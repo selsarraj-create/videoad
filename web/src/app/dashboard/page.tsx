@@ -96,13 +96,17 @@ export default function StudioPage() {
     }
 
     return (
-        <div className="h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary/30">
+        <div className="h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary/30 overflow-hidden">
             {/* Header / Credit Gauge */}
-            <header className="h-14 border-b bg-card/50 backdrop-blur-md flex items-center justify-between px-6 z-50">
+            <header className="h-16 border-b border-white/5 bg-background/60 backdrop-blur-xl flex items-center justify-between px-6 z-50 sticky top-0">
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <Box className="w-6 h-6 text-primary" />
-                        <h1 className="font-bold text-lg tracking-tight">Antigravity<span className="text-primary font-light">Studio</span></h1>
+                    <div className="flex items-center gap-2 group cursor-pointer">
+                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/20 group-hover:border-primary/50 transition-colors">
+                            <Box className="w-5 h-5 text-primary" />
+                        </div>
+                        <h1 className="font-bold text-xl tracking-tighter">
+                            ANTIGRAVITY<span className="font-light text-muted-foreground">STUDIO</span>
+                        </h1>
                     </div>
                 </div>
 
