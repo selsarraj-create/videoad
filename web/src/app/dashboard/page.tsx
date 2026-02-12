@@ -140,20 +140,20 @@ export default function StudioPage() {
                 </div>
 
                 <div className="flex items-center gap-6">
-                    {/* Mode Switcher - Enhanced Visibility */}
-                    <div className="flex bg-zinc-900/50 p-1.5 rounded-xl border border-zinc-800">
+                    {/* Mode Switcher - MAX VISIBILITY */}
+                    <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-700 shadow-inner">
                         <button
                             onClick={() => setMode('draft')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${mode === 'draft' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/40 ring-1 ring-blue-500/50' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}`}
+                            className={`flex items-center gap-3 px-5 py-2.5 rounded-lg text-sm font-black uppercase tracking-wide transition-all duration-300 ${mode === 'draft' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.5)] ring-1 ring-white/20 scale-105' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}
                         >
-                            <Zap className={`w-4 h-4 ${mode === 'draft' ? 'fill-white text-white' : ''}`} />
+                            <Zap className={`w-5 h-5 ${mode === 'draft' ? 'fill-white text-white' : ''}`} />
                             Quick Draft
                         </button>
                         <button
                             onClick={() => setMode('storyboard')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${mode === 'storyboard' ? 'bg-zinc-100 text-zinc-900 shadow-lg shadow-zinc-900/20' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}`}
+                            className={`flex items-center gap-3 px-5 py-2.5 rounded-lg text-sm font-black uppercase tracking-wide transition-all duration-300 ${mode === 'storyboard' ? 'bg-zinc-100 text-black shadow-[0_0_20px_rgba(255,255,255,0.3)] ring-1 ring-white scale-105' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}
                         >
-                            <Film className={`w-4 h-4 ${mode === 'storyboard' ? 'fill-zinc-900' : ''}`} />
+                            <Film className={`w-5 h-5 ${mode === 'storyboard' ? 'fill-black text-black' : ''}`} />
                             Storyboard
                         </button>
                     </div>
