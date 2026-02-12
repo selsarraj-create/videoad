@@ -95,7 +95,7 @@ export default function StudioPage() {
     // Calculators & Handlers
     // -------------------------------------------------------------------------
     const totalCredits = mode === 'draft'
-        ? calculateCredits(selectedModel.baseCredits, 5, is4k)
+        ? calculateCredits(selectedModel.baseCredits, 8, is4k)
         : shots.reduce((acc, shot) => acc + calculateCredits(selectedModel.baseCredits, shot.duration, is4k), 0)
 
     const addShot = () => {
@@ -112,7 +112,7 @@ export default function StudioPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(mode === 'draft'
-                    ? { prompt, model: selectedModelId, is4k, workspace_id: "def" }
+                    ? { prompt, model: selectedModelId, is4k, workspace_id: "def", provider_metadata: { duration: 8 } }
                     : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: "def" }
                 )
             })
@@ -201,7 +201,7 @@ export default function StudioPage() {
                 )}
 
                 {/* 2. TIMELINE / CANVAS (Center - Expands to 9 Cols in Draft Mode) */}
-                <section className={`${mode === 'draft' ? 'col-span-9' : 'col-span-6'} bg-[#121212] relative flex flex-col border-r border-zinc-800 transition-all duration-300`}>
+                <section className={`${mode === 'draft' ? 'col-span-9' : 'col-span-6'} bg-[#121212] relative flex flex-col border-r border-zinc-800 transition-all duration-300 min-h-0 text-white`}>
 
                     {/* Header - Only visible in Storyboard Mode */}
                     {mode === 'storyboard' && (
@@ -215,13 +215,13 @@ export default function StudioPage() {
                         </div>
                     )}
 
-                    <div className="flex-1 overflow-y-auto p-6 pb-32 relative">
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 pb-60 relative w-full h-full">
                         {/* Ambient Glow */}
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[500px] bg-blue-900/5 rounded-full blur-[100px] pointer-events-none" />
 
                         {mode === 'draft' ? (
                             /* QUICK DRAFT MODE */
-                            <div className="max-w-2xl mx-auto pt-20 pb-40 space-y-8 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="max-w-2xl mx-auto pt-10 pb-64 space-y-8 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div className="text-center space-y-4">
                                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/20 text-blue-400 border border-blue-900/50 text-xs font-bold uppercase tracking-wider mb-4">
                                         <Zap className="w-3 h-3" /> Quick Mode
@@ -230,7 +230,7 @@ export default function StudioPage() {
                                         Ignite Your Vision
                                     </h2>
                                     <p className="text-lg text-zinc-400 font-light max-w-lg mx-auto leading-relaxed">
-                                        Generate a high-fidelity 5s preview instantly. Select a model and describe your scene.
+                                        Generate a high-fidelity 8s preview instantly. Select a model and describe your scene.
                                     </p>
                                 </div>
 
@@ -244,7 +244,7 @@ export default function StudioPage() {
                                                 <ModelSelector
                                                     selectedModelId={selectedModelId}
                                                     onSelect={setSelectedModelId}
-                                                    duration={5}
+                                                    duration={8}
                                                     is4k={is4k}
                                                     compact={true}
                                                 />
@@ -267,7 +267,7 @@ export default function StudioPage() {
                                                     {is4k ? '4K Ultra HD' : 'HD Standard'}
                                                 </button>
                                                 <span className="text-xs text-zinc-600 font-mono">
-                                                    {calculateCredits(selectedModel.baseCredits, 5, is4k)} Credits
+                                                    {calculateCredits(selectedModel.baseCredits, 8, is4k)} Credits
                                                 </span>
                                             </div>
                                             <Button
