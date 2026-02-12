@@ -130,11 +130,11 @@ export default function StudioPage() {
             <header className="h-16 border-b border-white/5 bg-background/60 backdrop-blur-xl flex items-center justify-between px-6 z-50 sticky top-0">
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 group cursor-pointer">
-                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/20 group-hover:border-primary/50 transition-colors">
-                            <Box className="w-5 h-5 text-primary" />
+                        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center border border-white/10 group-hover:border-white/30 transition-colors">
+                            <Box className="w-5 h-5 text-white" />
                         </div>
-                        <h1 className="font-bold text-xl tracking-tighter">
-                            ANTIGRAVITY<span className="font-light text-muted-foreground">STUDIO</span>
+                        <h1 className="font-bold text-xl tracking-tighter text-white">
+                            ANTIGRAVITY<span className="font-light text-zinc-400">STUDIO</span>
                         </h1>
                     </div>
                 </div>
@@ -221,7 +221,7 @@ export default function StudioPage() {
 
                         {mode === 'draft' ? (
                             /* QUICK DRAFT MODE */
-                            <div className="max-w-2xl mx-auto pt-20 space-y-8 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="max-w-2xl mx-auto pt-20 pb-40 space-y-8 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div className="text-center space-y-4">
                                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/20 text-blue-400 border border-blue-900/50 text-xs font-bold uppercase tracking-wider mb-4">
                                         <Zap className="w-3 h-3" /> Quick Mode
