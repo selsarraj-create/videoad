@@ -1,0 +1,58 @@
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+
+export async function POST(request: Request) {
+    const supabase = createClient()
+
+    // Check auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    try {
+        const body = await request.json()
+        const { prompt, workspace_id, image_refs } = body
+
+        // Create job in Supabase
+        const { data: job, error: dbError } = await supabase
+            .from('jobs')
+            .insert({
+                project_id: workspace_id, // Simplified: using workspace_id as project_id for prototype
+                status: 'pending',
+                input_params: { prompt, image_refs },
+                created_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+
+        if (dbError) {
+            console.error('Database error:', dbError)
+            return NextResponse.json({ error: 'Failed to create job' }, { status: 500 })
+        }
+
+        // Call Railway Worker Webhook
+        const workerUrl = process.env.RAILWAY_WORKER_URL // e.g., https://worker-production.up.railway.app
+        if (workerUrl) {
+            try {
+                await fetch(`${workerUrl}/webhook/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        job_id: job.id,
+                        prompt,
+                        image_refs,
+                        duration: 5
+                    })
+                })
+            } catch (workerError) {
+                console.error('Worker call failed:', workerError)
+                // We don't fail the request to client, just log it. Job will stay pending/stuck unless handled.
+            }
+        }
+
+        return NextResponse.json({ job })
+    } catch (err) {
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
