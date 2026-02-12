@@ -15,6 +15,16 @@ export interface ModelSpec {
 }
 
 export const MODELS: ModelSpec[] = [
+    // Social (Fast) - Default
+    {
+        id: 'veo-3.1-fast',
+        name: 'Veo 3.1 Fast',
+        provider: 'Kie.ai',
+        category: 'Social',
+        tier: 'Eco',
+        description: 'High-speed generation perfect for social media trends.',
+        baseCredits: 5
+    },
     // Cinema (Hero)
     {
         id: 'sora-2',
@@ -33,16 +43,6 @@ export const MODELS: ModelSpec[] = [
         tier: 'Premium',
         description: 'Exclusive 4K upscaling and detailed texture rendering.',
         baseCredits: 60
-    },
-    // Social (Fast)
-    {
-        id: 'veo-3.1-fast',
-        name: 'Veo 3.1 Fast',
-        provider: 'Kie.ai',
-        category: 'Social',
-        tier: 'Eco',
-        description: 'High-speed generation perfect for social media trends.',
-        baseCredits: 5
     },
     {
         id: 'hailuo-2.3',
