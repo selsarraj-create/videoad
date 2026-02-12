@@ -43,9 +43,9 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
     Synchronous background task to handle Video Generation via ProviderFactory.
     """
     try:
-        print(f"Processing job {job_id} ({tier}) ...")
+        print(f"Processing job {job_id} ({tier}) model={model} ...")
         
-        provider = ProviderFactory.get_provider(tier)
+        provider = ProviderFactory.get_provider(tier, model)
         
         # 1. Start Generation
         # Map specific params based on provider if needed

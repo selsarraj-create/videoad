@@ -11,19 +11,30 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Wand2, Play, AlertCircle, CheckCircle2, Clock } from "lucide-react"
+import { Wand2, Play, AlertCircle, CheckCircle2, Clock, Zap } from "lucide-react"
+import { ModelSelector } from "@/components/model-selector"
+import { MODELS, calculateCredits } from "@/lib/models"
 
 export default function StudioPage() {
     const [jobs, setJobs] = useState<VideoJob[]>([])
     const [prompt, setPrompt] = useState("")
-    const [model, setModel] = useState<"veo-3.1-fast" | "sora-2" | "kling-2.6-quality" | "hailuo-2.3">("veo-3.1-fast")
-    const [tier, setTier] = useState<"draft" | "production">("draft")
+    const [selectedModelId, setSelectedModelId] = useState<string>("veo-3.1-fast")
+    // Derive tier and model details from selected ID
+    const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
+
+    // Duration/Resolution state
+    const [duration, setDuration] = useState<number>(5)
+    const [is4k, setIs4k] = useState<boolean>(false)
+
     const [loading, setLoading] = useState(false)
     const supabase = createClient()
 
+    // Calculate estimated credits
+    const estimatedCredits = calculateCredits(selectedModel.baseCredits, duration, is4k)
+
     // Mock data for initial render
     useEffect(() => {
-        // In real app: fetch from Supabase
+        // ... (keep existing mock data logic or fetch) ...
         setJobs([
             {
                 id: "1",
@@ -35,23 +46,13 @@ export default function StudioPage() {
                 output_url: "#",
                 created_at: new Date().toISOString()
             },
-            {
-                id: "2",
-                project_id: "def",
-                status: "processing",
-                input_params: { prompt: "Cyberpunk street scene with neon lights" },
-                model: "kling-2.6-quality",
-                tier: "production",
-                created_at: new Date().toISOString()
-            },
         ] as VideoJob[])
 
-        // Real-time subscription setup
+        // ... (keep subscription logic) ...
         const channel = supabase
             .channel('realtime-jobs')
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs' }, payload => {
                 console.log('Change received!', payload)
-                // Update local state based on payload
             })
             .subscribe()
 
@@ -69,24 +70,29 @@ export default function StudioPage() {
             id: Math.random().toString(),
             project_id: "def",
             status: "pending",
-            input_params: { prompt },
-            model,
-            tier,
+            input_params: { prompt, duration },
+            model: selectedModel.id as any,
+            tier: selectedModel.tier === 'Premium' ? 'production' : 'draft', // Map credit tier to system tier
             created_at: new Date().toISOString()
         }
 
         setJobs([newJob, ...jobs])
         setPrompt("")
 
-        // 2. Trigger webhook/backend (mock)
+        // 2. Trigger webhook/backend
         try {
             await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     prompt,
-                    model,
-                    tier,
+                    model: selectedModel.id,
+                    tier: selectedModel.tier === 'Premium' ? 'production' : 'draft',
+                    provider_metadata: {
+                        credits_cost: estimatedCredits,
+                        resolution: is4k ? '4k' : '720p',
+                        duration: duration
+                    },
                     workspace_id: "def"
                 })
             })
@@ -100,6 +106,7 @@ export default function StudioPage() {
     }
 
     const getStatusIcon = (status: string) => {
+        // ... (keep existing icon logic) ...
         switch (status) {
             case 'completed': return <CheckCircle2 className="h-4 w-4 text-green-500" />
             case 'processing': return <Clock className="h-4 w-4 text-blue-500 animate-pulse" />
@@ -120,37 +127,18 @@ export default function StudioPage() {
                         <CardHeader>
                             <CardTitle>Create New Ad</CardTitle>
                             <CardDescription>
-                                Generate a video ad. Toggle "Production" for high-fidelity WaveSpeed models.
+                                Select a model from the registry and customize your video.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base">Production Tier</Label>
-                                    <div className="text-sm text-muted-foreground">
-                                        Use WaveSpeed Seedance & WAN 2.2 for 4K quality.
-                                    </div>
-                                </div>
-                                <Switch
-                                    checked={tier === "production"}
-                                    onCheckedChange={(checked) => setTier(checked ? "production" : "draft")}
-                                />
-                            </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="model">Model</Label>
-                                <Select value={model} onValueChange={(v: any) => setModel(v)}>
-                                    <SelectTrigger id="model">
-                                        <SelectValue placeholder="Select model" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="veo-3.1-fast">Veo 3.1 Fast</SelectItem>
-                                        <SelectItem value="sora-2">Sora 2</SelectItem>
-                                        <SelectItem value="kling-2.6-quality">Kling 2.6 Quality</SelectItem>
-                                        <SelectItem value="hailuo-2.3">Hailuo 2.3</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <ModelSelector
+                                selectedModelId={selectedModelId}
+                                onSelect={setSelectedModelId}
+                                duration={duration}
+                                is4k={is4k}
+                            />
+
                             <div className="space-y-2">
                                 <Label htmlFor="prompt">Prompt</Label>
                                 <Input
@@ -160,34 +148,53 @@ export default function StudioPage() {
                                     onChange={(e) => setPrompt(e.target.value)}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Aspect Ratio</Label>
-                                <Select defaultValue="16:9">
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select aspect ratio" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
-                                        <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
-                                        <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                                    </SelectContent>
-                                </Select>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Duration</Label>
+                                    <Select value={duration.toString()} onValueChange={(v) => setDuration(parseInt(v))}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="5">5s (Base)</SelectItem>
+                                            <SelectItem value="10">10s (2x)</SelectItem>
+                                            <SelectItem value="25">25s (3x)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Resolution</Label>
+                                    <div className="flex items-center space-x-2 pt-2">
+                                        <Switch checked={is4k} onCheckedChange={setIs4k} id="res-mode" />
+                                        <Label htmlFor="res-mode">{is4k ? '4K (Ultra)' : '720p (HD)'}</Label>
+                                    </div>
+                                </div>
                             </div>
 
-                            {tier === "production" && (
+                            {/* Estimated Cost Display */}
+                            <div className="rounded-lg bg-muted p-3 flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground flex items-center gap-2">
+                                    <Zap className="w-4 h-4" /> Estimated Impact:
+                                </span>
+                                <span className="font-bold">{estimatedCredits} Credits</span>
+                            </div>
+
+                            {selectedModel.category === 'Production' && (
                                 <div className="space-y-2 rounded-md border border-dashed p-4">
                                     <Label>Motion Control (Reference Video)</Label>
                                     <Input type="file" accept="video/*" />
-                                    <p className="text-xs text-muted-foreground">Upload a video to guide the motion (e.g., specific walk cycle).</p>
+                                    <p className="text-xs text-muted-foreground">Upload a video to guide the motion.</p>
                                 </div>
                             )}
+
                         </CardContent>
                         <CardFooter>
                             <Button onClick={handleGenerate} disabled={loading} className="w-full">
-                                {loading ? "Submitting..." : (
+                                {loading ? "Scouting..." : (
                                     <>
                                         <Wand2 className="mr-2 h-4 w-4" />
-                                        Generate Video
+                                        Generate with {selectedModel.provider}
                                     </>
                                 )}
                             </Button>
