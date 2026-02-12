@@ -24,7 +24,7 @@ import { Workspace } from "@/lib/types"
 interface WorkspaceSelectorProps {
     workspaces: Workspace[]
     selectedWorkspace?: Workspace
-    onSelect: (workspace: Workspace) => void
+    onSelect?: (workspace: Workspace) => void
 }
 
 export function WorkspaceSelector({
@@ -57,7 +57,9 @@ export function WorkspaceSelector({
                                 <CommandItem
                                     key={workspace.id}
                                     onSelect={() => {
-                                        onSelect(workspace)
+                                        if (onSelect) {
+                                            onSelect(workspace)
+                                        }
                                         setOpen(false)
                                     }}
                                 >

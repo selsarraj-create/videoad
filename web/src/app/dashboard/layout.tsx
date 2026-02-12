@@ -41,7 +41,7 @@ export default async function DashboardLayout({
                     </div>
                     <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
                         <div className="w-full flex-1 md:w-auto md:flex-none">
-                            <WorkspaceSelector workspaces={workspaces} onSelect={() => { }} />
+                            <WorkspaceSelector workspaces={workspaces} />
                         </div>
                         <nav className="flex items-center">
                             {/* User Profile UserNav here if implemented */}
