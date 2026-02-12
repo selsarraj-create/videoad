@@ -134,38 +134,38 @@ export default function StudioPage() {
                             <Box className="w-5 h-5 text-white" />
                         </div>
                         <h1 className="font-bold text-xl tracking-tighter text-white">
-                            ANTIGRAVITY<span className="font-light text-zinc-400">STUDIO</span>
+                            CREATIVE<span className="font-light text-zinc-400">STUDIO</span>
                         </h1>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-6">
-                    {/* Mode Switcher - MAX VISIBILITY */}
-                    <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-700 shadow-inner">
+                <div className="flex items-center gap-4">
+                    {/* Mode Switcher - Compact & High Visibility */}
+                    <div className="flex bg-zinc-900 p-0.5 rounded-lg border border-zinc-700 shadow-inner">
                         <button
                             onClick={() => setMode('draft')}
-                            className={`flex items-center gap-3 px-5 py-2.5 rounded-lg text-sm font-black uppercase tracking-wide transition-all duration-300 ${mode === 'draft' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.5)] ring-1 ring-white/20 scale-105' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-black uppercase tracking-wide transition-all duration-300 ${mode === 'draft' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/40 ring-1 ring-white/20' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}
                         >
-                            <Zap className={`w-5 h-5 ${mode === 'draft' ? 'fill-white text-white' : ''}`} />
+                            <Zap className={`w-3.5 h-3.5 ${mode === 'draft' ? 'fill-white text-white' : ''}`} />
                             Quick Draft
                         </button>
                         <button
                             onClick={() => setMode('storyboard')}
-                            className={`flex items-center gap-3 px-5 py-2.5 rounded-lg text-sm font-black uppercase tracking-wide transition-all duration-300 ${mode === 'storyboard' ? 'bg-zinc-100 text-black shadow-[0_0_20px_rgba(255,255,255,0.3)] ring-1 ring-white scale-105' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-black uppercase tracking-wide transition-all duration-300 ${mode === 'storyboard' ? 'bg-zinc-100 text-black shadow-lg shadow-white/10 ring-1 ring-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}
                         >
-                            <Film className={`w-5 h-5 ${mode === 'storyboard' ? 'fill-black text-black' : ''}`} />
+                            <Film className={`w-3.5 h-3.5 ${mode === 'storyboard' ? 'fill-black text-black' : ''}`} />
                             Storyboard
                         </button>
                     </div>
 
-                    {/* Credit Gauge */}
-                    <div className="flex items-center gap-3 bg-secondary/30 px-3 py-1.5 rounded-full border border-border/50">
+                    {/* Credit Gauge - Compact & High Visibility */}
+                    <div className="flex items-center gap-2 bg-gradient-to-br from-zinc-800 to-zinc-900 px-3 py-1 rounded-full border border-zinc-700 shadow-lg shadow-black/20">
                         <div className="flex flex-col items-end leading-none">
-                            <span className="text-[10px] text-muted-foreground uppercase font-semibold">Cost Est.</span>
-                            <span className="text-sm font-bold font-mono text-primary">{totalCredits} CR</span>
+                            <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-wider">Credits</span>
+                            <span className="text-xs font-black font-mono text-white">{totalCredits} CR</span>
                         </div>
-                        <div className="h-8 w-[1px] bg-border/50" />
-                        <Zap className={`w-4 h-4 ${is4k ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground'}`} />
+                        <div className="h-6 w-[1px] bg-zinc-700" />
+                        <Zap className={`w-3.5 h-3.5 ${is4k ? 'text-amber-400 fill-amber-400' : 'text-zinc-400'}`} />
                     </div>
                 </div>
             </header>
