@@ -11,13 +11,13 @@ export default function Home() {
           <span>VideoAd SaaS</span>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/dashboard">
+          <Link href="/login">
             {/* Retaining buttons, just removing nav links as requested */}
             <Button variant="outline" className="text-black border-white hover:bg-zinc-200">
               Log in
             </Button>
           </Link>
-          <Link href="/dashboard">
+          <Link href="/login">
             <Button className="bg-white text-black hover:bg-zinc-200">
               Get Started
             </Button>
@@ -46,7 +46,7 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link href="/dashboard">
+            <Link href="/login">
               <Button size="lg" className="h-12 bg-white px-8 text-base text-black hover:bg-zinc-200">
                 LOGIN
                 <ArrowRight className="ml-2 h-4 w-4" />

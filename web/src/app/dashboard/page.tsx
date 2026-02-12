@@ -145,6 +145,17 @@ export default function StudioPage() {
                             CREATIVE<span className="font-light text-zinc-500">STUDIO</span>
                         </h1>
                     </div>
+                    {/* Logout Button */}
+                    <button
+                        onClick={async () => {
+                            const supabase = createClient()
+                            await supabase.auth.signOut()
+                            window.location.href = "/"
+                        }}
+                        className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors uppercase font-bold tracking-wider"
+                    >
+                        Logout
+                    </button>
                 </div>
 
                 <div className="flex items-center gap-6">
