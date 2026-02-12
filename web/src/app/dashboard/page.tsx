@@ -4,12 +4,12 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { VideoJob } from "@/lib/types"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Wand2, Play, AlertCircle, CheckCircle2, Clock } from "lucide-react"
 
@@ -17,6 +17,7 @@ export default function StudioPage() {
     const [jobs, setJobs] = useState<VideoJob[]>([])
     const [prompt, setPrompt] = useState("")
     const [model, setModel] = useState<"veo-3.1-fast" | "sora-2" | "kling-2.6-quality" | "hailuo-2.3">("veo-3.1-fast")
+    const [tier, setTier] = useState<"draft" | "production">("draft")
     const [loading, setLoading] = useState(false)
     const supabase = createClient()
 
@@ -29,6 +30,8 @@ export default function StudioPage() {
                 project_id: "def",
                 status: "completed",
                 input_params: { prompt: "Cinematic drone shot of a luxury villa" },
+                model: "veo-3.1-fast",
+                tier: "draft",
                 output_url: "#",
                 created_at: new Date().toISOString()
             },
@@ -37,6 +40,8 @@ export default function StudioPage() {
                 project_id: "def",
                 status: "processing",
                 input_params: { prompt: "Cyberpunk street scene with neon lights" },
+                model: "kling-2.6-quality",
+                tier: "production",
                 created_at: new Date().toISOString()
             },
         ] as VideoJob[])
@@ -66,6 +71,7 @@ export default function StudioPage() {
             status: "pending",
             input_params: { prompt },
             model,
+            tier,
             created_at: new Date().toISOString()
         }
 
@@ -73,15 +79,20 @@ export default function StudioPage() {
         setPrompt("")
 
         // 2. Trigger webhook/backend (mock)
-        await fetch('/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                prompt,
-                model,
-                workspace_id: "def"
+        try {
+            await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt,
+                    model,
+                    tier,
+                    workspace_id: "def"
+                })
             })
-        })
+        } catch (e) {
+            console.error(e)
+        }
 
         setTimeout(() => {
             setLoading(false)
@@ -109,10 +120,23 @@ export default function StudioPage() {
                         <CardHeader>
                             <CardTitle>Create New Ad</CardTitle>
                             <CardDescription>
-                                Generate a video ad using Veo 3.1. Describe your vision below.
+                                Generate a video ad. Toggle "Production" for high-fidelity WaveSpeed models.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="space-y-6">
+                            <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div className="space-y-0.5">
+                                    <Label className="text-base">Production Tier</Label>
+                                    <div className="text-sm text-muted-foreground">
+                                        Use WaveSpeed Seedance & WAN 2.2 for 4K quality.
+                                    </div>
+                                </div>
+                                <Switch
+                                    checked={tier === "production"}
+                                    onCheckedChange={(checked) => setTier(checked ? "production" : "draft")}
+                                />
+                            </div>
+
                             <div className="space-y-2">
                                 <Label htmlFor="model">Model</Label>
                                 <Select value={model} onValueChange={(v: any) => setModel(v)}>
@@ -149,7 +173,14 @@ export default function StudioPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            {/* Ingredients / Image Upload would go here */}
+
+                            {tier === "production" && (
+                                <div className="space-y-2 rounded-md border border-dashed p-4">
+                                    <Label>Motion Control (Reference Video)</Label>
+                                    <Input type="file" accept="video/*" />
+                                    <p className="text-xs text-muted-foreground">Upload a video to guide the motion (e.g., specific walk cycle).</p>
+                                </div>
+                            )}
                         </CardContent>
                         <CardFooter>
                             <Button onClick={handleGenerate} disabled={loading} className="w-full">
@@ -180,6 +211,7 @@ export default function StudioPage() {
                                             <span className="font-medium truncate max-w-[200px]">{job.input_params.prompt}</span>
                                             <div className="flex gap-2">
                                                 <Badge variant="outline" className="text-xs">{job.model}</Badge>
+                                                {job.tier === 'production' && <Badge className="text-xs bg-purple-500 hover:bg-purple-600">Pro</Badge>}
                                                 <span className="text-xs text-muted-foreground">{new Date(job.created_at).toLocaleTimeString()}</span>
                                             </div>
                                         </div>
@@ -194,8 +226,10 @@ export default function StudioPage() {
                                                 </div>
                                             )}
                                             {job.status === 'completed' && job.output_url && (
-                                                <Button size="sm" variant="ghost">
-                                                    <Play className="h-4 w-4" />
+                                                <Button size="sm" variant="ghost" asChild>
+                                                    <a href={job.output_url} target="_blank">
+                                                        <Play className="h-4 w-4" />
+                                                    </a>
                                                 </Button>
                                             )}
                                         </div>

@@ -25,66 +25,89 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+from .provider_factory import ProviderFactory
+
+# ... imports ...
+
 class VideoJobRequest(BaseModel):
     job_id: str
     prompt: str
     model: str = "veo-3.1-fast"
     image_refs: list[str] = []
     duration: int = 5
+    tier: str = "draft"
+    provider_metadata: dict = {}
 
-def process_video_job(job_id: str, prompt: str, model: str, image_refs: list[str], duration: int):
+def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_refs: list[str], duration: int, provider_metadata: dict):
     """
-    Synchronous background task to handle Kie.ai interaction.
-    Runs in a thread pool to avoid blocking the main event loop.
+    Synchronous background task to handle Video Generation via ProviderFactory.
     """
     try:
-        print(f"Processing job {job_id} for model {model}...")
+        print(f"Processing job {job_id} ({tier}) ...")
+        
+        provider = ProviderFactory.get_provider(tier)
         
         # 1. Start Generation
-        task_info = generate_video(prompt, model)
-        task_id = task_info.get("data", {}).get("id")
+        # Map specific params based on provider if needed
+        task_info = provider.generate_video(prompt, model, **provider_metadata)
+        
+        # Handle different response structures if necessary
+        # Kie returns { data: { id: ... } }
+        # WaveSpeed mock returns { id: ... }
+        
+        task_id = task_info.get("data", {}).get("id") or task_info.get("id")
         
         if not task_id:
-            raise Exception("Failed to get task_id from Kie.ai")
+             raise Exception(f"Failed to get task_id from {tier} provider")
 
-        print(f"Kie.ai task started: {task_id}")
+        print(f"Task started: {task_id}")
 
-        # 2. Update Supabase with task_id
+        # 2. Update Supabase
         supabase.table("jobs").update({
             "status": "processing",
             "provider_task_id": task_id,
-            "model": model
+            "model": model,
+            "tier": tier,
+            "provider_metadata": provider_metadata
         }).eq("id", job_id).execute()
 
         # 3. Poll for completion
         while True:
-            status_data = get_task_status(task_id)
-            status = status_data.get("data", {}).get("status")
+            status_data = provider.get_task_status(task_id)
             
-            print(f"Job {job_id} (Task {task_id}) status: {status}")
+            # Normalize status response
+            # Kie: { data: { status: ..., results: [{url: ...}] } }
+            # WaveSpeed: { status: ..., output: { url: ... } }
+            
+            if tier == "draft":
+                status = status_data.get("data", {}).get("status")
+            else:
+                status = status_data.get("status")
+
+            print(f"Job {job_id} status: {status}")
             
             if status == "completed":
-                # Get result URL
-                results = status_data.get("data", {}).get("results", [])
-                video_url = results[0].get("url") if results else None
+                video_url = None
+                if tier == "draft":
+                    results = status_data.get("data", {}).get("results", [])
+                    video_url = results[0].get("url") if results else None
+                else:
+                    video_url = status_data.get("output", {}).get("url")
                 
                 if not video_url:
                     raise Exception("Completed but no video URL found")
                 
-                # Update Supabase
                 supabase.table("jobs").update({
                     "status": "completed",
                     "output_url": video_url
                 }).eq("id", job_id).execute()
-                
-                print(f"Job {job_id} successfully completed. URL: {video_url}")
+                print(f"Job {job_id} completed. URL: {video_url}")
                 break
             
             elif status == "failed":
-                error_msg = status_data.get("data", {}).get("error", "Unknown error")
-                raise Exception(f"Kie.ai task failed: {error_msg}")
+                error_msg = status_data.get("data", {}).get("error") or status_data.get("error", "Unknown error")
+                raise Exception(f"Task failed: {error_msg}")
             
-            # Wait before next poll
             time.sleep(5)
 
     except Exception as e:
@@ -96,20 +119,16 @@ def process_video_job(job_id: str, prompt: str, model: str, image_refs: list[str
 
 @app.post("/webhook/generate")
 async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundTasks):
-    """
-    Receives a webhook from Vercel to start video generation.
-    Returns immediately while processing happens in background.
-    """
-    # Add to background tasks
     background_tasks.add_task(
         process_video_job, 
         request.job_id, 
         request.prompt, 
         request.model, 
+        request.tier,
         request.image_refs, 
-        request.duration
+        request.duration,
+        request.provider_metadata
     )
-    
     return {"message": "Job received", "job_id": request.job_id}
 
 @app.get("/health")

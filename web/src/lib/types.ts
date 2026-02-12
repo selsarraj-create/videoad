@@ -25,6 +25,8 @@ export interface VideoJob {
         duration?: number
     }
     model?: KieModel
+    tier?: 'draft' | 'production'
+    provider_metadata?: Record<string, any>
     provider_task_id?: string
     output_url?: string
     error_message?: string
