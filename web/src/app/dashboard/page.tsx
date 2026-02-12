@@ -140,18 +140,20 @@ export default function StudioPage() {
                 </div>
 
                 <div className="flex items-center gap-6">
-                    {/* Mode Switcher */}
-                    <div className="flex bg-secondary/50 p-1 rounded-lg border border-border/50">
+                    {/* Mode Switcher - Enhanced Visibility */}
+                    <div className="flex bg-zinc-900/50 p-1.5 rounded-xl border border-zinc-800">
                         <button
                             onClick={() => setMode('draft')}
-                            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'draft' ? 'bg-primary text-white shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground'}`}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${mode === 'draft' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/40 ring-1 ring-blue-500/50' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}`}
                         >
+                            <Zap className={`w-4 h-4 ${mode === 'draft' ? 'fill-white text-white' : ''}`} />
                             Quick Draft
                         </button>
                         <button
                             onClick={() => setMode('storyboard')}
-                            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'storyboard' ? 'bg-primary text-white shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground'}`}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${mode === 'storyboard' ? 'bg-zinc-100 text-zinc-900 shadow-lg shadow-zinc-900/20' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}`}
                         >
+                            <Film className={`w-4 h-4 ${mode === 'storyboard' ? 'fill-zinc-900' : ''}`} />
                             Storyboard
                         </button>
                     </div>
