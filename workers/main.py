@@ -136,15 +136,102 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
     )
     return {"message": "Job received", "job_id": request.job_id}
 
+from moviepy.editor import VideoFileClip, concatenate_videoclips
+import requests
+import tempfile
+
+from typing import Optional
+
 class StitchRequest(BaseModel):
     project_id: str
-    job_ids: list[str]
+    video_urls: list[str]
+    audio_url: Optional[str] = None
     output_format: str = "mp4"
+
+def process_stitch_job(project_id: str, video_urls: list[str], audio_url: Optional[str] = None):
+    print(f"Starting stitch job for project {project_id}")
+    temp_files = []
+    clips = []
+    
+    try:
+        # 1. Download Clips
+        for url in video_urls:
+            if not url: continue
+            
+            # Create temp file in binary mode
+            tf = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, mode='wb')
+            temp_files.append(tf.name)
+            
+            # Download
+            print(f"Downloading clip: {url}...")
+            r = requests.get(url, stream=True)
+            if r.status_code == 200:
+                for chunk in r.iter_content(chunk_size=1024):
+                    tf.write(chunk)
+                tf.close()
+                
+                # Load clip
+                clip = VideoFileClip(tf.name)
+                # Ensure consistent resolution (e.g., 720p)
+                clip = clip.resize(height=720) 
+                clips.append(clip)
+            else:
+                print(f"Failed to download {url}")
+
+        if not clips:
+            raise Exception("No valid video clips to stitch")
+
+        # 2. Concatenate
+        print("Concatenating clips...")
+        final_clip = concatenate_videoclips(clips, method="compose")
+
+        # 3. Add Audio (Optional) - Todo
+        
+        # 4. Write Output
+        output_tf = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        output_filename = output_tf.name
+        output_tf.close()
+        
+        print(f"Writing final video to {output_filename}...")
+        final_clip.write_videofile(output_filename, codec="libx264", audio_codec="aac", fps=24)
+
+        # 5. Upload to Supabase
+        print("Uploading to Supabase Storage...")
+        file_path = f"outputs/{project_id}_mashed.mp4"
+        with open(output_filename, "rb") as f:
+            supabase.storage.from_("final_ads").upload(
+                file=f,
+                path=file_path,
+                file_options={"content-type": "video/mp4", "x-upsert": "true"}
+            )
+            
+        # Get Public URL
+        public_url = supabase.storage.from_("final_ads").get_public_url(file_path)
+        print(f"Upload complete: {public_url}")
+
+        # 6. Update Project
+        supabase.table("projects").update({
+            "status": "completed",
+            "output_url": public_url
+        }).eq("id", project_id).execute()
+
+    except Exception as e:
+        print(f"Stitch job failed: {e}")
+        # Ideally update project status to 'failed' here
+    
+    finally:
+        # Cleanup
+        for clip in clips:
+            clip.close()
+        for tf in temp_files:
+            if os.path.exists(tf):
+                os.remove(tf)
+        if 'output_filename' in locals() and os.path.exists(output_filename):
+            os.remove(output_filename)
 
 @app.post("/webhook/stitch")
 async def handle_stitch(request: StitchRequest, background_tasks: BackgroundTasks):
-    # Placeholder for stitching logic
-    print(f"Stitching request for project {request.project_id} with jobs: {request.job_ids}")
+    background_tasks.add_task(process_stitch_job, request.project_id, request.video_urls, request.audio_url)
     return {"message": "Stitching started", "project_id": request.project_id}
 
 @app.get("/health")
