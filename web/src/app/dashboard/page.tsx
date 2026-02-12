@@ -16,6 +16,7 @@ import { Wand2, Play, AlertCircle, CheckCircle2, Clock } from "lucide-react"
 export default function StudioPage() {
     const [jobs, setJobs] = useState<VideoJob[]>([])
     const [prompt, setPrompt] = useState("")
+    const [model, setModel] = useState<"veo-3.1-fast" | "sora-2" | "kling-2.6-quality" | "hailuo-2.3">("veo-3.1-fast")
     const [loading, setLoading] = useState(false)
     const supabase = createClient()
 
@@ -64,6 +65,7 @@ export default function StudioPage() {
             project_id: "def",
             status: "pending",
             input_params: { prompt },
+            model,
             created_at: new Date().toISOString()
         }
 
@@ -71,7 +73,15 @@ export default function StudioPage() {
         setPrompt("")
 
         // 2. Trigger webhook/backend (mock)
-        // await fetch('/api/generate', { ... })
+        await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt,
+                model,
+                workspace_id: "def"
+            })
+        })
 
         setTimeout(() => {
             setLoading(false)
@@ -103,6 +113,20 @@ export default function StudioPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="model">Model</Label>
+                                <Select value={model} onValueChange={(v: any) => setModel(v)}>
+                                    <SelectTrigger id="model">
+                                        <SelectValue placeholder="Select model" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="veo-3.1-fast">Veo 3.1 Fast</SelectItem>
+                                        <SelectItem value="sora-2">Sora 2</SelectItem>
+                                        <SelectItem value="kling-2.6-quality">Kling 2.6 Quality</SelectItem>
+                                        <SelectItem value="hailuo-2.3">Hailuo 2.3</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="prompt">Prompt</Label>
                                 <Input
@@ -154,7 +178,10 @@ export default function StudioPage() {
                                     <div key={job.id} className="flex items-center justify-between rounded-lg border p-4">
                                         <div className="flex flex-col gap-1">
                                             <span className="font-medium truncate max-w-[200px]">{job.input_params.prompt}</span>
-                                            <span className="text-xs text-muted-foreground">{new Date(job.created_at).toLocaleTimeString()}</span>
+                                            <div className="flex gap-2">
+                                                <Badge variant="outline" className="text-xs">{job.model}</Badge>
+                                                <span className="text-xs text-muted-foreground">{new Date(job.created_at).toLocaleTimeString()}</span>
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <Badge variant={job.status === 'completed' ? 'default' : 'secondary'} className="capitalize flex gap-2">

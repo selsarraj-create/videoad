@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        const { prompt, workspace_id, image_refs } = body
+        const { prompt, workspace_id, image_refs, model } = body
 
         // Create job in Supabase
         const { data: job, error: dbError } = await supabase
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
                 project_id: workspace_id, // Simplified: using workspace_id as project_id for prototype
                 status: 'pending',
                 input_params: { prompt, image_refs },
+                model,
                 created_at: new Date().toISOString()
             })
             .select()
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
                     body: JSON.stringify({
                         job_id: job.id,
                         prompt,
+                        model,
                         image_refs,
                         duration: 5
                     })
