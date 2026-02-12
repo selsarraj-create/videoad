@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Play, Video } from "lucide-react"
+import { ArrowRight, Video } from "lucide-react"
 
 export default function Home() {
   return (
@@ -10,13 +10,9 @@ export default function Home() {
           <Video className="h-6 w-6" />
           <span>VideoAd SaaS</span>
         </div>
-        <nav className="hidden gap-8 text-sm font-medium md:flex">
-          <Link href="#" className="text-zinc-400 hover:text-white">Features</Link>
-          <Link href="#" className="text-zinc-400 hover:text-white">Showcase</Link>
-          <Link href="#" className="text-zinc-400 hover:text-white">Pricing</Link>
-        </nav>
         <div className="flex items-center gap-4">
           <Link href="/dashboard">
+            {/* Retaining buttons, just removing nav links as requested */}
             <Button variant="outline" className="text-black border-white hover:bg-zinc-200">
               Log in
             </Button>
@@ -36,7 +32,7 @@ export default function Home() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
             </span>
-            Powered by Veo 3.1 & Google GenAI
+            AI Powered Video Creation
           </div>
 
           <h1 className="text-5xl font-bold tracking-tight sm:text-7xl bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent">
@@ -52,14 +48,10 @@ export default function Home() {
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link href="/dashboard">
               <Button size="lg" className="h-12 bg-white px-8 text-base text-black hover:bg-zinc-200">
-                Start Creating Free
+                LOGIN
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="h-12 border-zinc-800 bg-transparent px-8 text-base text-white hover:bg-zinc-900">
-              <Play className="mr-2 h-4 w-4" />
-              Watch Demo
-            </Button>
           </div>
 
           <div className="pt-12">
