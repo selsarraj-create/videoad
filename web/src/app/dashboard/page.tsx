@@ -3,6 +3,18 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Shot } from "@/lib/types"
+
+interface Job {
+    id: string;
+    created_at: string;
+    prompt: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    video_url: string | null;
+    model: string;
+    is_4k: boolean;
+    workspace_id: string;
+}
+
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,7 +27,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     Wand2, Zap, Plus, Layers, Film, Settings,
     History, PlayCircle, MousePointer2, Camera,
-    Box
+    Box, Loader2
 } from "lucide-react"
 import { ModelSelector } from "@/components/model-selector"
 import { StoryboardPanel } from "@/components/storyboard-panel"
@@ -31,9 +43,22 @@ export default function StudioPage() {
     const [selectedModelId, setSelectedModelId] = useState<string>("veo-3.1-fast")
     const [is4k, setIs4k] = useState<boolean>(false)
     const [loading, setLoading] = useState(false)
+    const [jobs, setJobs] = useState<Job[]>([])
+    const [isGenerating, setIsGenerating] = useState(false) // Add isGenerating state
 
     const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
     const supabase = createClient()
+
+    // Fetch Jobs Effect
+    useEffect(() => {
+        const fetchJobs = async () => {
+            const { data } = await supabase.from('jobs').select('*').order('created_at', { ascending: false })
+            if (data) setJobs(data as Job[])
+        }
+        fetchJobs()
+        const interval = setInterval(fetchJobs, 5000)
+        return () => clearInterval(interval)
+    }, [])
 
     // -------------------------------------------------------------------------
     // Auto-Save & Load Logic
@@ -95,6 +120,10 @@ export default function StudioPage() {
         setTimeout(() => setLoading(false), 2000)
     }
 
+    // Define a default duration for ModelSelector if not in storyboard mode, or use first shot's duration
+    const modelSelectorDuration = shots[0]?.duration || 5;
+
+
     return (
         <div className="h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary/30 overflow-hidden">
             {/* Header / Credit Gauge */}
@@ -139,156 +168,172 @@ export default function StudioPage() {
                 </div>
             </header>
 
-            {/* 3-Column Layout */}
-            <main className="flex-1 grid grid-cols-12 overflow-hidden">
+            {/* 3-Column Studio Layout */}
+            <main className="flex-1 grid grid-cols-12 overflow-hidden relative bg-[#121212]">
 
-                {/* 1. The Director's Console (Left) */}
-                <aside className="col-span-3 border-r bg-card/30 backdrop-blur-sm p-4 overflow-y-auto space-y-6">
-                    <div>
-                        <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-                            <Settings className="w-3 h-3" /> Production Settings
+                {/* 1. REGISTRY (Left - 3 Cols) */}
+                <aside className="col-span-3 border-r border-zinc-800 bg-[#121212] flex flex-col overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-[#121212]/80 backdrop-blur-md sticky top-0 z-30">
+                        <h2 className="text-zinc-100 font-bold tracking-tight text-sm uppercase flex items-center gap-2">
+                            <span className="w-1.5 h-4 bg-blue-600 rounded-sm" /> Model Registry
                         </h2>
-
-                        {/* Anchor */}
-                        <Card className="mb-4 bg-secondary/20 border-border/50 shadow-none">
-                            <CardHeader className="p-3 pb-0">
-                                <CardTitle className="text-xs font-medium flex items-center gap-2">
-                                    <Layers className="w-3 h-3 text-primary" /> Style Anchor
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-3 space-y-3">
-                                <Input
-                                    className="h-8 text-xs bg-background/50 border-border/50 focus:border-primary/50"
-                                    placeholder="Global style prompt..."
-                                    value={anchorStyle}
-                                    onChange={(e) => setAnchorStyle(e.target.value)}
-                                />
-                                <div className="h-20 border border-dashed border-border rounded-md flex items-center justify-center text-xs text-muted-foreground hover:bg-secondary/50 cursor-pointer transition-colors">
-                                    Upload Reference
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Formatting */}
-                        <div className="space-y-4 px-1">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-xs">UHD 4K Upscale</Label>
-                                <Switch checked={is4k} onCheckedChange={setIs4k} className="scale-75 origin-right" />
-                            </div>
-                            <Separator className="bg-border/50" />
-                        </div>
                     </div>
-
-                    {/* Model Registry */}
-                    <div className="flex-1">
-                        <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-                            <Box className="w-3 h-3" /> Model Registry
-                        </h2>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {/* Model Selector Reformatted as Vertical List handled inside the component or we wrap it here */}
                         <ModelSelector
                             selectedModelId={selectedModelId}
                             onSelect={setSelectedModelId}
-                            duration={5}
+                            duration={modelSelectorDuration}
                             is4k={is4k}
-                            compact={true} // New prop needed for compact view
+                            compact={true} // We'll rely on the compact mode to start, but styles need to match
                         />
+
+                        {/* Settings Panel embedded below registry */}
+                        <div className="pt-6 border-t border-zinc-800 space-y-6">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-zinc-400 text-xs">Quality</Label>
+                                <div className="flex items-center gap-2 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+                                    <button
+                                        onClick={() => setIs4k(false)}
+                                        className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${!is4k ? 'bg-zinc-700 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                    >
+                                        HD
+                                    </button>
+                                    <button
+                                        onClick={() => setIs4k(true)}
+                                        className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${is4k ? 'bg-blue-900/40 text-blue-400 border border-blue-800' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                    >
+                                        4K
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </aside>
 
-                {/* 2. The Canvas (Center) */}
-                <section className="col-span-6 bg-background relative flex flex-col">
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/5 via-background to-background pointer-events-none" />
+                {/* 2. TIMELINE (Center - 6 Cols) */}
+                <section className="col-span-6 bg-[#121212] relative flex flex-col border-r border-zinc-800">
+                    {/* Header / Actions */}
+                    <div className="h-14 border-b border-zinc-800 flex items-center justify-between px-6 bg-[#121212]/80 backdrop-blur-md sticky top-0 z-40">
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-zinc-100 font-black tracking-tight text-lg">TIMELINE</h2>
+                            <Badge variant="outline" className="bg-zinc-900/50 text-zinc-500 border-zinc-800 font-mono text-xs">
+                                {shots.length} SHOTS
+                            </Badge>
+                        </div>
+                    </div>
 
-                    <div className="flex-1 overflow-y-auto p-8 relative z-10 w-full max-w-3xl mx-auto">
-                        {mode === 'draft' ? (
-                            <div className="mt-20 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className="text-center space-y-2">
-                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">Quick Draft</Badge>
-                                    <h2 className="text-3xl font-bold tracking-tight">What are you creating?</h2>
-                                    <p className="text-muted-foreground">Describe your vision for a rapid 5s generation.</p>
-                                </div>
-                                <div className="relative group">
-                                    <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-purple-600 rounded-lg blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
-                                    <Textarea
-                                        placeholder="A futuristic city with flying cars..."
-                                        className="relative min-h-[160px] text-lg p-6 bg-card border-border/50 focus:border-primary resize-none shadow-2xl"
-                                        value={prompt}
-                                        onChange={(e) => setPrompt(e.target.value)}
-                                    />
-                                    <div className="absolute bottom-4 right-4">
-                                        <Button size="sm" onClick={handleGenerate} disabled={loading} className="gap-2 shadow-lg shadow-primary/20">
-                                            <Wand2 className="w-4 h-4" /> {loading ? "Dreaming..." : "Generate"}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-8 pb-32">
-                                <div className="flex items-center justify-between">
-                                    <h2 className="text-xl font-semibold flex items-center gap-2">
-                                        <Film className="w-5 h-5 text-primary" /> Timeline
-                                    </h2>
-                                    <Button size="sm" onClick={handleGenerate} disabled={loading} className="gap-2">
-                                        <Wand2 className="w-4 h-4" /> {loading ? "Rendering..." : "Render All Shots"}
-                                    </Button>
-                                </div>
+                    <div className="flex-1 overflow-y-auto p-6 relative">
+                        {/* Ambient Glow */}
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[500px] bg-blue-900/5 rounded-full blur-[100px] pointer-events-none" />
 
-                                <div className="space-y-0 relative">
-                                    {/* Continuous Line */}
-                                    <div className="absolute left-6 top-4 bottom-4 w-px bg-gradient-to-b from-transparent via-border to-transparent" />
+                        <div className="space-y-6 relative z-10">
+                            {shots.map((shot, idx) => (
+                                <StoryboardPanel
+                                    key={shot.id}
+                                    index={idx}
+                                    shot={shot}
+                                    onUpdate={updateShot}
+                                    onRemove={removeShot}
+                                />
+                            ))}
 
-                                    {shots.map((shot, idx) => (
-                                        <div key={shot.id} className="relative pl-14 py-4 group">
-                                            {/* Node */}
-                                            <div className="absolute left-[1.15rem] top-10 w-4 h-4 rounded-full border-2 border-primary bg-background z-10 group-hover:scale-110 transition-transform shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
-                                            <div className="absolute left-[2.9rem] top-[2.6rem] text-[10px] font-mono text-muted-foreground">
-                                                {idx + 1 < 10 ? `0${idx + 1}` : idx + 1}
-                                            </div>
+                            <Button
+                                variant="outline"
+                                onClick={addShot}
+                                className="w-full h-16 border-dashed border-zinc-800 bg-zinc-900/20 hover:bg-zinc-900/50 hover:border-zinc-700 text-zinc-500 hover:text-zinc-300 transition-all uppercase tracking-widest text-xs font-bold"
+                            >
+                                + Add Shot Card
+                            </Button>
+                        </div>
+                    </div>
 
-                                            <StoryboardPanel
-                                                index={idx}
-                                                shot={shot}
-                                                onUpdate={updateShot}
-                                                onRemove={removeShot}
-                                            />
-                                        </div>
-                                    ))}
-
-                                    <div className="pl-14 pt-4">
-                                        <Button variant="outline" onClick={addShot} className="w-full border-dashed border-border/50 hover:bg-secondary/50 hover:border-primary/50 h-10 gap-2 text-muted-foreground">
-                                            <Plus className="w-4 h-4" /> Add Next Shot
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                    {/* Footer Actions */}
+                    <div className="p-6 border-t border-zinc-800 bg-[#121212]/90 backdrop-blur-xl absolute bottom-0 w-full z-50">
+                        <div className="flex gap-4">
+                            <Button
+                                disabled={isGenerating || jobs.filter(j => j.status === 'completed').length < 2}
+                                onClick={async () => {
+                                    const completedJobIds = jobs.filter(j => j.status === 'completed').map(j => j.id)
+                                    try {
+                                        const res = await fetch('/api/stitch', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ project_id: "def", job_ids: completedJobIds })
+                                        })
+                                        if (res.ok) alert("Started!")
+                                    } catch (e) { console.error(e) }
+                                }}
+                                variant="secondary"
+                                className="flex-1 bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 h-12 text-sm font-medium"
+                            >
+                                <Film className="w-4 h-4 mr-2" /> Export Animatic
+                            </Button>
+                            <Button
+                                onClick={handleGenerate}
+                                disabled={loading}
+                                className="flex-[2] bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white border-0 shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all h-12 text-sm font-bold tracking-wide"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Wand2 className="w-4 h-4 mr-2" /> GENERATE
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </section>
 
-                {/* 3. The Archive (Right) */}
-                <aside className="col-span-3 border-l bg-card/30 backdrop-blur-sm p-4 flex flex-col">
-                    <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <History className="w-3 h-3" /> Recent Jobs
-                    </h2>
+                {/* 3. ARCHIVE (Right - 3 Cols) */}
+                <aside className="col-span-3 bg-[#121212] flex flex-col overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-[#121212]/80 backdrop-blur-md sticky top-0 z-30 flex justify-between items-center">
+                        <h2 className="text-zinc-100 font-bold tracking-tight text-sm uppercase flex items-center gap-2">
+                            <span className="w-1.5 h-4 bg-purple-600 rounded-sm" /> Archive
+                        </h2>
+                        {/* Floating Credit Gauge - Simplified */}
+                        <div className="bg-zinc-900/80 px-3 py-1 rounded-full border border-zinc-800 flex items-center gap-2">
+                            <span className="text-[10px] text-zinc-500 font-bold">CREDITS</span>
+                            <span className="text-sm font-mono text-zinc-200">{totalCredits}</span>
+                        </div>
+                    </div>
 
-                    <ScrollArea className="flex-1 -mx-4 px-4">
-                        <div className="space-y-3">
-                            {/* Placeholder Items */}
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="group relative aspect-video bg-muted rounded-md overflow-hidden border border-border/50 hover:border-primary/50 transition-colors cursor-pointer">
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <PlayCircle className="w-8 h-8 text-white drop-shadow-lg" />
+                    <div className="flex-1 overflow-y-auto p-4">
+                        <div className="grid grid-cols-1 gap-4">
+                            {jobs.map((job) => (
+                                <div key={job.id} className="group relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all">
+                                    <div className="aspect-video bg-zinc-950 relative">
+                                        {job.video_url ? (
+                                            <video src={job.video_url} controls className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <div className="text-center space-y-2">
+                                                    <div className="w-8 h-8 rounded-full border-2 border-zinc-800 border-t-blue-500 animate-spin mx-auto" />
+                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Processing</p>
+                                                </div>
+                                                {/* Pulse Effect */}
+                                                <div className="absolute inset-0 bg-gradient-to-t from-blue-900/10 to-transparent animate-pulse" />
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                                        <p className="text-[10px] text-white font-medium truncate">Futuristic City {i}</p>
-                                        <p className="text-[9px] text-white/70">Veo 3.1 • 5s</p>
+                                    <div className="p-3">
+                                        <div className="flex items-center justify-between">
+                                            <Badge variant="outline" className={`text-[10px] h-5 border-0 ${job.status === 'completed' ? 'bg-green-900/20 text-green-400' : 'bg-blue-900/20 text-blue-400'}`}>
+                                                {job.status}
+                                            </Badge>
+                                            <span className="text-[10px] text-zinc-600 font-mono">
+                                                {new Date(job.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-zinc-500 mt-2 line-clamp-1">{job.prompt}</p>
                                     </div>
                                 </div>
                             ))}
-                            <div className="p-4 text-center">
-                                <p className="text-xs text-muted-foreground">View Full Archive</p>
-                            </div>
                         </div>
-                    </ScrollArea>
+                    </div>
                 </aside>
 
             </main>
