@@ -33,10 +33,12 @@ export async function POST(request: Request) {
         }
 
         // Call Railway Worker Webhook
-        const workerUrl = process.env.RAILWAY_WORKER_URL // e.g., https://worker-production.up.railway.app
+        const workerUrl = process.env.RAILWAY_WORKER_URL
+        let workerDebug = "skipped (no URL)"
+
         if (workerUrl) {
             try {
-                await fetch(`${workerUrl}/webhook/generate`, {
+                const res = await fetch(`${workerUrl}/webhook/generate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -47,13 +49,16 @@ export async function POST(request: Request) {
                         duration: 5
                     })
                 })
+                workerDebug = res.ok ? "success" : `failed (${res.status})`
             } catch (workerError) {
                 console.error('Worker call failed:', workerError)
-                // We don't fail the request to client, just log it. Job will stay pending/stuck unless handled.
+                workerDebug = `error: ${workerError}`
             }
+        } else {
+            console.error("RAILWAY_WORKER_URL is not set")
         }
 
-        return NextResponse.json({ job })
+        return NextResponse.json({ job, workerDebug })
     } catch (err) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     }
