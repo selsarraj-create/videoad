@@ -47,15 +47,28 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
             </CardHeader>
             <CardContent className="space-y-4">
                 {/* Visual Prompt */}
-                <div className="space-y-1">
-                    <Label htmlFor={`prompt-${shot.id}`} className="text-xs">Visual Description</Label>
-                    <Textarea
-                        id={`prompt-${shot.id}`}
-                        placeholder="Describe the action..."
-                        className="resize-none h-20 text-sm"
-                        value={shot.prompt}
-                        onChange={(e) => onUpdate(shot.id, { prompt: e.target.value })}
-                    />
+                <div className="space-y-3">
+                    <div className="space-y-1">
+                        <Label htmlFor={`prompt-${shot.id}`} className="text-xs">Visual Description (Setting/Background)</Label>
+                        <Textarea
+                            id={`prompt-${shot.id}`}
+                            placeholder="A cybernetic forest..."
+                            className="resize-none h-16 text-xs bg-background/50"
+                            value={shot.prompt}
+                            onChange={(e) => onUpdate(shot.id, { prompt: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <Label htmlFor={`action-${shot.id}`} className="text-xs">Action (Subject Movement)</Label>
+                        <Textarea
+                            id={`action-${shot.id}`}
+                            placeholder="A robot walks through the trees..."
+                            className="resize-none h-16 text-xs bg-background/50 border-primary/20 focus:border-primary"
+                            value={shot.action || ""}
+                            onChange={(e) => onUpdate(shot.id, { action: e.target.value })}
+                        />
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">

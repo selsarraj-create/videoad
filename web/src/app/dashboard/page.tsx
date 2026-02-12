@@ -25,7 +25,7 @@ import { saveProjectState, loadProjectState } from "@/app/actions"
 export default function StudioPage() {
     // Mode & State
     const [mode, setMode] = useState<'draft' | 'storyboard'>('storyboard')
-    const [shots, setShots] = useState<Shot[]>([{ id: "s1", prompt: "", duration: 5, cameraMove: "static" }])
+    const [shots, setShots] = useState<Shot[]>([{ id: "s1", prompt: "", action: "", duration: 5, cameraMove: "static" }])
     const [prompt, setPrompt] = useState("")
     const [anchorStyle, setAnchorStyle] = useState("")
     const [selectedModelId, setSelectedModelId] = useState<string>("veo-3.1-fast")

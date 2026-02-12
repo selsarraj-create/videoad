@@ -36,6 +36,7 @@ export interface VideoJob {
 export interface Shot {
     id: string
     prompt: string
+    action?: string // Specific action description
     duration: number
     cameraMove?: 'static' | 'pan_left' | 'pan_right' | 'tilt_up' | 'tilt_down' | 'zoom_in' | 'zoom_out'
     imageRef?: string // URL or File path

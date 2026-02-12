@@ -32,7 +32,7 @@ export async function POST(request: Request) {
                     project_id: workspace_id,
                     status: 'pending',
                     input_params: {
-                        prompt: item.prompt,
+                        prompt: item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt,
                         style_ref: anchorStyle
                     },
                     model: model, // Main model for all for now
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             job_id: job.id,
-                            prompt: item.prompt,
+                            prompt: item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt,
                             model: model,
                             tier: tier || 'draft',
                             provider_metadata: {
