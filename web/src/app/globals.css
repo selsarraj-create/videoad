@@ -98,36 +98,37 @@
 }
 
 .dark {
-  --background: 240 10% 3.9%;
-  /* #09090B */
+  /* Premium Dark Studio - Force Sync */
+  --background: 0 0% 7%;
+  /* #121212 */
   --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  /* #0A0A0A */
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
 
-  /* Vibrant Blue Accent (#3b82f6) */
-  --primary: 217 91% 60%;
-  --primary-foreground: 210 40% 98%;
+  --card: 0 0% 12%;
+  /* #1E1E1E */
+  --card-foreground: 240 5% 96%;
 
-  --secondary: 240 3.7% 15.9%;
-  /* Zinc 800 */
-  --secondary-foreground: 0 0% 98%;
+  --popover: 0 0% 12%;
+  --popover-foreground: 240 5% 96%;
 
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
+  /* Cyber Blue Primary */
+  --primary: 221 83% 53%;
+  --primary-foreground: 0 0% 100%;
 
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
+  --secondary: 240 4% 16%;
+  --secondary-foreground: 240 5% 96%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 65%;
 
-  --border: 240 3.7% 15.9%;
-  /* Zinc 800 */
-  --input: 240 3.7% 15.9%;
-  --ring: 217 91% 60%;
+  --accent: 240 4% 16%;
+  --accent-foreground: 240 5% 96%;
+
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 240 5% 96%;
+
+  --border: 240 4% 16%;
+  --input: 240 4% 16%;
+  --ring: 221 83% 53%;
 }
 
 @utility bg-noise {
