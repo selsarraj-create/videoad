@@ -1,7 +1,59 @@
 @import "tailwindcss";
 
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
 @theme {
   --font-sans: var(--font-inter);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to sure everything still looks
+  correct.
+*/
+@layer base {
+
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
 }
 
 :root {
@@ -28,30 +80,34 @@
 }
 
 .dark {
-  --background: 240 10% 3.9%; /* #09090B */
+  --background: 240 10% 3.9%;
+  /* #09090B */
   --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%; /* #0A0A0A for card bg to match or slightly offset */
+  --card: 240 10% 3.9%;
+  /* #0A0A0A */
   --card-foreground: 0 0% 98%;
   --popover: 240 10% 3.9%;
   --popover-foreground: 0 0% 98%;
-  
+
   /* Vibrant Blue Accent (#3b82f6) */
-  --primary: 217 91% 60%; 
+  --primary: 217 91% 60%;
   --primary-foreground: 210 40% 98%;
-  
-  --secondary: 240 3.7% 15.9%; /* Zinc 800 */
+
+  --secondary: 240 3.7% 15.9%;
+  /* Zinc 800 */
   --secondary-foreground: 0 0% 98%;
-  
+
   --muted: 240 3.7% 15.9%;
   --muted-foreground: 240 5% 64.9%;
-  
+
   --accent: 240 3.7% 15.9%;
   --accent-foreground: 0 0% 98%;
-  
+
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-  
-  --border: 240 3.7% 15.9%; /* Zinc 800 */
+
+  --border: 240 3.7% 15.9%;
+  /* Zinc 800 */
   --input: 240 3.7% 15.9%;
   --ring: 217 91% 60%;
 }
@@ -60,6 +116,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
