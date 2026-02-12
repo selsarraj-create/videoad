@@ -41,6 +41,13 @@ export interface Shot {
     cameraMove?: 'static' | 'pan_left' | 'pan_right' | 'tilt_up' | 'tilt_down' | 'zoom_in' | 'zoom_out'
     imageRef?: string // URL or File path
     motionSketch?: string // Data URL of canvas
+    cameraControls?: {
+        pan: { x: number, y: number }
+        zoom: number
+        tilt: number
+        roll: number
+    }
+    motionVideoRef?: string // URL for motion driving video
 }
 
 export interface StoryboardProject {

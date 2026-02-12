@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Shot } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,9 +8,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Trash2, Image as ImageIcon, Video, Move, Pencil, X } from "lucide-react"
+import { Trash2, Image as ImageIcon, Video, Move, Pencil, X, Upload, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { MotionBrush } from "@/components/motion-brush"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CameraControls } from "@/components/camera-controls"
+import { LivePreview } from "@/components/live-preview"
+import { createClient } from "@/lib/supabase/client"
 
 interface StoryboardPanelProps {
     shot: Shot
@@ -22,9 +26,51 @@ interface StoryboardPanelProps {
 export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardPanelProps) {
     const [isMotionBrushOpen, setIsMotionBrushOpen] = useState(false)
 
+    const handleCameraChange = (vals: any) => {
+        onUpdate(shot.id, { cameraControls: vals })
+    }
+
     const handleSaveMotion = (dataUrl: string) => {
         onUpdate(shot.id, { motionSketch: dataUrl })
         setIsMotionBrushOpen(false)
+    }
+
+    // ... (inside component)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const [isUploading, setIsUploading] = useState(false)
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setIsUploading(true)
+        try {
+            const supabase = createClient()
+            const fileExt = file.name.split('.').pop()
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+            const filePath = `motion_refs/${fileName}`
+
+            const { error: uploadError } = await supabase.storage
+                .from('raw_assets')
+                .upload(filePath, file)
+
+            if (uploadError) throw uploadError
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('raw_assets')
+                .getPublicUrl(filePath)
+
+            onUpdate(shot.id, { motionVideoRef: publicUrl })
+        } catch (error) {
+            console.error('Error uploading motion ref:', error)
+            alert('Failed to upload video')
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const handleMotionVideoUpload = () => {
+        fileInputRef.current?.click()
     }
 
     return (
@@ -37,138 +83,176 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
                     <div className="w-1.5 h-1.5 rounded-full bg-zinc-700 group-hover:bg-primary transition-colors" />
                     Shot {index + 1}
                 </CardTitle>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-colors"
-                    onClick={() => onRemove(shot.id)}
-                >
-                    <Trash2 className="h-3 w-3" />
-                </Button>
+                <div className="flex items-center gap-2">
+                    {/* Live Status Indicators */}
+                    <div className="flex gap-1" title="AI Verification">
+                        <div className={`w-1.5 h-1.5 rounded-full ${shot.prompt ? 'bg-green-500/50' : 'bg-red-500/50'}`} />
+                        <div className={`w-1.5 h-1.5 rounded-full ${shot.motionSketch ? 'bg-blue-500/50' : 'bg-zinc-800'}`} />
+                    </div>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                        onClick={() => onRemove(shot.id)}
+                    >
+                        <Trash2 className="h-3 w-3" />
+                    </Button>
+                </div>
             </CardHeader>
 
             <CardContent className="space-y-4 p-4 pt-1">
-                {/* Visual Prompt */}
-                <div className="grid grid-cols-1 gap-3">
-                    <div className="space-y-1.5">
-                        <Label htmlFor={`prompt-${shot.id}`} className="text-[10px] uppercase font-bold text-zinc-600">Visuals</Label>
-                        <Textarea
-                            id={`prompt-${shot.id}`}
-                            placeholder="Cybernetic forest..."
-                            className="resize-none h-14 text-xs bg-black/40 border-white/5 focus:border-primary/50 focus:bg-black/60 transition-all font-light"
-                            value={shot.prompt}
-                            onChange={(e) => onUpdate(shot.id, { prompt: e.target.value })}
-                        />
-                    </div>
+                <Tabs defaultValue="visuals" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 bg-black/20 h-7 p-0.5 mb-2">
+                        <TabsTrigger value="visuals" className="text-[10px] h-6 data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-200">Visuals</TabsTrigger>
+                        <TabsTrigger value="director" className="text-[10px] h-6 data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-200">Director</TabsTrigger>
+                    </TabsList>
 
-                    <div className="space-y-1.5">
-                        <Label htmlFor={`action-${shot.id}`} className="text-[10px] uppercase font-bold text-zinc-600">Action</Label>
-                        <Textarea
-                            id={`action-${shot.id}`}
-                            placeholder="Robot walking..."
-                            className="resize-none h-14 text-xs bg-black/40 border-white/5 focus:border-primary/50 focus:bg-black/60 transition-all font-light"
-                            value={shot.action || ""}
-                            onChange={(e) => onUpdate(shot.id, { action: e.target.value })}
-                        />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                    {/* Camera Move */}
-                    <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase font-bold text-zinc-600 flex items-center gap-1">
-                            <Move className="w-3 h-3" /> Cam
-                        </Label>
-                        <Select
-                            value={shot.cameraMove || 'static'}
-                            onValueChange={(v: any) => onUpdate(shot.id, { cameraMove: v })}
-                        >
-                            <SelectTrigger className="h-8 text-xs bg-zinc-800/50 border-white/5 hover:border-white/10 hover:bg-zinc-800">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-zinc-900 border-white/10">
-                                <SelectItem value="static">Static</SelectItem>
-                                <SelectItem value="pan_left">Pan Left</SelectItem>
-                                <SelectItem value="pan_right">Pan Right</SelectItem>
-                                <SelectItem value="zoom_in">Zoom In</SelectItem>
-                                <SelectItem value="zoom_out">Zoom Out</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Duration */}
-                    <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase font-bold text-zinc-600 flex items-center gap-1">
-                            <Video className="w-3 h-3" /> Time
-                        </Label>
-                        <Select
-                            value={shot.duration.toString()}
-                            onValueChange={(v) => onUpdate(shot.id, { duration: parseInt(v) })}
-                        >
-                            <SelectTrigger className="h-8 text-xs bg-zinc-800/50 border-white/5 hover:border-white/10 hover:bg-zinc-800">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-zinc-900 border-white/10">
-                                <SelectItem value="3">3s</SelectItem>
-                                <SelectItem value="5">5s</SelectItem>
-                                <SelectItem value="8">8s</SelectItem>
-                                <SelectItem value="10">10s</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-
-                {/* Motion Brush / Image Ref */}
-                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/5">
-                    <Button variant="outline" size="sm" className="w-full text-[10px] h-7 bg-transparent border-dashed border-zinc-700 hover:border-primary/50 hover:text-primary transition-colors">
-                        <ImageIcon className="w-3 h-3 mr-2" /> Ref
-                    </Button>
-
-                    <Dialog open={isMotionBrushOpen} onOpenChange={setIsMotionBrushOpen}>
-                        <DialogTrigger asChild>
-                            <Button
-                                variant={shot.motionSketch ? "secondary" : "outline"}
-                                size="sm"
-                                className={cn(
-                                    "w-full text-[10px] h-7 border-dashed transition-colors",
-                                    shot.motionSketch
-                                        ? "bg-primary/20 border-primary text-primary"
-                                        : "bg-transparent border-zinc-700 hover:border-primary/50 hover:text-primary"
-                                )}
-                            >
-                                <Pencil className="w-3 h-3 mr-2" />
-                                {shot.motionSketch ? "Active" : "Motion"}
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-white/10">
-                            <DialogHeader>
-                                <DialogTitle className="text-zinc-200">Draw Motion Path</DialogTitle>
-                            </DialogHeader>
-                            <div className="py-4 flex justify-center">
-                                <MotionBrush
-                                    onSave={handleSaveMotion}
-                                    initialData={shot.motionSketch}
+                    <TabsContent value="visuals" className="space-y-4">
+                        {/* Visual Prompt */}
+                        <div className="grid grid-cols-1 gap-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor={`prompt-${shot.id}`} className="text-[10px] uppercase font-bold text-zinc-600">Visuals</Label>
+                                <Textarea
+                                    id={`prompt-${shot.id}`}
+                                    placeholder="Cybernetic forest..."
+                                    className="resize-none h-14 text-xs bg-black/40 border-white/5 focus:border-primary/50 focus:bg-black/60 transition-all font-light"
+                                    value={shot.prompt}
+                                    onChange={(e) => onUpdate(shot.id, { prompt: e.target.value })}
                                 />
                             </div>
-                        </DialogContent>
-                    </Dialog>
-                </div>
 
-                {shot.motionSketch && (
-                    <div className="relative border border-primary/30 rounded overflow-hidden h-8 w-full bg-primary/5 flex items-center justify-center group/preview">
-                        <span className="text-[9px] text-primary/70 font-mono">Motion Data</span>
-                        <img src={shot.motionSketch} alt="motion" className="absolute inset-0 w-full h-full object-cover opacity-50 mix-blend-screen" />
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full w-8 text-primary hover:bg-primary/20 hover:text-primary-foreground opacity-0 group-hover/preview:opacity-100 transition-all rounded-none"
-                            onClick={() => onUpdate(shot.id, { motionSketch: undefined })}
-                        >
-                            <X className="w-3 h-3" />
-                        </Button>
-                    </div>
-                )}
+                            <div className="space-y-1.5">
+                                <Label htmlFor={`action-${shot.id}`} className="text-[10px] uppercase font-bold text-zinc-600">Action</Label>
+                                <Textarea
+                                    id={`action-${shot.id}`}
+                                    placeholder="Robot walking..."
+                                    className="resize-none h-14 text-xs bg-black/40 border-white/5 focus:border-primary/50 focus:bg-black/60 transition-all font-light"
+                                    value={shot.action || ""}
+                                    onChange={(e) => onUpdate(shot.id, { action: e.target.value })}
+                                />
+                            </div>
 
+                            {/* Live Preview */}
+                            <div className="space-y-1.5 pt-2">
+                                <Label className="text-[10px] uppercase font-bold text-zinc-600">Live Preview</Label>
+                                <LivePreview shot={shot} />
+                            </div>
+                        </div>
+
+                        {/* Duration (Moved here for quick access) */}
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase font-bold text-zinc-600 flex items-center gap-1">
+                                <Video className="w-3 h-3" /> Time (s)
+                            </Label>
+                            <Select
+                                value={shot.duration.toString()}
+                                onValueChange={(v) => onUpdate(shot.id, { duration: parseInt(v) })}
+                            >
+                                <SelectTrigger className="h-8 text-xs bg-zinc-800/50 border-white/5 hover:border-white/10 hover:bg-zinc-800">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-zinc-900 border-white/10">
+                                    <SelectItem value="3">3s</SelectItem>
+                                    <SelectItem value="5">5s</SelectItem>
+                                    <SelectItem value="8">8s</SelectItem>
+                                    <SelectItem value="10">10s</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="director" className="space-y-4 animate-in slide-in-from-right-2 duration-300">
+                        {/* Camera Controls */}
+                        <CameraControls
+                            values={shot.cameraControls || { pan: { x: 0, y: 0 }, zoom: 0, tilt: 0, roll: 0 }}
+                            onChange={handleCameraChange}
+                        />
+
+                        {/* Motion Driving Video */}
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase font-bold text-zinc-600">Motion Driver</Label>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                accept="video/*"
+                                onChange={handleFileChange}
+                            />
+                            <div
+                                onClick={handleMotionVideoUpload}
+                                className={cn(
+                                    "h-16 border border-dashed border-zinc-700 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all group/upload relative overflow-hidden",
+                                    isUploading ? "opacity-50 pointer-events-none" : "hover:bg-zinc-800/50 hover:border-zinc-500"
+                                )}
+                            >
+                                {isUploading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                    </div>
+                                )}
+                                {shot.motionVideoRef ? (
+                                    <div className="flex items-center gap-2 text-green-500">
+                                        <Video className="w-4 h-4" />
+                                        <span className="text-[10px] font-mono">Reference Added</span>
+                                        <Button variant="ghost" size="icon" className="h-4 w-4 ml-2 hover:bg-red-500/20 hover:text-red-400" onClick={(e) => { e.stopPropagation(); onUpdate(shot.id, { motionVideoRef: undefined }) }}>
+                                            <X className="w-3 h-3" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <Upload className="w-4 h-4 text-zinc-500 group-hover/upload:text-zinc-300 mb-1" />
+                                        <span className="text-[9px] text-zinc-600 group-hover/upload:text-zinc-400">Upload Video Ref</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Motion Brush Trigger */}
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase font-bold text-zinc-600">Motion Path</Label>
+                            <div className="flex gap-2">
+                                <Dialog open={isMotionBrushOpen} onOpenChange={setIsMotionBrushOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button
+                                            variant={shot.motionSketch ? "secondary" : "outline"}
+                                            size="sm"
+                                            className={cn(
+                                                "w-full text-[10px] h-8 border-dashed transition-colors",
+                                                shot.motionSketch
+                                                    ? "bg-primary/20 border-primary text-primary"
+                                                    : "bg-transparent border-zinc-700 hover:border-primary/50 hover:text-primary"
+                                            )}
+                                        >
+                                            <Pencil className="w-3 h-3 mr-2" />
+                                            {shot.motionSketch ? "Edit Motion Path" : "Draw Motion Path"}
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-white/10">
+                                        <DialogHeader>
+                                            <DialogTitle className="text-zinc-200">Draw Motion Path</DialogTitle>
+                                        </DialogHeader>
+                                        <div className="py-4 flex justify-center">
+                                            <MotionBrush
+                                                onSave={handleSaveMotion}
+                                                initialData={shot.motionSketch}
+                                            />
+                                        </div>
+                                    </DialogContent>
+                                </Dialog>
+                                {shot.motionSketch && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-zinc-500 hover:text-red-400"
+                                        onClick={() => onUpdate(shot.id, { motionSketch: undefined })}
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </TabsContent>
+                </Tabs>
             </CardContent>
         </Card>
     )
