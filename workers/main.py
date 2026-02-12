@@ -119,6 +119,11 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
 
 @app.post("/webhook/generate")
 async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundTasks):
+    # Extract duration from provider_metadata if not set top-level
+    duration = request.duration
+    if request.provider_metadata and "duration" in request.provider_metadata:
+        duration = request.provider_metadata["duration"]
+
     background_tasks.add_task(
         process_video_job, 
         request.job_id, 
@@ -126,10 +131,21 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
         request.model, 
         request.tier,
         request.image_refs, 
-        request.duration,
+        duration,
         request.provider_metadata
     )
     return {"message": "Job received", "job_id": request.job_id}
+
+class StitchRequest(BaseModel):
+    project_id: str
+    job_ids: list[str]
+    output_format: str = "mp4"
+
+@app.post("/webhook/stitch")
+async def handle_stitch(request: StitchRequest, background_tasks: BackgroundTasks):
+    # Placeholder for stitching logic
+    print(f"Stitching request for project {request.project_id} with jobs: {request.job_ids}")
+    return {"message": "Stitching started", "project_id": request.project_id}
 
 @app.get("/health")
 def health_check():
