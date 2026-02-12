@@ -16,15 +16,17 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-interface ModelSelectorProps {
+export interface ModelSelectorProps {
     selectedModelId: string
-    onSelect: (modelId: string) => void
+    onSelect: (id: string) => void
     duration: number
     is4k: boolean
+    compact?: boolean
 }
 
-export function ModelSelector({ selectedModelId, onSelect, duration, is4k }: ModelSelectorProps) {
+export function ModelSelector({ selectedModelId, onSelect, duration, is4k, compact = false }: ModelSelectorProps) {
     const [activeCategory, setActiveCategory] = useState<ModelCategory>('Cinema')
+    const activeTier = MODELS.find(m => m.id === selectedModelId)?.tier || 'production'
 
     const getCategoryIcon = (cat: ModelCategory) => {
         switch (cat) {
@@ -42,6 +44,36 @@ export function ModelSelector({ selectedModelId, onSelect, duration, is4k }: Mod
             case 'Premium': return "bg-amber-100 text-amber-800 border-amber-200"
             default: return "bg-gray-100 text-gray-800"
         }
+    }
+
+    if (compact) {
+        return (
+            <div className="space-y-2">
+                {MODELS.map((model) => (
+                    <div
+                        key={model.id}
+                        onClick={() => onSelect(model.id)}
+                        className={cn(
+                            "p-2 rounded-md border cursor-pointer transition-all flex flex-col gap-1",
+                            selectedModelId === model.id
+                                ? 'bg-primary/10 border-primary shadow-sm'
+                                : 'bg-card border-border/50 hover:bg-accent/50'
+                        )}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium">{model.name}</span>
+                            {selectedModelId === model.id && <div className="w-2 h-2 rounded-full bg-primary" />}
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <Badge variant="outline" className="text-[9px] h-4 px-1">{model.tier}</Badge>
+                            <span className="text-[10px] font-mono text-muted-foreground">
+                                {calculateCredits(model.baseCredits, duration, is4k)} cr
+                            </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )
     }
 
     return (
