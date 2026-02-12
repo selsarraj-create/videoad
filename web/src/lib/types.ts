@@ -32,3 +32,32 @@ export interface VideoJob {
     error_message?: string
     created_at: string
 }
+
+export interface Shot {
+    id: string
+    prompt: string
+    duration: number
+    cameraMove?: 'static' | 'pan_left' | 'pan_right' | 'tilt_up' | 'tilt_down' | 'zoom_in' | 'zoom_out'
+    imageRef?: string // URL or File path
+    motionSketch?: string // Data URL of canvas
+}
+
+export interface StoryboardProject {
+    id: string
+    name: string
+    anchorShot?: {
+        imageRef?: string
+        stylePrompt?: string
+    }
+    shots: Shot[]
+    status: 'draft' | 'rendering' | 'completed'
+}
+
+export interface ProjectData {
+    mode: 'draft' | 'storyboard'
+    shots: Shot[]
+    anchorStyle: string
+    selectedModelId: string
+    is4k: boolean
+    prompt?: string // For draft mode
+}

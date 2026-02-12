@@ -2,251 +2,330 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { VideoJob } from "@/lib/types"
+import { VideoJob, Shot } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Wand2, Play, AlertCircle, CheckCircle2, Clock, Zap } from "lucide-react"
+import { Wand2, Play, AlertCircle, CheckCircle2, Clock, Zap, Plus, Layers, Film } from "lucide-react"
 import { ModelSelector } from "@/components/model-selector"
+import { StoryboardPanel } from "@/components/storyboard-panel"
 import { MODELS, calculateCredits } from "@/lib/models"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { saveProjectState, loadProjectState } from "@/app/actions"
 
 export default function StudioPage() {
-    const [jobs, setJobs] = useState<VideoJob[]>([])
-    const [prompt, setPrompt] = useState("")
-    const [selectedModelId, setSelectedModelId] = useState<string>("veo-3.1-fast")
-    // Derive tier and model details from selected ID
-    const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
+    // Workspace Mode: 'draft' | 'storyboard'
+    const [mode, setMode] = useState<'draft' | 'storyboard'>('storyboard')
 
-    // Duration/Resolution state
-    const [duration, setDuration] = useState<number>(5)
+    const [activeTab, setActiveTab] = useState("storyboard")
+    const [shots, setShots] = useState<Shot[]>([
+        { id: "s1", prompt: "", duration: 5, cameraMove: "static" }
+    ])
+    const [prompt, setPrompt] = useState("") // Single prompt for Draft Mode
+
+    // Anchor Shot state
+    const [anchorStyle, setAnchorStyle] = useState("")
+
+    // Model Selection
+    const [selectedModelId, setSelectedModelId] = useState<string>("veo-3.1-fast")
+    const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
     const [is4k, setIs4k] = useState<boolean>(false)
 
     const [loading, setLoading] = useState(false)
     const supabase = createClient()
 
-    // Calculate estimated credits
-    const estimatedCredits = calculateCredits(selectedModel.baseCredits, duration, is4k)
+    // Calculate total project credits
+    const totalCredits = mode === 'draft'
+        ? calculateCredits(selectedModel.baseCredits, 5, is4k) // Draft is fixed 5s for now
+        : shots.reduce((acc, shot) => acc + calculateCredits(selectedModel.baseCredits, shot.duration, is4k), 0)
 
-    // Mock data for initial render
+    // Auto-save logic
     useEffect(() => {
-        // ... (keep existing mock data logic or fetch) ...
-        setJobs([
-            {
-                id: "1",
-                project_id: "def",
-                status: "completed",
-                input_params: { prompt: "Cinematic drone shot of a luxury villa" },
-                model: "veo-3.1-fast",
-                tier: "draft",
-                output_url: "#",
-                created_at: new Date().toISOString()
-            },
-        ] as VideoJob[])
-
-        // ... (keep subscription logic) ...
-        const channel = supabase
-            .channel('realtime-jobs')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs' }, payload => {
-                console.log('Change received!', payload)
+        const timer = setTimeout(() => {
+            // Mock project ID for now. In a real app, this would be from params.
+            const projectId = "default-project-id"
+            saveProjectState(projectId, {
+                mode,
+                shots,
+                anchorStyle,
+                selectedModelId,
+                is4k,
+                prompt: mode === 'draft' ? prompt : undefined
             })
-            .subscribe()
+        }, 3000) // Debounce 3s
+        return () => clearTimeout(timer)
+    }, [mode, shots, anchorStyle, selectedModelId, is4k, prompt])
 
-        return () => {
-            supabase.removeChannel(channel)
+    // Load initial state
+    useEffect(() => {
+        async function load() {
+            const projectId = "default-project-id"
+            const result = await loadProjectState(projectId)
+            if (result.data) {
+                const d = result.data
+                setMode(d.mode)
+                setShots(d.shots || [])
+                setAnchorStyle(d.anchorStyle || "")
+                setSelectedModelId(d.selectedModelId || "veo-3.1-fast")
+                setIs4k(d.is4k || false)
+                if (d.prompt) setPrompt(d.prompt)
+            }
         }
-    }, [supabase])
+        load()
+    }, [])
+
+    const addShot = () => {
+        const newShot: Shot = {
+            id: `s${Math.random().toString(36).substr(2, 9)}`,
+            prompt: "",
+            duration: 5,
+            cameraMove: "static"
+        }
+        setShots([...shots, newShot])
+    }
+
+    const updateShot = (id: string, updates: Partial<Shot>) => {
+        setShots(shots.map(s => s.id === id ? { ...s, ...updates } : s))
+    }
+
+    const removeShot = (id: string) => {
+        if (shots.length > 1) {
+            setShots(shots.filter(s => s.id !== id))
+        }
+    }
 
     const handleGenerate = async () => {
-        if (!prompt) return
         setLoading(true)
+        const payload = mode === 'draft'
+            ? { prompt, model: selectedModelId, is4k, workspace_id: "def" }
+            : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: "def" }
 
-        // 1. Insert job into Supabase (mock)
-        const newJob: VideoJob = {
-            id: Math.random().toString(),
-            project_id: "def",
-            status: "pending",
-            input_params: { prompt, duration },
-            model: selectedModel.id as any,
-            tier: selectedModel.tier === 'Premium' ? 'production' : 'draft', // Map credit tier to system tier
-            created_at: new Date().toISOString()
-        }
+        console.log(`Generating in ${mode} mode:`, payload)
 
-        setJobs([newJob, ...jobs])
-        setPrompt("")
-
-        // 2. Trigger webhook/backend
         try {
             await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt,
-                    model: selectedModel.id,
-                    tier: selectedModel.tier === 'Premium' ? 'production' : 'draft',
-                    provider_metadata: {
-                        credits_cost: estimatedCredits,
-                        resolution: is4k ? '4k' : '720p',
-                        duration: duration
-                    },
-                    workspace_id: "def"
-                })
+                body: JSON.stringify(payload)
             })
         } catch (e) {
             console.error(e)
         }
 
-        setTimeout(() => {
-            setLoading(false)
-        }, 1000)
+        setTimeout(() => setLoading(false), 2000)
     }
 
-    const getStatusIcon = (status: string) => {
-        // ... (keep existing icon logic) ...
-        switch (status) {
-            case 'completed': return <CheckCircle2 className="h-4 w-4 text-green-500" />
-            case 'processing': return <Clock className="h-4 w-4 text-blue-500 animate-pulse" />
-            case 'failed': return <AlertCircle className="h-4 w-4 text-red-500" />
-            default: return <Clock className="h-4 w-4 text-gray-500" />
-        }
+    const handleGenerateAnimatic = async () => {
+        handleGenerate()
     }
 
     return (
-        <div className="grid gap-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">Studio</h1>
+        <div className="grid gap-6 h-[calc(100vh-100px)] grid-rows-[auto_1fr]">
+            <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Studio</h1>
+                        <p className="text-xs text-muted-foreground">Ai-Powered Video Production</p>
+                    </div>
+
+                    {/* Mode Toggle */}
+                    <div className="flex items-center p-1 bg-muted rounded-lg border">
+                        <Button
+                            variant={mode === 'draft' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            onClick={() => setMode('draft')}
+                            className="text-xs h-7 transition-all"
+                        >
+                            Quick Draft
+                        </Button>
+                        <Button
+                            variant={mode === 'storyboard' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            onClick={() => setMode('storyboard')}
+                            className="text-xs h-7 transition-all"
+                        >
+                            Storyboard
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <div className="rounded-lg bg-muted px-3 py-1 text-sm flex items-center gap-2 border">
+                        <Zap className="w-4 h-4 text-amber-500" />
+                        <span className="font-bold">{totalCredits} Credits</span>
+                    </div>
+                </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-                <div className="col-span-4 lg:col-span-3">
+            <div className="grid gap-6 md:grid-cols-12 lg:grid-cols-12 h-full overflow-hidden">
+                {/* Left Sidebar: Ingredients & Tools (Persists across modes) */}
+                <div className="col-span-12 md:col-span-3 space-y-4 overflow-y-auto pr-2 pb-10">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Create New Ad</CardTitle>
-                            <CardDescription>
-                                Select a model from the registry and customize your video.
-                            </CardDescription>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Model & Settings</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-
-                            <ModelSelector
-                                selectedModelId={selectedModelId}
-                                onSelect={setSelectedModelId}
-                                duration={duration}
-                                is4k={is4k}
-                            />
-
+                        <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="prompt">Prompt</Label>
+                                <Label className="text-xs">Resolution</Label>
+                                <div className="flex items-center space-x-2">
+                                    <Switch checked={is4k} onCheckedChange={setIs4k} id="res-mode" />
+                                    <Label htmlFor="res-mode" className="text-xs">{is4k ? '4K (Ultra)' : '720p (HD)'}</Label>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs">Active Model</Label>
+                                <div className="text-xs font-medium p-2 bg-muted rounded border">
+                                    {selectedModel.name}
+                                </div>
+                                <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setActiveTab("models")}>
+                                    Change Model
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Ingredients only relevant for Storyboard usually, but anchors can help drafts too ideally. Keeping for both for now. */}
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Global Style (Anchor)</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs">Art Direction / Style Prompt</Label>
                                 <Input
-                                    id="prompt"
-                                    placeholder="Describe your video..."
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
+                                    placeholder="e.g. Cinematic lighting, teal and orange..."
+                                    value={anchorStyle}
+                                    onChange={(e) => setAnchorStyle(e.target.value)}
+                                    className="text-xs"
                                 />
                             </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Duration</Label>
-                                    <Select value={duration.toString()} onValueChange={(v) => setDuration(parseInt(v))}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="5">5s (Base)</SelectItem>
-                                            <SelectItem value="10">10s (2x)</SelectItem>
-                                            <SelectItem value="25">25s (3x)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Resolution</Label>
-                                    <div className="flex items-center space-x-2 pt-2">
-                                        <Switch checked={is4k} onCheckedChange={setIs4k} id="res-mode" />
-                                        <Label htmlFor="res-mode">{is4k ? '4K (Ultra)' : '720p (HD)'}</Label>
-                                    </div>
+                            <div className="border-2 border-dashed rounded-md p-4 text-center hover:bg-muted/50 transition-colors cursor-pointer">
+                                <div className="text-xs text-muted-foreground flex flex-col items-center gap-2">
+                                    <Layers className="w-6 h-6" />
+                                    <span>Upload Anchor Image</span>
                                 </div>
                             </div>
-
-                            {/* Estimated Cost Display */}
-                            <div className="rounded-lg bg-muted p-3 flex justify-between items-center text-sm">
-                                <span className="text-muted-foreground flex items-center gap-2">
-                                    <Zap className="w-4 h-4" /> Estimated Impact:
-                                </span>
-                                <span className="font-bold">{estimatedCredits} Credits</span>
-                            </div>
-
-                            {selectedModel.category === 'Production' && (
-                                <div className="space-y-2 rounded-md border border-dashed p-4">
-                                    <Label>Motion Control (Reference Video)</Label>
-                                    <Input type="file" accept="video/*" />
-                                    <p className="text-xs text-muted-foreground">Upload a video to guide the motion.</p>
-                                </div>
-                            )}
-
                         </CardContent>
-                        <CardFooter>
-                            <Button onClick={handleGenerate} disabled={loading} className="w-full">
-                                {loading ? "Scouting..." : (
+                    </Card>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="col-span-12 md:col-span-9 flex flex-col gap-4 h-full overflow-hidden">
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
+                        <div className="flex items-center justify-between mb-2 shrink-0">
+                            <TabsList>
+                                <TabsTrigger value="storyboard" className="gap-2">
+                                    <Film className="w-4 h-4" />
+                                    {mode === 'draft' ? 'Active Prompt' : 'Timeline'}
+                                </TabsTrigger>
+                                <TabsTrigger value="models" className="gap-2"><SettingsIcon className="w-4 h-4" /> Registry</TabsTrigger>
+                            </TabsList>
+
+                            <Button onClick={handleGenerate} disabled={loading}>
+                                {loading ? "Generating..." : (
                                     <>
                                         <Wand2 className="mr-2 h-4 w-4" />
-                                        Generate with {selectedModel.provider}
+                                        {mode === 'draft' ? 'Generate Draft' : 'Render All Shots'}
                                     </>
                                 )}
                             </Button>
-                        </CardFooter>
-                    </Card>
-                </div>
+                        </div>
 
-                <div className="col-span-4">
-                    <Card className="h-full">
-                        <CardHeader>
-                            <CardTitle>Recent Jobs</CardTitle>
-                            <CardDescription>
-                                Track the status of your video generation jobs.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                {jobs.map((job) => (
-                                    <div key={job.id} className="flex items-center justify-between rounded-lg border p-4">
-                                        <div className="flex flex-col gap-1">
-                                            <span className="font-medium truncate max-w-[200px]">{job.input_params.prompt}</span>
-                                            <div className="flex gap-2">
-                                                <Badge variant="outline" className="text-xs">{job.model}</Badge>
-                                                {job.tier === 'production' && <Badge className="text-xs bg-purple-500 hover:bg-purple-600">Pro</Badge>}
-                                                <span className="text-xs text-muted-foreground">{new Date(job.created_at).toLocaleTimeString()}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <Badge variant={job.status === 'completed' ? 'default' : 'secondary'} className="capitalize flex gap-2">
-                                                {getStatusIcon(job.status)}
-                                                {job.status}
-                                            </Badge>
-                                            {job.status === 'processing' && (
-                                                <div className="w-24">
-                                                    <Progress value={45} className="h-2" />
-                                                </div>
-                                            )}
-                                            {job.status === 'completed' && job.output_url && (
-                                                <Button size="sm" variant="ghost" asChild>
-                                                    <a href={job.output_url} target="_blank">
-                                                        <Play className="h-4 w-4" />
-                                                    </a>
-                                                </Button>
-                                            )}
+                        <TabsContent value="storyboard" className="flex-grow overflow-y-auto pb-20 pr-2">
+                            {mode === 'draft' ? (
+                                // Quick Draft View
+                                <div className="max-w-2xl mx-auto mt-10 space-y-6">
+                                    <div className="space-y-2">
+                                        <Label className="text-lg">What do you want to create?</Label>
+                                        <Textarea
+                                            placeholder="Describe your video idea in detail..."
+                                            className="h-40 text-base"
+                                            value={prompt}
+                                            onChange={(e) => setPrompt(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex gap-4 p-4 bg-muted/50 rounded-lg border border-dashed">
+                                        <div className="flex-1 text-sm text-muted-foreground">
+                                            <p className="font-semibold text-foreground mb-1">Quick Draft Mode</p>
+                                            Generates a single 5s clip using the selected model. Great for testing ideas quickly.
                                         </div>
                                     </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
+                                </div>
+                            ) : (
+                                // Storyboard Mode - Vertical Timeline
+                                <div className="space-y-4 max-w-3xl mx-auto">
+                                    {shots.map((shot, idx) => (
+                                        <div key={shot.id} className="flex gap-4 relative">
+                                            {/* Timeline Connector */}
+                                            {idx !== shots.length - 1 && (
+                                                <div className="absolute left-[19px] top-10 bottom-[-20px] w-0.5 bg-border -z-10" />
+                                            )}
+
+                                            {/* Index Bubble */}
+                                            <div className="flex flex-col items-center pt-2">
+                                                <div className="w-10 h-10 rounded-full bg-muted border flex items-center justify-center font-bold text-sm shrink-0">
+                                                    {idx + 1}
+                                                </div>
+                                            </div>
+
+                                            {/* Shot Panel */}
+                                            <div className="flex-grow">
+                                                <StoryboardPanel
+                                                    index={idx}
+                                                    shot={shot}
+                                                    onUpdate={updateShot}
+                                                    onRemove={removeShot}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <div className="pl-14">
+                                        <Button variant="outline" onClick={addShot} className="w-full border-dashed h-12">
+                                            <Plus className="w-4 h-4 mr-2" /> Add Next Shot
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="models" className="overflow-y-auto h-full pb-20">
+                            <ModelSelector
+                                selectedModelId={selectedModelId}
+                                onSelect={(id) => { setSelectedModelId(id); setActiveTab("storyboard"); }}
+                                duration={5}
+                                is4k={is4k}
+                            />
+                        </TabsContent>
+                    </Tabs>
                 </div>
             </div>
         </div>
+    )
+}
+
+function SettingsIcon(props: any) {
+    return (
+        <svg
+            {...props}
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
     )
 }
