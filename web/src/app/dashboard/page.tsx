@@ -34,6 +34,9 @@ import { StoryboardPanel } from "@/components/storyboard-panel"
 import { MODELS, calculateCredits } from "@/lib/models"
 import { saveProjectState, loadProjectState } from "@/app/actions"
 
+import { CreditBadge } from "@/components/credit-badge"
+import { useCreditCalculator } from "@/hooks/use-credit-calculator"
+
 export default function StudioPage() {
     // Mode & State
     const [mode, setMode] = useState<'draft' | 'storyboard'>('storyboard')
@@ -44,10 +47,21 @@ export default function StudioPage() {
     const [is4k, setIs4k] = useState<boolean>(false)
     const [loading, setLoading] = useState(false)
     const [jobs, setJobs] = useState<Job[]>([])
-    const [isGenerating, setIsGenerating] = useState(false) // Add isGenerating state
+    const [isGenerating, setIsGenerating] = useState(false)
 
-    const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
     const supabase = createClient()
+    const userBalance = 500 // Mock balance for now
+
+    // Real-time Credit Calculation
+    const totalCredits = useCreditCalculator({
+        mode,
+        shots,
+        selectedModelId,
+        is4k
+    })
+
+    // Budget Guardrail
+    const isOverBudget = totalCredits > userBalance
 
     // Fetch Jobs Effect
     useEffect(() => {
@@ -60,6 +74,7 @@ export default function StudioPage() {
         return () => clearInterval(interval)
     }, [])
 
+    // ... (Auto-Save logic remains same)
     // -------------------------------------------------------------------------
     // Auto-Save & Load Logic
     // -------------------------------------------------------------------------
@@ -91,12 +106,7 @@ export default function StudioPage() {
         load()
     }, [])
 
-    // -------------------------------------------------------------------------
-    // Calculators & Handlers
-    // -------------------------------------------------------------------------
-    const totalCredits = mode === 'draft'
-        ? calculateCredits(selectedModel.baseCredits, 8, is4k)
-        : shots.reduce((acc, shot) => acc + calculateCredits(selectedModel.baseCredits, shot.duration, is4k), 0)
+    const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
 
     const addShot = () => {
         setShots([...shots, { id: `s${Math.random().toString(36).substr(2, 9)}`, prompt: "", duration: 5, cameraMove: "static" }])
@@ -105,8 +115,8 @@ export default function StudioPage() {
     const removeShot = (id: string) => { if (shots.length > 1) setShots(shots.filter(s => s.id !== id)) }
 
     const handleGenerate = async () => {
+        if (isOverBudget) return
         setLoading(true)
-        // ... (API call logic same as before)
         try {
             await fetch('/api/generate', {
                 method: 'POST',
@@ -120,27 +130,25 @@ export default function StudioPage() {
         setTimeout(() => setLoading(false), 2000)
     }
 
-    // Define a default duration for ModelSelector if not in storyboard mode, or use first shot's duration
     const modelSelectorDuration = shots[0]?.duration || 5;
 
-
     return (
-        <div className="h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary/30 overflow-hidden">
-            {/* Header / Credit Gauge */}
-            <header className="h-16 border-b border-white/5 bg-background/60 backdrop-blur-xl flex items-center justify-between px-6 z-50 sticky top-0">
+        <div className="h-screen bg-[#121212] text-zinc-400 flex flex-col font-sans selection:bg-primary/30 overflow-hidden">
+            {/* Header */}
+            <header className="h-16 border-b border-white/5 bg-[#121212]/80 backdrop-blur-xl flex items-center justify-between px-6 z-50 sticky top-0">
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 group cursor-pointer">
                         <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center border border-white/10 group-hover:border-white/30 transition-colors">
                             <Box className="w-5 h-5 text-white" />
                         </div>
-                        <h1 className="font-bold text-xl tracking-tighter text-white">
-                            CREATIVE<span className="font-light text-zinc-400">STUDIO</span>
+                        <h1 className="font-bold text-xl tracking-tighter text-white/90">
+                            CREATIVE<span className="font-light text-zinc-500">STUDIO</span>
                         </h1>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    {/* Mode Switcher - Compact & High Visibility */}
+                <div className="flex items-center gap-6">
+                    {/* Mode Switcher */}
                     <div className="flex bg-zinc-900 p-0.5 rounded-lg border border-zinc-700 shadow-inner">
                         <button
                             onClick={() => setMode('draft')}
@@ -158,26 +166,19 @@ export default function StudioPage() {
                         </button>
                     </div>
 
-                    {/* Credit Gauge - Compact & High Visibility */}
-                    <div className="flex items-center gap-2 bg-gradient-to-br from-zinc-800 to-zinc-900 px-3 py-1 rounded-full border border-zinc-700 shadow-lg shadow-black/20">
-                        <div className="flex flex-col items-end leading-none">
-                            <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-wider">Credits</span>
-                            <span className="text-xs font-black font-mono text-white">{totalCredits} CR</span>
-                        </div>
-                        <div className="h-6 w-[1px] bg-zinc-700" />
-                        <Zap className={`w-3.5 h-3.5 ${is4k ? 'text-amber-400 fill-amber-400' : 'text-zinc-400'}`} />
-                    </div>
+                    {/* Real-time Credit Estimator */}
+                    <CreditBadge cost={totalCredits} balance={userBalance} />
                 </div>
             </header>
 
             {/* 3-Column Studio Layout */}
             <main className="flex-1 grid grid-cols-12 overflow-hidden relative bg-[#121212]">
 
-                {/* 1. REGISTRY (Left - 3 Cols) - HIDDEN IN DRAFT MODE */}
+                {/* 1. REGISTRY (Left - 3 Cols) - Glassmorphism */}
                 {mode === 'storyboard' && (
-                    <aside className="col-span-3 border-r border-zinc-800 bg-[#121212] flex flex-col overflow-hidden animate-in slide-in-from-left duration-300">
-                        <div className="p-4 border-b border-zinc-800 bg-[#121212]/80 backdrop-blur-md sticky top-0 z-30">
-                            <h2 className="text-zinc-100 font-bold tracking-tight text-sm uppercase flex items-center gap-2">
+                    <aside className="col-span-3 border-r border-zinc-800 bg-zinc-900/40 backdrop-blur-md flex flex-col overflow-hidden animate-in slide-in-from-left duration-300">
+                        <div className="p-4 border-b border-zinc-800 bg-transparent sticky top-0 z-30">
+                            <h2 className="text-zinc-100/90 font-bold tracking-tight text-sm uppercase flex items-center gap-2">
                                 <span className="w-1.5 h-4 bg-blue-600 rounded-sm" /> Model Registry
                             </h2>
                         </div>
@@ -191,10 +192,10 @@ export default function StudioPage() {
                             />
                             <div className="pt-6 border-t border-zinc-800 space-y-6">
                                 <div className="flex items-center justify-between">
-                                    <Label className="text-zinc-400 text-xs">Quality</Label>
+                                    <Label className="text-zinc-500 text-xs font-medium">Quality</Label>
                                     <div className="flex items-center gap-2 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
-                                        <button onClick={() => setIs4k(false)} className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${!is4k ? 'bg-zinc-700 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>HD</button>
-                                        <button onClick={() => setIs4k(true)} className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${is4k ? 'bg-blue-900/40 text-blue-400 border border-blue-800' : 'text-zinc-500 hover:text-zinc-300'}`}>4K</button>
+                                        <button onClick={() => setIs4k(false)} className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${!is4k ? 'bg-zinc-800 text-zinc-200 shadow-sm' : 'text-zinc-600 hover:text-zinc-400'}`}>HD</button>
+                                        <button onClick={() => setIs4k(true)} className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${is4k ? 'bg-blue-900/40 text-blue-400 border border-blue-800' : 'text-zinc-600 hover:text-zinc-400'}`}>4K</button>
                                     </div>
                                 </div>
                             </div>
@@ -202,14 +203,14 @@ export default function StudioPage() {
                     </aside>
                 )}
 
-                {/* 2. TIMELINE / CANVAS (Center - Expands to 9 Cols in Draft Mode) */}
-                <section className={`${mode === 'draft' ? 'col-span-9' : 'col-span-6'} bg-[#121212] relative flex flex-col border-r border-zinc-800 transition-all duration-300 min-h-0 text-white`}>
+                {/* 2. TIMELINE / CANVAS */}
+                <section className={`${mode === 'draft' ? 'col-span-9' : 'col-span-6'} bg-[#121212] relative flex flex-col border-r border-zinc-800 transition-all duration-300 min-h-0`}>
 
-                    {/* Header - Only visible in Storyboard Mode */}
+                    {/* Header */}
                     {mode === 'storyboard' && (
                         <div className="h-14 border-b border-zinc-800 flex items-center justify-between px-6 bg-[#121212]/80 backdrop-blur-md sticky top-0 z-40">
                             <div className="flex items-center gap-4">
-                                <h2 className="text-zinc-100 font-black tracking-tight text-lg">TIMELINE</h2>
+                                <h2 className="text-zinc-100/90 font-black tracking-tight text-lg">TIMELINE</h2>
                                 <Badge variant="outline" className="bg-zinc-900/50 text-zinc-500 border-zinc-800 font-mono text-xs">
                                     {shots.length} SHOTS
                                 </Badge>
@@ -225,10 +226,10 @@ export default function StudioPage() {
                             /* QUICK DRAFT MODE */
                             <div className="max-w-2xl mx-auto pt-10 pb-64 space-y-8 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div className="text-center space-y-4">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/20 text-blue-400 border border-blue-900/50 text-xs font-bold uppercase tracking-wider mb-4">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/10 text-blue-400 border border-blue-900/30 text-xs font-bold uppercase tracking-wider mb-4">
                                         <Zap className="w-3 h-3" /> Quick Mode
                                     </div>
-                                    <h2 className="text-4xl md:text-5xl font-black tracking-tighter text-white">
+                                    <h2 className="text-4xl md:text-5xl font-black tracking-tighter text-white/90">
                                         Ignite Your Vision
                                     </h2>
                                     <p className="text-lg text-zinc-400 font-light max-w-lg mx-auto leading-relaxed">
@@ -236,9 +237,7 @@ export default function StudioPage() {
                                     </p>
                                 </div>
 
-                                <Card className="bg-zinc-900/50 border-zinc-800 backdrop-blur-xl overflow-hidden relative group">
-                                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-
+                                <Card className="bg-zinc-900/30 border-zinc-800 filter backdrop-blur-xl relative group">
                                     <CardContent className="p-6 space-y-6 relative z-10">
                                         <div className="space-y-2">
                                             <Label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Model Selection</Label>
@@ -257,7 +256,7 @@ export default function StudioPage() {
                                             <Label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Prompt</Label>
                                             <Textarea
                                                 placeholder="A cinematic shot of..."
-                                                className="resize-none h-32 bg-black/40 border-zinc-800 focus:border-blue-500/50 text-lg p-4 transition-all"
+                                                className="resize-none h-32 bg-black/40 border-zinc-800 focus:border-blue-500/50 text-lg p-4 transition-all text-zinc-200 placeholder:text-zinc-600"
                                                 value={prompt}
                                                 onChange={(e) => setPrompt(e.target.value)}
                                             />
@@ -265,21 +264,21 @@ export default function StudioPage() {
 
                                         <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => setIs4k(!is4k)} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${is4k ? 'bg-blue-900/30 text-blue-400 border border-blue-800' : 'bg-zinc-800 text-zinc-400'}`}>
+                                                <button onClick={() => setIs4k(!is4k)} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${is4k ? 'bg-blue-900/30 text-blue-400 border border-blue-800' : 'bg-zinc-800 text-zinc-500'}`}>
                                                     {is4k ? '4K Ultra HD' : 'HD Standard'}
                                                 </button>
-                                                <span className="text-xs text-zinc-600 font-mono">
-                                                    {calculateCredits(selectedModel.baseCredits, 8, is4k)} Credits
-                                                </span>
                                             </div>
                                             <Button
                                                 onClick={handleGenerate}
-                                                disabled={loading}
+                                                disabled={loading || isOverBudget}
                                                 size="lg"
-                                                className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold px-8 shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all"
+                                                className={`font-bold px-8 transition-all ${isOverBudget
+                                                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                                                    : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)]'
+                                                    }`}
                                             >
                                                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
-                                                Generate Preview
+                                                {isOverBudget ? 'Over Limit' : 'Generate Preview'}
                                             </Button>
                                         </div>
                                     </CardContent>
@@ -309,7 +308,7 @@ export default function StudioPage() {
                         )}
                     </div>
 
-                    {/* Footer Actions - Only in Storyboard Mode */}
+                    {/* Footer Actions */}
                     {mode === 'storyboard' && (
                         <div className="p-6 border-t border-zinc-800 bg-[#121212]/90 backdrop-blur-xl absolute bottom-0 w-full z-50">
                             <div className="flex gap-4">
@@ -318,12 +317,12 @@ export default function StudioPage() {
                                     onClick={async () => {
                                         const completedJobIds = jobs.filter(j => j.status === 'completed').map(j => j.id)
                                         try {
-                                            const res = await fetch('/api/stitch', {
+                                            await fetch('/api/stitch', { // simplified fetch
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
                                                 body: JSON.stringify({ project_id: "def", job_ids: completedJobIds })
                                             })
-                                            if (res.ok) alert("Started!")
+                                            alert("Started!")
                                         } catch (e) { console.error(e) }
                                     }}
                                     variant="secondary"
@@ -333,8 +332,11 @@ export default function StudioPage() {
                                 </Button>
                                 <Button
                                     onClick={handleGenerate}
-                                    disabled={loading}
-                                    className="flex-[2] bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white border-0 shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all h-12 text-sm font-bold tracking-wide"
+                                    disabled={loading || isOverBudget}
+                                    className={`flex-[2] border-0 transition-all h-12 text-sm font-bold tracking-wide ${isOverBudget
+                                        ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                                        : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)]'
+                                        }`}
                                 >
                                     {loading ? (
                                         <>
@@ -342,7 +344,7 @@ export default function StudioPage() {
                                         </>
                                     ) : (
                                         <>
-                                            <Wand2 className="w-4 h-4 mr-2" /> GENERATE
+                                            <Wand2 className="w-4 h-4 mr-2" /> {isOverBudget ? 'INSUFFICIENT FUNDS' : 'GENERATE'}
                                         </>
                                     )}
                                 </Button>
@@ -351,23 +353,18 @@ export default function StudioPage() {
                     )}
                 </section>
 
-                {/* 3. ARCHIVE (Right - 3 Cols) - ALWAYS VISIBLE */}
-                <aside className="col-span-3 bg-[#121212] flex flex-col overflow-hidden border-l border-zinc-800">
-                    <div className="p-4 border-b border-zinc-800 bg-[#121212]/80 backdrop-blur-md sticky top-0 z-30 flex justify-between items-center">
-                        <h2 className="text-zinc-100 font-bold tracking-tight text-sm uppercase flex items-center gap-2">
+                {/* 3. ARCHIVE (Right - 3 Cols) - Glassmorphism */}
+                <aside className="col-span-3 bg-zinc-900/40 backdrop-blur-md flex flex-col overflow-hidden border-l border-zinc-800">
+                    <div className="p-4 border-b border-zinc-800 bg-transparent sticky top-0 z-30 flex justify-between items-center">
+                        <h2 className="text-zinc-100/90 font-bold tracking-tight text-sm uppercase flex items-center gap-2">
                             <span className="w-1.5 h-4 bg-purple-600 rounded-sm" /> Archive
                         </h2>
-                        {/* Floating Credit Gauge - Simplified */}
-                        <div className="bg-zinc-900/80 px-3 py-1 rounded-full border border-zinc-800 flex items-center gap-2">
-                            <span className="text-[10px] text-zinc-500 font-bold">CREDITS</span>
-                            <span className="text-sm font-mono text-zinc-200">{totalCredits}</span>
-                        </div>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4">
                         <div className="grid grid-cols-1 gap-4">
                             {jobs.map((job) => (
-                                <div key={job.id} className="group relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all">
+                                <div key={job.id} className="group relative rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-all">
                                     <div className="aspect-video bg-zinc-950 relative">
                                         {job.video_url ? (
                                             <video src={job.video_url} controls className="w-full h-full object-cover" />
@@ -377,7 +374,6 @@ export default function StudioPage() {
                                                     <div className="w-8 h-8 rounded-full border-2 border-zinc-800 border-t-blue-500 animate-spin mx-auto" />
                                                     <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Processing</p>
                                                 </div>
-                                                {/* Pulse Effect */}
                                                 <div className="absolute inset-0 bg-gradient-to-t from-blue-900/10 to-transparent animate-pulse" />
                                             </div>
                                         )}

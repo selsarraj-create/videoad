@@ -28,7 +28,7 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
     }
 
     return (
-        <Card className="relative group bg-zinc-900/80 border-white/5 backdrop-blur-xl transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.5)] hover:-translate-y-1 overflow-hidden">
+        <Card className="relative group bg-[#1E1E1E] border-white/5 backdrop-blur-xl transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.5)] hover:-translate-y-1 overflow-hidden">
             {/* 3D Depth Border Bottom */}
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
