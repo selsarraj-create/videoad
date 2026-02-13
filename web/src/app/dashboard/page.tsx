@@ -7,13 +7,14 @@ import { Shot } from "@/lib/types"
 interface Job {
     id: string;
     created_at: string;
-    input_params: { prompt: string; style_ref?: string };
+    input_params: { prompt: string; style_ref?: string; original_job_id?: string };
     status: 'pending' | 'processing' | 'completed' | 'failed';
     output_url: string | null;
     model: string;
     tier: string;
     project_id: string;
     error_message: string | null;
+    provider_metadata?: { task_id?: string; aspect_ratio?: string; extend_task_id?: string };
 }
 
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     Wand2, Zap, Plus, Layers, Film, Settings,
     History, PlayCircle, MousePointer2, Camera,
-    Box, Loader2
+    Box, Loader2, FastForward
 } from "lucide-react"
 import { ModelSelector } from "@/components/model-selector"
 import { StoryboardPanel } from "@/components/storyboard-panel"
@@ -51,6 +52,9 @@ export default function StudioPage() {
     const [jobs, setJobs] = useState<Job[]>([])
     const [isGenerating, setIsGenerating] = useState(false)
     const [projectId, setProjectId] = useState<string | null>(null)
+    const [extendingJobId, setExtendingJobId] = useState<string | null>(null)
+    const [extendPrompt, setExtendPrompt] = useState("")
+    const [extendLoading, setExtendLoading] = useState(false)
 
     const supabase = createClient()
     const userBalance = 500 // Mock balance for now
@@ -446,6 +450,54 @@ export default function StudioPage() {
                                         </div>
                                         <p className="text-[10px] text-zinc-500 mt-2 line-clamp-1">{job.input_params?.prompt || 'No prompt'}</p>
                                         {job.error_message && <p className="text-[10px] text-red-400 mt-1 line-clamp-1">{job.error_message}</p>}
+
+                                        {/* Extend Button - Veo models only */}
+                                        {job.status === 'completed' && job.output_url && (job.model === 'veo-3.1-fast' || job.model === 'veo-3.1-quality') && (
+                                            <div className="mt-2">
+                                                {extendingJobId === job.id ? (
+                                                    <div className="flex gap-1.5">
+                                                        <Input
+                                                            placeholder="What happens next..."
+                                                            value={extendPrompt}
+                                                            onChange={(e) => setExtendPrompt(e.target.value)}
+                                                            className="h-7 text-[10px] bg-zinc-800/50 border-zinc-700 text-zinc-200 placeholder:text-zinc-600"
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Escape') { setExtendingJobId(null); setExtendPrompt('') }
+                                                            }}
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            disabled={!extendPrompt.trim() || extendLoading}
+                                                            className="h-7 px-2 text-[10px] bg-purple-600 hover:bg-purple-500 text-white"
+                                                            onClick={async () => {
+                                                                setExtendLoading(true)
+                                                                try {
+                                                                    await fetch('/api/extend', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ job_id: job.id, prompt: extendPrompt })
+                                                                    })
+                                                                    setExtendingJobId(null)
+                                                                    setExtendPrompt('')
+                                                                } catch (e) { console.error(e) }
+                                                                setExtendLoading(false)
+                                                            }}
+                                                        >
+                                                            {extendLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Go'}
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="w-full h-7 text-[10px] text-purple-400 hover:text-purple-300 hover:bg-purple-900/20"
+                                                        onClick={() => setExtendingJobId(job.id)}
+                                                    >
+                                                        <FastForward className="w-3 h-3 mr-1" /> Extend +7s
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}

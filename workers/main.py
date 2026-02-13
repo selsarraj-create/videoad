@@ -131,7 +131,8 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
                 
                 supabase.table("jobs").update({
                     "status": "completed",
-                    "output_url": video_url
+                    "output_url": video_url,
+                    "provider_metadata": {"task_id": task_id, "aspect_ratio": provider_metadata.get("aspect_ratio", "16:9") if provider_metadata else "16:9"}
                 }).eq("id", job_id).execute()
                 print(f"Job {job_id} completed. URL: {video_url}")
                 break
@@ -168,6 +169,105 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
         request.provider_metadata
     )
     return {"message": "Job received", "job_id": request.job_id}
+
+class ExtendRequest(BaseModel):
+    job_id: str
+    original_task_id: str
+    prompt: str
+    video_url: str
+    aspect_ratio: str = "16:9"
+
+def process_extend_job(job_id: str, original_task_id: str, prompt: str, video_url: str, aspect_ratio: str):
+    """Extend a Veo 3.1 video by ~7 seconds."""
+    print(f"Processing extend job {job_id} (extending task {original_task_id})...")
+    
+    try:
+        # 1. Update status to processing
+        supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
+        
+        # 2. Call extend API
+        task_info = kie.extend_video(original_task_id, prompt, video_url, aspect_ratio)
+        print(f"Extend response: {task_info}")
+        
+        # Extract new task ID
+        data = task_info.get("data") or {}
+        new_task_id = None
+        if isinstance(data, dict):
+            new_task_id = data.get("taskId") or data.get("task_id") or data.get("id")
+        if not new_task_id:
+            new_task_id = task_info.get("taskId") or task_info.get("task_id") or task_info.get("id")
+        
+        if not new_task_id:
+            raise Exception(f"Failed to get task_id from extend response: {task_info}")
+        
+        print(f"Extend task started: {new_task_id}")
+        
+        # 3. Poll for completion (reuse same logic as generate)
+        model = "veo-3.1-fast"  # Extend is always Veo
+        while True:
+            status_data = kie.get_task_status(new_task_id, model)
+            
+            poll_data = status_data.get("data") if isinstance(status_data, dict) else None
+            if not isinstance(poll_data, dict):
+                poll_data = {}
+            
+            raw_status = poll_data.get("status", "")
+            success_flag = poll_data.get("successFlag")
+            
+            if raw_status in ("SUCCESS", "success") or success_flag == 1:
+                status = "completed"
+            elif raw_status in ("GENERATE_FAILED", "CREATE_TASK_FAILED", "fail") or success_flag in (2, 3):
+                status = "failed"
+            else:
+                status = "processing"
+            
+            print(f"Extend job {job_id} status: {status} (raw: {raw_status}, flag: {success_flag})")
+            
+            if status == "completed":
+                # Extract video URL
+                results = poll_data.get("results") or poll_data.get("works") or []
+                video_url_result = None
+                if results and isinstance(results, list):
+                    first = results[0] if isinstance(results[0], dict) else {}
+                    video_url_result = first.get("url") or first.get("videoUrl") or first.get("video_url")
+                if not video_url_result:
+                    video_url_result = poll_data.get("videoUrl") or poll_data.get("url") or poll_data.get("video_url")
+                
+                if not video_url_result:
+                    raise Exception(f"Extended but no URL found. Response: {status_data}")
+                
+                supabase.table("jobs").update({
+                    "status": "completed",
+                    "output_url": video_url_result,
+                    "provider_metadata": {"extend_task_id": new_task_id, "aspect_ratio": aspect_ratio}
+                }).eq("id", job_id).execute()
+                print(f"Extend job {job_id} completed. URL: {video_url_result}")
+                break
+            
+            elif status == "failed":
+                error_msg = poll_data.get("error") or poll_data.get("msg") or "Unknown error"
+                raise Exception(f"Extend failed: {error_msg}")
+            
+            time.sleep(5)
+    
+    except Exception as e:
+        print(f"Extend job {job_id} failed: {str(e)}")
+        supabase.table("jobs").update({
+            "status": "failed",
+            "error_message": str(e)
+        }).eq("id", job_id).execute()
+
+@app.post("/webhook/extend")
+async def handle_extend_webhook(request: ExtendRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(
+        process_extend_job,
+        request.job_id,
+        request.original_task_id,
+        request.prompt,
+        request.video_url,
+        request.aspect_ratio
+    )
+    return {"message": "Extend job received", "job_id": request.job_id}
 
 import requests
 import tempfile

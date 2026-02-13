@@ -110,3 +110,33 @@ def get_task_status(task_id: str, model: str = "") -> dict:
     except Exception as e:
         logger.error(f"Failed to get task status for {task_id}: {e}")
         raise
+
+def extend_video(task_id: str, prompt: str, video_url: str, aspect_ratio: str = "16:9") -> dict:
+    """
+    Extends a Veo 3.1 video by ~7 seconds using the extend endpoint.
+    Requires the original taskId, a continuation prompt, and the video URL.
+    Can be chained up to 20 times (max ~148s total). 720p only.
+    """
+    headers = {
+        "Authorization": f"Bearer {KIE_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    url = f"{KIE_API_BASE}/veo/extend"
+    
+    payload = {
+        "taskId": task_id,
+        "prompt": prompt,
+        "video_url": video_url,
+        "aspectRatio": aspect_ratio,
+    }
+    
+    logger.info(f"Kie.ai extend request to {url}: taskId={task_id}, prompt={prompt[:80]}...")
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to extend Kie.ai video: {e}")
+        raise
