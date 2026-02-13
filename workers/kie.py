@@ -71,17 +71,20 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
         logger.error(f"Failed to start Kie.ai generation: {e}")
         raise
 
-def get_task_status(task_id: str) -> dict:
+def get_task_status(task_id: str, model: str = "") -> dict:
     """
-    Checks the status of a task.
+    Checks the status of a task using the model-specific record-info endpoint.
     """
     headers = {
         "Authorization": f"Bearer {KIE_API_KEY}"
     }
-    url = f"https://api.kie.ai/api/v1/tasks/{task_id}"
+    
+    # Use the model-specific record-info endpoint
+    endpoint_segment = MODEL_ENDPOINTS.get(model, "veo")
+    url = f"{KIE_API_BASE}/{endpoint_segment}/record-info"
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, params={"taskId": task_id})
         response.raise_for_status()
         return response.json()
     except Exception as e:

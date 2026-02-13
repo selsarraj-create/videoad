@@ -80,7 +80,7 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
 
         # 3. Poll for completion
         while True:
-            status_data = provider.get_task_status(task_id)
+            status_data = provider.get_task_status(task_id, model)
             
             print(f"Poll response for {job_id}: {status_data}")
             
