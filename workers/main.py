@@ -83,20 +83,42 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
             print(f"Poll response for {job_id}: {status_data}")
             
             # Normalize status response (null-safe)
-            poll_data = status_data.get("data") or {} if isinstance(status_data, dict) else {}
+            poll_data = status_data.get("data") if isinstance(status_data, dict) else None
+            if not isinstance(poll_data, dict):
+                poll_data = {}
             
             if tier == "draft":
-                status = poll_data.get("status") if isinstance(poll_data, dict) else None
+                # Kie.ai uses multiple status indicators:
+                # 1. data.status = "SUCCESS" / "GENERATING" / "PENDING" / "GENERATE_FAILED"
+                # 2. Veo uses data.successFlag = 0 (generating), 1 (success), 2/3 (failed)
+                raw_status = poll_data.get("status", "")
+                success_flag = poll_data.get("successFlag")
+                
+                # Normalize to our internal status
+                if raw_status == "SUCCESS" or success_flag == 1:
+                    status = "completed"
+                elif raw_status in ("GENERATE_FAILED", "CREATE_TASK_FAILED", "SENSITIVE_WORD_ERROR", "fail") or success_flag in (2, 3):
+                    status = "failed"
+                elif raw_status in ("GENERATING", "PENDING", "queuing", "waiting") or success_flag == 0:
+                    status = "processing"
+                else:
+                    status = raw_status.lower() if raw_status else "processing"
             else:
                 status = status_data.get("status")
 
-            print(f"Job {job_id} status: {status}")
+            print(f"Job {job_id} status: {status} (raw: {poll_data.get('status', 'N/A')}, flag: {poll_data.get('successFlag', 'N/A')})")
             
             if status == "completed":
                 video_url = None
                 if tier == "draft":
-                    results = poll_data.get("results", []) if isinstance(poll_data, dict) else []
-                    video_url = results[0].get("url") if results else None
+                    # Kie.ai may use "results" or "works" array, with "url" or "videoUrl" keys
+                    results = poll_data.get("results") or poll_data.get("works") or []
+                    if results and isinstance(results, list):
+                        first_result = results[0] if isinstance(results[0], dict) else {}
+                        video_url = first_result.get("url") or first_result.get("videoUrl") or first_result.get("video_url")
+                    # Fallback: check direct URL fields
+                    if not video_url:
+                        video_url = poll_data.get("videoUrl") or poll_data.get("url") or poll_data.get("video_url")
                 else:
                     output = status_data.get("output") or {}
                     video_url = output.get("url") if isinstance(output, dict) else None
@@ -113,7 +135,7 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
                 break
             
             elif status == "failed":
-                error_msg = poll_data.get("error") if isinstance(poll_data, dict) else None
+                error_msg = poll_data.get("error") or poll_data.get("msg") or poll_data.get("failReason")
                 error_msg = error_msg or status_data.get("error", "Unknown error")
                 raise Exception(f"Task failed: {error_msg}")
             
