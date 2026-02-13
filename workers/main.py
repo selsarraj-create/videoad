@@ -80,12 +80,13 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
         while True:
             status_data = provider.get_task_status(task_id)
             
-            # Normalize status response
-            # Kie: { data: { status: ..., results: [{url: ...}] } }
-            # WaveSpeed: { status: ..., output: { url: ... } }
+            print(f"Poll response for {job_id}: {status_data}")
+            
+            # Normalize status response (null-safe)
+            poll_data = status_data.get("data") or {} if isinstance(status_data, dict) else {}
             
             if tier == "draft":
-                status = status_data.get("data", {}).get("status")
+                status = poll_data.get("status") if isinstance(poll_data, dict) else None
             else:
                 status = status_data.get("status")
 
@@ -94,12 +95,14 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
             if status == "completed":
                 video_url = None
                 if tier == "draft":
-                    results = status_data.get("data", {}).get("results", [])
+                    results = poll_data.get("results", []) if isinstance(poll_data, dict) else []
                     video_url = results[0].get("url") if results else None
                 else:
-                    video_url = status_data.get("output", {}).get("url")
+                    output = status_data.get("output") or {}
+                    video_url = output.get("url") if isinstance(output, dict) else None
                 
                 if not video_url:
+                    print(f"Completed but no URL found. Full response: {status_data}")
                     raise Exception("Completed but no video URL found")
                 
                 supabase.table("jobs").update({
@@ -110,7 +113,8 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
                 break
             
             elif status == "failed":
-                error_msg = status_data.get("data", {}).get("error") or status_data.get("error", "Unknown error")
+                error_msg = poll_data.get("error") if isinstance(poll_data, dict) else None
+                error_msg = error_msg or status_data.get("error", "Unknown error")
                 raise Exception(f"Task failed: {error_msg}")
             
             time.sleep(5)
