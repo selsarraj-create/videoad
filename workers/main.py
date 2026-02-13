@@ -55,10 +55,15 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
         # Kie returns { data: { id: ... } }
         # WaveSpeed mock returns { id: ... }
         
-        task_id = task_info.get("data", {}).get("id") or task_info.get("id")
+        print(f"Provider response: {task_info}")
+        
+        data = task_info.get("data") or {}
+        task_id = data.get("id") if isinstance(data, dict) else None
+        if not task_id:
+            task_id = task_info.get("id")
         
         if not task_id:
-             raise Exception(f"Failed to get task_id from {tier} provider")
+             raise Exception(f"Failed to get task_id from {tier} provider. Response: {task_info}")
 
         print(f"Task started: {task_id}")
 
