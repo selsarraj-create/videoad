@@ -16,7 +16,6 @@ export async function saveProjectState(projectId: string, data: ProjectData) {
         .upsert({
             id: projectId,
             data: data,
-            user_id: user.id,
             updated_at: new Date().toISOString()
         }, { onConflict: 'id' })
 
