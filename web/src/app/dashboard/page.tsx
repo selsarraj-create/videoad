@@ -7,12 +7,13 @@ import { Shot } from "@/lib/types"
 interface Job {
     id: string;
     created_at: string;
-    prompt: string;
+    input_params: { prompt: string; style_ref?: string };
     status: 'pending' | 'processing' | 'completed' | 'failed';
-    video_url: string | null;
+    output_url: string | null;
     model: string;
-    is_4k: boolean;
-    workspace_id: string;
+    tier: string;
+    project_id: string;
+    error_message: string | null;
 }
 
 import { Button } from "@/components/ui/button"
@@ -386,15 +387,15 @@ export default function StudioPage() {
                             {jobs.map((job) => (
                                 <div key={job.id} className="group relative rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-all">
                                     <div className="aspect-video bg-zinc-950 relative">
-                                        {job.video_url ? (
-                                            <video src={job.video_url} controls className="w-full h-full object-cover" />
+                                        {job.output_url ? (
+                                            <video src={job.output_url} controls className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="absolute inset-0 flex items-center justify-center">
                                                 <div className="text-center space-y-2">
                                                     <div className="w-8 h-8 rounded-full border-2 border-zinc-800 border-t-blue-500 animate-spin mx-auto" />
-                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Processing</p>
+                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{job.status === 'failed' ? 'Failed' : 'Processing'}</p>
                                                 </div>
-                                                <div className="absolute inset-0 bg-gradient-to-t from-blue-900/10 to-transparent animate-pulse" />
+                                                {job.status !== 'failed' && <div className="absolute inset-0 bg-gradient-to-t from-blue-900/10 to-transparent animate-pulse" />}
                                             </div>
                                         )}
                                     </div>
@@ -407,7 +408,8 @@ export default function StudioPage() {
                                                 {new Date(job.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
-                                        <p className="text-[10px] text-zinc-500 mt-2 line-clamp-1">{job.prompt}</p>
+                                        <p className="text-[10px] text-zinc-500 mt-2 line-clamp-1">{job.input_params?.prompt || 'No prompt'}</p>
+                                        {job.error_message && <p className="text-[10px] text-red-400 mt-1 line-clamp-1">{job.error_message}</p>}
                                     </div>
                                 </div>
                             ))}
