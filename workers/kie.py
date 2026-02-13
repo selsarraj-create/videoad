@@ -18,6 +18,14 @@ MODEL_ENDPOINTS = {
     "hailuo-2.3": "hailuo",
 }
 
+# Map our internal model IDs to Kie.ai API model names
+MODEL_API_NAMES = {
+    "veo-3.1-fast": "veo3_fast",
+    "sora-2": "sora2",
+    "kling-2.6-quality": "kling2.6",
+    "hailuo-2.3": "hailuo2.3",
+}
+
 def generate_video(prompt: str, model: str, **kwargs) -> dict:
     """
     Starts a video generation task on Kie.ai.
@@ -32,8 +40,11 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
     endpoint_segment = MODEL_ENDPOINTS.get(model, "veo")
     url = f"{KIE_API_BASE}/{endpoint_segment}/generate"
     
+    # Map internal model ID to Kie.ai API model name
+    api_model_name = MODEL_API_NAMES.get(model, model)
+    
     payload = {
-        "model": model,
+        "model": api_model_name,
         "prompt": prompt,
         "aspectRatio": kwargs.get("aspect_ratio", "16:9"),
     }
