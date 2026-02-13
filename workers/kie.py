@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 KIE_API_KEY = os.getenv("KIE_API_KEY", "19297022e69b70a833da6ac91c822f8b")
 KIE_API_URL = "https://api.kie.ai/api/v1/generate"
 
-def generate_video(prompt: str, model: str) -> dict:
+def generate_video(prompt: str, model: str, **kwargs) -> dict:
     """
     Starts a video generation task on Kie.ai.
     Returns the task info (including task_id).
