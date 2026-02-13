@@ -136,7 +136,6 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
     )
     return {"message": "Job received", "job_id": request.job_id}
 
-from moviepy.editor import VideoFileClip, concatenate_videoclips
 import requests
 import tempfile
 
@@ -149,6 +148,8 @@ class StitchRequest(BaseModel):
     output_format: str = "mp4"
 
 def process_stitch_job(project_id: str, video_urls: list[str], audio_url: Optional[str] = None):
+    # Lazy import to avoid crashing if ffmpeg is not installed
+    from moviepy.editor import VideoFileClip, concatenate_videoclips
     print(f"Starting stitch job for project {project_id}")
     temp_files = []
     clips = []
