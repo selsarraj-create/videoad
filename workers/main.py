@@ -58,9 +58,11 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
         print(f"Provider response: {task_info}")
         
         data = task_info.get("data") or {}
-        task_id = data.get("id") if isinstance(data, dict) else None
+        task_id = None
+        if isinstance(data, dict):
+            task_id = data.get("taskId") or data.get("task_id") or data.get("id")
         if not task_id:
-            task_id = task_info.get("id")
+            task_id = task_info.get("taskId") or task_info.get("task_id") or task_info.get("id")
         
         if not task_id:
              raise Exception(f"Failed to get task_id from {tier} provider. Response: {task_info}")
