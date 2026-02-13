@@ -15,15 +15,21 @@ MODEL_ENDPOINTS = {
     "veo-3.1-fast": "veo",
     "sora-2": "sora",
     "kling-2.6-quality": "kling",
+    "kling-2.6-pro": "kling",
     "hailuo-2.3": "hailuo",
+    "product-showcase-1": "veo",  # Use Veo for product shots
 }
 
 # Map our internal model IDs to Kie.ai API model names
+# Kie.ai uses underscore-separated names
 MODEL_API_NAMES = {
     "veo-3.1-fast": "veo3_fast",
+    "veo-3.1-quality": "veo3",
     "sora-2": "sora2",
     "kling-2.6-quality": "kling2.6",
+    "kling-2.6-pro": "kling2.6_pro",
     "hailuo-2.3": "hailuo2.3",
+    "product-showcase-1": "veo3_fast",  # Reuse Veo fast for product
 }
 
 def generate_video(prompt: str, model: str, **kwargs) -> dict:
