@@ -18,6 +18,7 @@ MODEL_ENDPOINTS = {
     "kling-2.6-quality": "kling",
     "kling-2.6-pro": "kling",
     "hailuo-2.3": "hailuo",
+    "grok-imagine": "grok-imagine",
     "product-showcase-1": "veo",
 }
 
@@ -30,6 +31,7 @@ MODEL_STATUS_PATHS = {
     "kling-2.6-quality": "kling/record-info",
     "kling-2.6-pro": "kling/record-info",
     "hailuo-2.3": "hailuo/record-info",
+    "grok-imagine": "grok-imagine/record-info",
     "product-showcase-1": "veo/record-info",
 }
 
@@ -41,6 +43,7 @@ MODEL_API_NAMES = {
     "kling-2.6-quality": "kling2.6",
     "kling-2.6-pro": "kling2.6_pro",
     "hailuo-2.3": "hailuo2.3",
+    "grok-imagine": "grok-imagine",
     "product-showcase-1": "veo3_fast",
 }
 

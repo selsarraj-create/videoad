@@ -63,6 +63,17 @@ export const MODELS: ModelSpec[] = [
         supportedDurations: [6, 10],
         maxResolution: '1080p'
     },
+    {
+        id: 'grok-imagine',
+        name: 'Grok Imagine',
+        provider: 'Kie.ai',
+        category: 'Social',
+        tier: 'Eco',
+        description: 'Fast, affordable video with coherent motion and synchronized audio.',
+        baseCredits: 20, // 20 credits for 6s (~$0.10), 30 for 10s
+        supportedDurations: [6, 10],
+        maxResolution: '1080p'
+    },
     // Production (Consistency)
     {
         id: 'kling-2.6-pro',
