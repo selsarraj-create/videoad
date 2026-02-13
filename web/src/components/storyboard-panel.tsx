@@ -185,14 +185,14 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
                                 value={shot.duration.toString()}
                                 onValueChange={(v) => onUpdate(shot.id, { duration: parseInt(v) })}
                             >
-                                <SelectTrigger className="h-8 text-xs bg-zinc-800/50 border-white/5 hover:border-white/10 hover:bg-zinc-800">
+                                <SelectTrigger className="h-8 text-xs text-zinc-200 bg-zinc-800/50 border-white/5 hover:border-white/10 hover:bg-zinc-800">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent className="bg-zinc-900 border-white/10">
-                                    <SelectItem value="3">3s</SelectItem>
-                                    <SelectItem value="5">5s</SelectItem>
-                                    <SelectItem value="8">8s</SelectItem>
-                                    <SelectItem value="10">10s</SelectItem>
+                                <SelectContent className="bg-zinc-900 border-white/10 text-zinc-200">
+                                    <SelectItem value="3" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">3s</SelectItem>
+                                    <SelectItem value="5" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">5s</SelectItem>
+                                    <SelectItem value="8" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">8s</SelectItem>
+                                    <SelectItem value="10" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">10s</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
