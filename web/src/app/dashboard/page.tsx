@@ -295,8 +295,8 @@ export default function StudioPage() {
                                                             key={ratio}
                                                             onClick={() => setAspectRatio(ratio)}
                                                             className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${aspectRatio === ratio
-                                                                    ? 'bg-blue-900/40 text-blue-400 shadow-sm'
-                                                                    : 'text-zinc-500 hover:text-zinc-300'
+                                                                ? 'bg-blue-900/40 text-blue-400 shadow-sm'
+                                                                : 'text-zinc-500 hover:text-zinc-300'
                                                                 }`}
                                                         >
                                                             {ratio}
@@ -328,6 +328,7 @@ export default function StudioPage() {
                                         key={shot.id}
                                         index={idx}
                                         shot={shot}
+                                        selectedModelId={selectedModelId}
                                         onUpdate={updateShot}
                                         onRemove={removeShot}
                                     />
@@ -355,8 +356,8 @@ export default function StudioPage() {
                                             key={ratio}
                                             onClick={() => setAspectRatio(ratio)}
                                             className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${aspectRatio === ratio
-                                                    ? 'bg-blue-900/40 text-blue-400 shadow-sm'
-                                                    : 'text-zinc-500 hover:text-zinc-300'
+                                                ? 'bg-blue-900/40 text-blue-400 shadow-sm'
+                                                : 'text-zinc-500 hover:text-zinc-300'
                                                 }`}
                                         >
                                             {ratio}

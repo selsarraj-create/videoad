@@ -10,7 +10,7 @@ export interface ModelSpec {
     tier: CreditTier
     description: string
     baseCredits: number // credits per generation (standard duration/resolution)
-    maxDuration?: number
+    supportedDurations: number[] // available duration options in seconds
     maxResolution?: '720p' | '1080p' | '4k'
 }
 
@@ -26,7 +26,7 @@ export const MODELS: ModelSpec[] = [
         tier: 'Eco',
         description: 'High-speed generation perfect for social media trends.',
         baseCredits: 60, // 60 credits per video (~$0.30)
-        maxDuration: 8,
+        supportedDurations: [8], // Veo 3.1 is fixed at 8s
         maxResolution: '1080p'
     },
     // Cinema (Hero)
@@ -38,7 +38,7 @@ export const MODELS: ModelSpec[] = [
         tier: 'Premium',
         description: 'Best-in-class cinematic realism and complex scene understanding.',
         baseCredits: 30, // 30 credits for 10s (~$0.15), 35 for 15s
-        maxDuration: 15,
+        supportedDurations: [10, 15],
         maxResolution: '1080p'
     },
     {
@@ -49,7 +49,7 @@ export const MODELS: ModelSpec[] = [
         tier: 'Premium',
         description: 'Exclusive 4K upscaling and detailed texture rendering.',
         baseCredits: 60, // Estimated (WaveSpeedAI pricing)
-        maxDuration: 10,
+        supportedDurations: [5, 10],
         maxResolution: '4k'
     },
     {
@@ -60,7 +60,7 @@ export const MODELS: ModelSpec[] = [
         tier: 'Standard',
         description: 'Balanced performance for social content with moderate complexity.',
         baseCredits: 30, // 30 credits for 6s 768p (~$0.15), 50 for 10s
-        maxDuration: 10,
+        supportedDurations: [6, 10],
         maxResolution: '1080p'
     },
     // Production (Consistency)
@@ -72,7 +72,7 @@ export const MODELS: ModelSpec[] = [
         tier: 'Standard',
         description: 'Professional grade visual consistency for long-form content.',
         baseCredits: 55, // 55 credits for 5s HD (~$0.28), 110 for 10s
-        maxDuration: 10,
+        supportedDurations: [5, 10],
         maxResolution: '1080p'
     },
     {
@@ -83,7 +83,7 @@ export const MODELS: ModelSpec[] = [
         tier: 'Premium',
         description: 'Advanced character consistency and motion control.',
         baseCredits: 80, // Estimated (WaveSpeedAI pricing)
-        maxDuration: 10,
+        supportedDurations: [5, 10],
         maxResolution: '1080p'
     },
     // Product (E-comm)
@@ -95,7 +95,7 @@ export const MODELS: ModelSpec[] = [
         tier: 'Standard',
         description: 'Optimized for product photography and clean backgrounds.',
         baseCredits: 60, // Uses Veo 3.1 Fast under the hood
-        maxDuration: 8,
+        supportedDurations: [8],
         maxResolution: '1080p'
     }
 ]

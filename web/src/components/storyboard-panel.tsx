@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Shot } from "@/lib/types"
+import { MODELS } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,12 +20,22 @@ import { createClient } from "@/lib/supabase/client"
 interface StoryboardPanelProps {
     shot: Shot
     index: number
+    selectedModelId: string
     onUpdate: (id: string, updates: Partial<Shot>) => void
     onRemove: (id: string) => void
 }
 
-export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardPanelProps) {
+export function StoryboardPanel({ shot, index, selectedModelId, onUpdate, onRemove }: StoryboardPanelProps) {
     const [isMotionBrushOpen, setIsMotionBrushOpen] = useState(false)
+    const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
+    const durations = selectedModel.supportedDurations
+
+    // Auto-set duration to first supported value if current isn't supported
+    useEffect(() => {
+        if (!durations.includes(shot.duration)) {
+            onUpdate(shot.id, { duration: durations[0] })
+        }
+    }, [selectedModelId])
 
     const handleCameraChange = (vals: any) => {
         onUpdate(shot.id, { cameraControls: vals })
@@ -176,23 +187,24 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
                             </div>
                         </div>
 
-                        {/* Duration (Moved here for quick access) */}
+                        {/* Duration */}
                         <div className="space-y-1.5">
                             <Label className="text-[10px] uppercase font-bold text-zinc-600 flex items-center gap-1">
                                 <Video className="w-3 h-3" /> Time (s)
+                                {durations.length === 1 && <span className="text-zinc-700 normal-case font-normal ml-1">— fixed</span>}
                             </Label>
                             <Select
                                 value={shot.duration.toString()}
                                 onValueChange={(v) => onUpdate(shot.id, { duration: parseInt(v) })}
+                                disabled={durations.length === 1}
                             >
                                 <SelectTrigger className="h-8 text-xs text-zinc-200 bg-zinc-800/50 border-white/5 hover:border-white/10 hover:bg-zinc-800">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-zinc-900 border-white/10 text-zinc-200">
-                                    <SelectItem value="3" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">3s</SelectItem>
-                                    <SelectItem value="5" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">5s</SelectItem>
-                                    <SelectItem value="8" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">8s</SelectItem>
-                                    <SelectItem value="10" className="text-zinc-200 focus:bg-zinc-800 focus:text-white">10s</SelectItem>
+                                    {durations.map(d => (
+                                        <SelectItem key={d} value={d.toString()} className="text-zinc-200 focus:bg-zinc-800 focus:text-white">{d}s</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
