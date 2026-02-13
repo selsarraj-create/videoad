@@ -32,6 +32,9 @@ export function CreditBadge({ cost, balance }: CreditBadgeProps) {
                         </motion.span>
                     </AnimatePresence>
                     <span className={`text-xs font-bold ${isOverBudget ? 'text-red-500/70' : 'text-zinc-600'}`}>CR</span>
+                    <span className={`text-[10px] font-mono ${isOverBudget ? 'text-red-500/50' : 'text-zinc-500'}`}>
+                        (${(cost * 0.005).toFixed(2)})
+                    </span>
                 </div>
             </div>
 
