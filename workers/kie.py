@@ -23,7 +23,7 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
     payload = {
         "model": model,
         "prompt": prompt,
-        # Add other parameters if needed, e.g. aspect_ratio
+        "customMode": False,
     }
     
     try:
