@@ -87,6 +87,17 @@ export const MODELS: ModelSpec[] = [
         maxResolution: '1080p'
     },
     {
+        id: 'seedance-1.5-pro',
+        name: 'Seedance 1.5 Pro',
+        provider: 'Kie.ai',
+        category: 'Production',
+        tier: 'Eco',
+        description: 'Cinema-quality video with native audio and multilingual dialogue.',
+        baseCredits: 28, // 28 credits for 8s 720p (~$0.14), with audio 56
+        supportedDurations: [4, 8, 12],
+        maxResolution: '720p'
+    },
+    {
         id: 'seedance-2.0-pro',
         name: 'Seedance 2.0 Pro',
         provider: 'WaveSpeedAI',

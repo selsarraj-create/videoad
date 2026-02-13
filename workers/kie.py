@@ -19,6 +19,7 @@ MODEL_ENDPOINTS = {
     "kling-2.6-pro": "kling",
     "hailuo-2.3": "hailuo",
     "grok-imagine": "grok-imagine",
+    "seedance-1.5-pro": "seedance",
     "product-showcase-1": "veo",
 }
 
@@ -32,6 +33,7 @@ MODEL_STATUS_PATHS = {
     "kling-2.6-pro": "kling/record-info",
     "hailuo-2.3": "hailuo/record-info",
     "grok-imagine": "grok-imagine/record-info",
+    "seedance-1.5-pro": "seedance/record-info",
     "product-showcase-1": "veo/record-info",
 }
 
@@ -44,6 +46,7 @@ MODEL_API_NAMES = {
     "kling-2.6-pro": "kling2.6_pro",
     "hailuo-2.3": "hailuo2.3",
     "grok-imagine": "grok-imagine",
+    "seedance-1.5-pro": "seedance1.5_pro",
     "product-showcase-1": "veo3_fast",
 }
 
