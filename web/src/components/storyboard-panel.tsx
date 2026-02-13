@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Trash2, Image as ImageIcon, Video, Move, Pencil, X, Upload, Loader2 } from "lucide-react"
+import { Trash2, Image as ImageIcon, Video, Move, Pencil, X, Upload, Loader2, User } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { MotionBrush } from "@/components/motion-brush"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -37,7 +37,9 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
 
     // ... (inside component)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const identityInputRef = useRef<HTMLInputElement>(null)
     const [isUploading, setIsUploading] = useState(false)
+    const [isUploadingIdentity, setIsUploadingIdentity] = useState(false)
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -73,6 +75,36 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
         fileInputRef.current?.click()
     }
 
+    const handleIdentityImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setIsUploadingIdentity(true)
+        try {
+            const supabase = createClient()
+            const fileExt = file.name.split('.').pop()
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+            const filePath = `identity_refs/${fileName}`
+
+            const { error: uploadError } = await supabase.storage
+                .from('raw_assets')
+                .upload(filePath, file)
+
+            if (uploadError) throw uploadError
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('raw_assets')
+                .getPublicUrl(filePath)
+
+            onUpdate(shot.id, { identityRef: publicUrl })
+        } catch (error) {
+            console.error('Error uploading identity ref:', error)
+            alert('Failed to upload image')
+        } finally {
+            setIsUploadingIdentity(false)
+        }
+    }
+
     return (
         <Card className="relative group bg-[#1E1E1E] border-white/5 backdrop-blur-xl transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.5)] hover:-translate-y-1 overflow-hidden">
             {/* 3D Depth Border Bottom */}
@@ -88,6 +120,7 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
                     <div className="flex gap-1" title="AI Verification">
                         <div className={`w-1.5 h-1.5 rounded-full ${shot.prompt ? 'bg-green-500/50' : 'bg-red-500/50'}`} />
                         <div className={`w-1.5 h-1.5 rounded-full ${shot.motionSketch ? 'bg-blue-500/50' : 'bg-zinc-800'}`} />
+                        <div className={`w-1.5 h-1.5 rounded-full ${shot.identityRef ? 'bg-purple-500/50' : 'bg-zinc-800'}`} title="Identity Ref" />
                     </div>
                     <Button
                         variant="ghost"
@@ -167,6 +200,60 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
                             values={shot.cameraControls || { pan: { x: 0, y: 0 }, zoom: 0, tilt: 0, roll: 0 }}
                             onChange={handleCameraChange}
                         />
+
+                        {/* Identity Reference Image */}
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase font-bold text-zinc-600 flex items-center gap-1">
+                                <User className="w-3 h-3" /> Identity Reference
+                            </Label>
+                            <input
+                                type="file"
+                                ref={identityInputRef}
+                                className="hidden"
+                                accept="image/*"
+                                onChange={handleIdentityImageChange}
+                            />
+                            <div
+                                onClick={() => identityInputRef.current?.click()}
+                                className={cn(
+                                    "h-20 border border-dashed border-zinc-700 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all group/identity relative overflow-hidden",
+                                    isUploadingIdentity ? "opacity-50 pointer-events-none" : "hover:bg-zinc-800/50 hover:border-zinc-500"
+                                )}
+                            >
+                                {isUploadingIdentity && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                    </div>
+                                )}
+                                {shot.identityRef ? (
+                                    <div className="flex items-center gap-3 px-3">
+                                        <img
+                                            src={shot.identityRef}
+                                            alt="Identity ref"
+                                            className="w-12 h-12 rounded-lg object-cover border border-zinc-700"
+                                        />
+                                        <div className="flex-1">
+                                            <span className="text-[10px] font-mono text-green-500">Identity Added</span>
+                                            <p className="text-[9px] text-zinc-600 mt-0.5">Character reference for consistency</p>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-5 w-5 hover:bg-red-500/20 hover:text-red-400"
+                                            onClick={(e) => { e.stopPropagation(); onUpdate(shot.id, { identityRef: undefined }) }}
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <User className="w-4 h-4 text-zinc-500 group-hover/identity:text-zinc-300 mb-1" />
+                                        <span className="text-[9px] text-zinc-600 group-hover/identity:text-zinc-400">Upload Identity Image</span>
+                                        <span className="text-[8px] text-zinc-700">Face / character reference</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
 
                         {/* Motion Driving Video */}
                         <div className="space-y-1.5">

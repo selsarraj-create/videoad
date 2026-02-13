@@ -48,6 +48,7 @@ export interface Shot {
         roll: number
     }
     motionVideoRef?: string // URL for motion driving video
+    identityRef?: string // URL for identity/character reference image
 }
 
 export interface StoryboardProject {
