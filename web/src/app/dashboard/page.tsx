@@ -32,7 +32,7 @@ import {
 import { ModelSelector } from "@/components/model-selector"
 import { StoryboardPanel } from "@/components/storyboard-panel"
 import { MODELS, calculateCredits } from "@/lib/models"
-import { saveProjectState, loadProjectState } from "@/app/actions"
+import { saveProjectState, loadProjectState, getOrCreateDefaultProject } from "@/app/actions"
 
 import { CreditBadge } from "@/components/credit-badge"
 import { useCreditCalculator } from "@/hooks/use-credit-calculator"
@@ -48,15 +48,16 @@ export default function StudioPage() {
     const [loading, setLoading] = useState(false)
     const [jobs, setJobs] = useState<Job[]>([])
     const [isGenerating, setIsGenerating] = useState(false)
-    const [userId, setUserId] = useState<string | null>(null)
+    const [projectId, setProjectId] = useState<string | null>(null)
 
     const supabase = createClient()
     const userBalance = 500 // Mock balance for now
 
-    // Fetch authenticated user ID
+    // Initialize: get or create default workspace + project
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-            if (user) setUserId(user.id)
+        getOrCreateDefaultProject().then(({ projectId: pid, error }) => {
+            if (pid) setProjectId(pid)
+            if (error) console.error('Project init error:', error)
         })
     }, [])
 
@@ -88,19 +89,19 @@ export default function StudioPage() {
     // -------------------------------------------------------------------------
     useEffect(() => {
         const timer = setTimeout(() => {
-            if (!userId) return
-            saveProjectState(userId, {
+            if (!projectId) return
+            saveProjectState(projectId, {
                 mode, shots, anchorStyle, selectedModelId, is4k,
                 prompt: mode === 'draft' ? prompt : undefined
             })
         }, 3000)
         return () => clearTimeout(timer)
-    }, [mode, shots, anchorStyle, selectedModelId, is4k, prompt, userId])
+    }, [mode, shots, anchorStyle, selectedModelId, is4k, prompt, projectId])
 
     useEffect(() => {
         async function load() {
-            if (!userId) return
-            const result = await loadProjectState(userId)
+            if (!projectId) return
+            const result = await loadProjectState(projectId)
             if (result.data) {
                 const d = result.data
                 setMode(d.mode)
@@ -112,7 +113,7 @@ export default function StudioPage() {
             }
         }
         load()
-    }, [userId])
+    }, [projectId])
 
     const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
 
@@ -130,8 +131,8 @@ export default function StudioPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(mode === 'draft'
-                    ? { prompt, model: selectedModelId, is4k, workspace_id: userId, provider_metadata: { duration: 8 } }
-                    : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: userId }
+                    ? { prompt, model: selectedModelId, is4k, workspace_id: projectId, provider_metadata: { duration: 8 } }
+                    : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: projectId }
                 )
             })
         } catch (e) { console.error(e) }
@@ -339,7 +340,7 @@ export default function StudioPage() {
                                             await fetch('/api/stitch', { // simplified fetch
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ project_id: userId, job_ids: completedJobIds })
+                                                body: JSON.stringify({ project_id: projectId, job_ids: completedJobIds })
                                             })
                                             alert("Started!")
                                         } catch (e) { console.error(e) }
