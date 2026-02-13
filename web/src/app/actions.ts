@@ -10,14 +10,15 @@ export async function saveProjectState(projectId: string, data: ProjectData) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: "Unauthorized" }
 
-    // Upsert project data
+    // Upsert project data (creates row if it doesn't exist)
     const { error } = await supabase
         .from('projects')
-        .update({
+        .upsert({
+            id: projectId,
             data: data,
+            user_id: user.id,
             updated_at: new Date().toISOString()
-        })
-        .eq('id', projectId)
+        }, { onConflict: 'id' })
 
     if (error) {
         console.error("Save error:", error)

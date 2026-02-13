@@ -48,9 +48,17 @@ export default function StudioPage() {
     const [loading, setLoading] = useState(false)
     const [jobs, setJobs] = useState<Job[]>([])
     const [isGenerating, setIsGenerating] = useState(false)
+    const [userId, setUserId] = useState<string | null>(null)
 
     const supabase = createClient()
     const userBalance = 500 // Mock balance for now
+
+    // Fetch authenticated user ID
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) setUserId(user.id)
+        })
+    }, [])
 
     // Real-time Credit Calculation
     const totalCredits = useCreditCalculator({
@@ -80,19 +88,19 @@ export default function StudioPage() {
     // -------------------------------------------------------------------------
     useEffect(() => {
         const timer = setTimeout(() => {
-            const projectId = "default-project-id"
-            saveProjectState(projectId, {
+            if (!userId) return
+            saveProjectState(userId, {
                 mode, shots, anchorStyle, selectedModelId, is4k,
                 prompt: mode === 'draft' ? prompt : undefined
             })
         }, 3000)
         return () => clearTimeout(timer)
-    }, [mode, shots, anchorStyle, selectedModelId, is4k, prompt])
+    }, [mode, shots, anchorStyle, selectedModelId, is4k, prompt, userId])
 
     useEffect(() => {
         async function load() {
-            const projectId = "default-project-id"
-            const result = await loadProjectState(projectId)
+            if (!userId) return
+            const result = await loadProjectState(userId)
             if (result.data) {
                 const d = result.data
                 setMode(d.mode)
@@ -104,7 +112,7 @@ export default function StudioPage() {
             }
         }
         load()
-    }, [])
+    }, [userId])
 
     const selectedModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0]
 
@@ -122,8 +130,8 @@ export default function StudioPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(mode === 'draft'
-                    ? { prompt, model: selectedModelId, is4k, workspace_id: "def", provider_metadata: { duration: 8 } }
-                    : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: "def" }
+                    ? { prompt, model: selectedModelId, is4k, workspace_id: userId, provider_metadata: { duration: 8 } }
+                    : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: userId }
                 )
             })
         } catch (e) { console.error(e) }
@@ -331,7 +339,7 @@ export default function StudioPage() {
                                             await fetch('/api/stitch', { // simplified fetch
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ project_id: "def", job_ids: completedJobIds })
+                                                body: JSON.stringify({ project_id: userId, job_ids: completedJobIds })
                                             })
                                             alert("Started!")
                                         } catch (e) { console.error(e) }
