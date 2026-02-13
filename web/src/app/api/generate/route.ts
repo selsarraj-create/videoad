@@ -14,6 +14,11 @@ export async function POST(request: Request) {
         const body = await request.json()
         const { shots, prompt, model, tier, provider_metadata, workspace_id, is4k, anchorStyle } = body
 
+        // Ensure project row exists (satisfies foreign key on jobs)
+        await supabase
+            .from('projects')
+            .upsert({ id: workspace_id, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+
         // Support both new Storyboard (shots array) and legacy Single Shot (prompt)
         // If 'shots' is present, use it. Otherwise wrap 'prompt' in a single shot.
         const workItems = shots ? shots : [{
