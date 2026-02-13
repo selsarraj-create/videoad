@@ -46,6 +46,7 @@ export default function StudioPage() {
     const [anchorStyle, setAnchorStyle] = useState("")
     const [selectedModelId, setSelectedModelId] = useState<string>("veo-3.1-fast")
     const [is4k, setIs4k] = useState<boolean>(false)
+    const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9')
     const [loading, setLoading] = useState(false)
     const [jobs, setJobs] = useState<Job[]>([])
     const [isGenerating, setIsGenerating] = useState(false)
@@ -132,8 +133,8 @@ export default function StudioPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(mode === 'draft'
-                    ? { prompt, model: selectedModelId, is4k, workspace_id: projectId, provider_metadata: { duration: 8 } }
-                    : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: projectId }
+                    ? { prompt, model: selectedModelId, is4k, workspace_id: projectId, provider_metadata: { duration: 8, aspect_ratio: aspectRatio } }
+                    : { shots, model: selectedModelId, anchorStyle, is4k, workspace_id: projectId, provider_metadata: { aspect_ratio: aspectRatio } }
                 )
             })
         } catch (e) { console.error(e) }
@@ -288,6 +289,20 @@ export default function StudioPage() {
                                                 <button onClick={() => setIs4k(!is4k)} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${is4k ? 'bg-blue-900/30 text-blue-400 border border-blue-800' : 'bg-zinc-800 text-zinc-500'}`}>
                                                     {is4k ? '4K Ultra HD' : 'HD Standard'}
                                                 </button>
+                                                <div className="flex bg-zinc-800 rounded-lg p-0.5 gap-0.5">
+                                                    {(['16:9', '9:16', '1:1'] as const).map((ratio) => (
+                                                        <button
+                                                            key={ratio}
+                                                            onClick={() => setAspectRatio(ratio)}
+                                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${aspectRatio === ratio
+                                                                    ? 'bg-blue-900/40 text-blue-400 shadow-sm'
+                                                                    : 'text-zinc-500 hover:text-zinc-300'
+                                                                }`}
+                                                        >
+                                                            {ratio}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                             <Button
                                                 onClick={handleGenerate}
@@ -332,6 +347,26 @@ export default function StudioPage() {
                     {/* Footer Actions */}
                     {mode === 'storyboard' && (
                         <div className="p-6 border-t border-zinc-800 bg-[#121212]/90 backdrop-blur-xl absolute bottom-0 w-full z-50">
+                            <div className="flex items-center gap-3 mb-3">
+                                <span className="text-[10px] uppercase font-bold text-zinc-600">Aspect Ratio</span>
+                                <div className="flex bg-zinc-800 rounded-lg p-0.5 gap-0.5">
+                                    {(['16:9', '9:16', '1:1'] as const).map((ratio) => (
+                                        <button
+                                            key={ratio}
+                                            onClick={() => setAspectRatio(ratio)}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${aspectRatio === ratio
+                                                    ? 'bg-blue-900/40 text-blue-400 shadow-sm'
+                                                    : 'text-zinc-500 hover:text-zinc-300'
+                                                }`}
+                                        >
+                                            {ratio}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button onClick={() => setIs4k(!is4k)} className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all ml-auto ${is4k ? 'bg-blue-900/30 text-blue-400 border border-blue-800' : 'bg-zinc-800 text-zinc-500'}`}>
+                                    {is4k ? '4K' : 'HD'}
+                                </button>
+                            </div>
                             <div className="flex gap-4">
                                 <Button
                                     disabled={isGenerating || jobs.filter(j => j.status === 'completed').length < 2}
