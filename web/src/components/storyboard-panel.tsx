@@ -58,11 +58,13 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
 
             if (uploadError) throw uploadError
 
-            const { data: { publicUrl } } = supabase.storage
+            const { data: signedData, error: signError } = await supabase.storage
                 .from('raw_assets')
-                .getPublicUrl(filePath)
+                .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year
 
-            onUpdate(shot.id, { motionVideoRef: publicUrl })
+            if (signError || !signedData?.signedUrl) throw signError || new Error('Failed to get signed URL')
+
+            onUpdate(shot.id, { motionVideoRef: signedData.signedUrl })
         } catch (error) {
             console.error('Error uploading motion ref:', error)
             alert('Failed to upload video')
@@ -92,11 +94,13 @@ export function StoryboardPanel({ shot, index, onUpdate, onRemove }: StoryboardP
 
             if (uploadError) throw uploadError
 
-            const { data: { publicUrl } } = supabase.storage
+            const { data: signedData, error: signError } = await supabase.storage
                 .from('raw_assets')
-                .getPublicUrl(filePath)
+                .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year
 
-            onUpdate(shot.id, { identityRef: publicUrl })
+            if (signError || !signedData?.signedUrl) throw signError || new Error('Failed to get signed URL')
+
+            onUpdate(shot.id, { identityRef: signedData.signedUrl })
         } catch (error) {
             console.error('Error uploading identity ref:', error)
             alert('Failed to upload image')
