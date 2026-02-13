@@ -9,11 +9,13 @@ export interface ModelSpec {
     category: ModelCategory
     tier: CreditTier
     description: string
-    baseCredits: number // per 720p/8s
+    baseCredits: number // credits per generation (standard duration/resolution)
     maxDuration?: number
     maxResolution?: '720p' | '1080p' | '4k'
 }
 
+// Actual Kie.ai credit costs (as of Feb 2026)
+// $0.005 per credit ($50 / 10,000 credits)
 export const MODELS: ModelSpec[] = [
     // Social (Fast) - Default
     {
@@ -23,7 +25,9 @@ export const MODELS: ModelSpec[] = [
         category: 'Social',
         tier: 'Eco',
         description: 'High-speed generation perfect for social media trends.',
-        baseCredits: 5
+        baseCredits: 60, // 60 credits per video (~$0.30)
+        maxDuration: 8,
+        maxResolution: '1080p'
     },
     // Cinema (Hero)
     {
@@ -33,7 +37,9 @@ export const MODELS: ModelSpec[] = [
         category: 'Cinema',
         tier: 'Premium',
         description: 'Best-in-class cinematic realism and complex scene understanding.',
-        baseCredits: 50
+        baseCredits: 30, // 30 credits for 10s (~$0.15), 35 for 15s
+        maxDuration: 15,
+        maxResolution: '1080p'
     },
     {
         id: 'wan-2.6',
@@ -42,7 +48,9 @@ export const MODELS: ModelSpec[] = [
         category: 'Cinema',
         tier: 'Premium',
         description: 'Exclusive 4K upscaling and detailed texture rendering.',
-        baseCredits: 60
+        baseCredits: 60, // Estimated (WaveSpeedAI pricing)
+        maxDuration: 10,
+        maxResolution: '4k'
     },
     {
         id: 'hailuo-2.3',
@@ -51,7 +59,9 @@ export const MODELS: ModelSpec[] = [
         category: 'Social',
         tier: 'Standard',
         description: 'Balanced performance for social content with moderate complexity.',
-        baseCredits: 15
+        baseCredits: 30, // 30 credits for 6s 768p (~$0.15), 50 for 10s
+        maxDuration: 10,
+        maxResolution: '1080p'
     },
     // Production (Consistency)
     {
@@ -61,7 +71,9 @@ export const MODELS: ModelSpec[] = [
         category: 'Production',
         tier: 'Standard',
         description: 'Professional grade visual consistency for long-form content.',
-        baseCredits: 20
+        baseCredits: 55, // 55 credits for 5s HD (~$0.28), 110 for 10s
+        maxDuration: 10,
+        maxResolution: '1080p'
     },
     {
         id: 'seedance-2.0-pro',
@@ -70,7 +82,9 @@ export const MODELS: ModelSpec[] = [
         category: 'Production',
         tier: 'Premium',
         description: 'Advanced character consistency and motion control.',
-        baseCredits: 40
+        baseCredits: 80, // Estimated (WaveSpeedAI pricing)
+        maxDuration: 10,
+        maxResolution: '1080p'
     },
     // Product (E-comm)
     {
@@ -80,15 +94,24 @@ export const MODELS: ModelSpec[] = [
         category: 'Product',
         tier: 'Standard',
         description: 'Optimized for product photography and clean backgrounds.',
-        baseCredits: 10
+        baseCredits: 60, // Uses Veo 3.1 Fast under the hood
+        maxDuration: 8,
+        maxResolution: '1080p'
     }
 ]
 
 export const CATEGORIES: ModelCategory[] = ['Cinema', 'Social', 'Production', 'Product']
 
+// Credits are flat per generation for most Kie.ai models
+// 1080p doubles the cost, 4K quadruples
 export function calculateCredits(base: number, duration: number, is4k: boolean): number {
-    let multiplier = 1
-    if (is4k) multiplier *= 4
-    if (duration > 8) multiplier *= 3 // Simple stepping for now
-    return base * multiplier
+    let cost = base
+
+    // Duration scaling (base price covers standard duration, longer costs more)
+    if (duration > 8) cost = Math.round(cost * 1.5)
+
+    // Resolution multiplier
+    if (is4k) cost = cost * 4
+
+    return cost
 }
