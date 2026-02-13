@@ -10,18 +10,30 @@ logger = logging.getLogger(__name__)
 KIE_API_KEY = os.getenv("KIE_API_KEY", "19297022e69b70a833da6ac91c822f8b")
 KIE_API_BASE = "https://api.kie.ai/api/v1"
 
-# Map model names to their API path segments
+# Map model names to their API path segments for GENERATION
 MODEL_ENDPOINTS = {
     "veo-3.1-fast": "veo",
-    "sora-2": "sora",
+    "veo-3.1-quality": "veo",
+    "sora-2": "runway",          # Sora uses /runway/ endpoint on Kie.ai
     "kling-2.6-quality": "kling",
     "kling-2.6-pro": "kling",
     "hailuo-2.3": "hailuo",
-    "product-showcase-1": "veo",  # Use Veo for product shots
+    "product-showcase-1": "veo",
+}
+
+# Map model names to their STATUS polling path
+# Some models use record-info, others use record-detail
+MODEL_STATUS_PATHS = {
+    "veo-3.1-fast": "veo/record-info",
+    "veo-3.1-quality": "veo/record-info",
+    "sora-2": "runway/record-detail",     # Sora/Runway uses record-detail
+    "kling-2.6-quality": "kling/record-info",
+    "kling-2.6-pro": "kling/record-info",
+    "hailuo-2.3": "hailuo/record-info",
+    "product-showcase-1": "veo/record-info",
 }
 
 # Map our internal model IDs to Kie.ai API model names
-# Kie.ai uses underscore-separated names
 MODEL_API_NAMES = {
     "veo-3.1-fast": "veo3_fast",
     "veo-3.1-quality": "veo3",
@@ -29,7 +41,7 @@ MODEL_API_NAMES = {
     "kling-2.6-quality": "kling2.6",
     "kling-2.6-pro": "kling2.6_pro",
     "hailuo-2.3": "hailuo2.3",
-    "product-showcase-1": "veo3_fast",  # Reuse Veo fast for product
+    "product-showcase-1": "veo3_fast",
 }
 
 def generate_video(prompt: str, model: str, **kwargs) -> dict:
@@ -73,15 +85,17 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
 
 def get_task_status(task_id: str, model: str = "") -> dict:
     """
-    Checks the status of a task using the model-specific record-info endpoint.
+    Checks the status of a task using the model-specific record-info/record-detail endpoint.
     """
     headers = {
         "Authorization": f"Bearer {KIE_API_KEY}"
     }
     
-    # Use the model-specific record-info endpoint
-    endpoint_segment = MODEL_ENDPOINTS.get(model, "veo")
-    url = f"{KIE_API_BASE}/{endpoint_segment}/record-info"
+    # Use the model-specific status endpoint
+    status_path = MODEL_STATUS_PATHS.get(model, "veo/record-info")
+    url = f"{KIE_API_BASE}/{status_path}"
+    
+    logger.info(f"Polling status at {url}?taskId={task_id}")
     
     try:
         response = requests.get(url, headers=headers, params={"taskId": task_id})

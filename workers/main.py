@@ -97,7 +97,7 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
                 success_flag = poll_data.get("successFlag")
                 
                 # Normalize to our internal status
-                if raw_status == "SUCCESS" or success_flag == 1:
+                if raw_status in ("SUCCESS", "success") or success_flag == 1:
                     status = "completed"
                 elif raw_status in ("GENERATE_FAILED", "CREATE_TASK_FAILED", "SENSITIVE_WORD_ERROR", "fail") or success_flag in (2, 3):
                     status = "failed"
