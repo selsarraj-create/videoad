@@ -51,20 +51,33 @@ export default function Home() {
       </motion.header>
 
       {/* ===== HERO SECTION ===== */}
-      <section className="relative min-h-screen flex flex-col justify-center px-6 pt-32 pb-20">
+      <section className="relative min-h-screen flex flex-col justify-center px-6 pt-24 pb-12 lg:pt-32 lg:pb-20">
         <div className="max-w-[1800px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-24 items-center">
 
           {/* Typography Column */}
           <div className="lg:col-span-7 relative z-10">
             <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="mb-8 flex items-center gap-3"
+            >
+              <div className="flex -space-x-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="w-8 h-8 rounded-full border-2 border-background bg-zinc-200" />
+                ))}
+              </div>
+              <span className="text-sm font-medium text-muted-foreground">Trusted by 5,000+ Creators</span>
+            </motion.div>
+
+            <motion.div
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, ease: "easeOut" }}
             >
-              <h1 className="font-serif text-oversized text-primary leading-[0.85] tracking-tight mix-blend-darken">
-                Cloud
-                <br />
-                <span className="italic font-light ml-20">Dancer</span>
+              <h1 className="font-serif text-7xl lg:text-9xl text-primary leading-[0.9] tracking-tight mix-blend-darken">
+                High-Fashion Content, <br />
+                <span className="italic font-light">Generated in 3 Clicks</span>
               </h1>
             </motion.div>
 
@@ -72,43 +85,69 @@ export default function Home() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5, duration: 1 }}
-              className="mt-12 max-w-md ml-auto lg:mr-24"
+              className="mt-12 max-w-lg lg:mr-24"
             >
-              <p className="text-lg font-light text-muted-foreground leading-relaxed text-justify">
+              <p className="text-lg font-light text-muted-foreground leading-relaxed">
                 Step into the future of digital expression. Upload your essence,
                 drape yourself in virtual silk, and craft cinematic moments
                 that blur the line between reality and dream.
               </p>
 
-              <div className="mt-10 flex items-center gap-4">
-                <Link href="/dashboard" className="group flex items-center gap-3 text-sm uppercase tracking-widest font-bold border-b border-primary/20 pb-1 hover:border-primary transition-colors">
-                  Open Studio
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-2 transition-transform duration-500" />
+              <div className="mt-10 flex items-center gap-6">
+                <Link href="/dashboard"
+                  className="bg-primary text-primary-foreground px-10 py-5 text-sm uppercase tracking-widest font-bold shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                >
+                  Start Creating Now
                 </Link>
+                <span className="text-xs text-muted-foreground uppercase tracking-widest">No credit card required</span>
               </div>
             </motion.div>
           </div>
 
-          {/* Visual Column */}
-          <div className="lg:col-span-5 relative h-[60vh] lg:h-[80vh] w-full">
+          {/* Visual Column - Product Preview Animation */}
+          <div className="lg:col-span-5 relative h-[50vh] lg:h-[70vh] w-full">
             <motion.div style={{ y: y1 }} className="absolute inset-0 z-0">
               <div className="relative w-full h-full overflow-hidden bg-[#e5e0dc]">
+                {/* Layer 1: Base Image (Upload/Raw) */}
                 <Image
-                  src="/hero-fashion.png"
-                  alt="Editorial Fashion"
+                  src="/step-upload.png"
+                  alt="Raw Upload"
                   fill
-                  className="object-cover opacity-90 grayscale-[20%] contrast-[1.1]"
+                  className="object-cover opacity-100"
                   priority
                 />
+
+                {/* Layer 2: Transformation (Hero/Final) - Looping Opacity */}
+                <motion.div
+                  animate={{ opacity: [0, 1, 1, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, times: [0, 0.4, 0.8, 1], repeatDelay: 1 }}
+                  className="absolute inset-0"
+                >
+                  <Image
+                    src="/hero-fashion.png"
+                    alt="Transformed Fashion"
+                    fill
+                    className="object-cover"
+                    priority
+                  />
+                </motion.div>
+
+                {/* UI Overlay for "Scanning/Processing" Effect */}
+                <motion.div
+                  animate={{ top: ["0%", "100%", "0%"] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                  className="absolute left-0 right-0 h-1 bg-white/50 backdrop-blur-md shadow-[0_0_20px_rgba(255,255,255,0.5)] z-20"
+                />
+
                 {/* Grain Overlay */}
-                <div className="absolute inset-0 bg-noise opacity-30 mix-blend-overlay" />
+                <div className="absolute inset-0 bg-noise opacity-30 mix-blend-overlay pointer-events-none z-30" />
               </div>
             </motion.div>
 
             {/* Floating Elements */}
             <motion.div
               style={{ y: y2 }}
-              className="absolute -bottom-12 -left-12 w-64 h-80 bg-white p-4 shadow-2xl hidden lg:block"
+              className="absolute -bottom-8 -left-8 w-56 h-72 bg-white p-3 shadow-2xl hidden lg:block z-40"
             >
               <div className="w-full h-full border border-black/5 relative overflow-hidden">
                 <Image

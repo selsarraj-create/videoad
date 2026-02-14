@@ -30,18 +30,12 @@ export async function POST(request: Request) {
             })
         }
 
-        // Add 15s timeout for worker call (tolerates cold starts)
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 15000)
-
         try {
             const res = await fetch(`${workerUrl}/webhook/validate-selfie-realtime`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image_data }),
-                signal: controller.signal
             })
-            clearTimeout(timeoutId)
 
             if (!res.ok) {
                 const errText = await res.text()
@@ -61,7 +55,6 @@ export async function POST(request: Request) {
             return NextResponse.json(result)
 
         } catch (fetchErr: any) {
-            clearTimeout(timeoutId)
             console.error('Worker fetch failed:', fetchErr)
             const msg = fetchErr.name === 'AbortError' ? 'Timeout' : 'Connection failed'
 
