@@ -41,6 +41,8 @@ import { getOrCreateDefaultProject } from "@/app/actions"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { BespokeInput } from "@/components/ui/bespoke-input"
+import { ParticleSilhouette } from "@/components/ui/particle-silhouette"
+import { StatusPill } from "@/components/ui/status-pill"
 
 type Tab = 'try-on' | 'video'
 
@@ -331,7 +333,7 @@ export default function StudioPage() {
             <main className="flex-1 grid grid-cols-12 overflow-hidden">
 
                 {/* ===== LEFT PANEL ===== */}
-                <section className="col-span-12 lg:col-span-5 flex flex-col border-r border-nimbus/50 overflow-y-auto bg-white/40">
+                <section className="col-span-12 lg:col-span-5 flex flex-col overflow-y-auto glass-panel z-20 relative">
                     <div className="flex-1 p-8 lg:p-12 max-w-xl mx-auto w-full space-y-12">
 
                         {activeTab === 'try-on' ? (
@@ -360,8 +362,11 @@ export default function StudioPage() {
                                     </div>
 
                                     {masterIdentityUrl ? (
-                                        <div className="relative aspect-[3/4] w-2/3 mx-auto shadow-xl bg-white p-2 rotate-1 transition-transform hover:rotate-0 duration-500">
-                                            <img src={masterIdentityUrl} alt="Master Identity" className="w-full h-full object-cover grayscale-[20%]" />
+                                        <div className="relative aspect-[3/4] w-2/3 mx-auto shadow-xl bg-white p-2 rotate-1 transition-transform hover:rotate-0 duration-500 group">
+                                            <div className="absolute inset-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none">
+                                                <ParticleSilhouette />
+                                            </div>
+                                            <img src={masterIdentityUrl} alt="Master Identity" className="w-full h-full object-cover grayscale-[20%] group-hover:opacity-0 transition-opacity duration-700" />
                                         </div>
                                     ) : (
                                         <div className="py-12 text-center border border-dashed border-nimbus">
@@ -486,17 +491,17 @@ export default function StudioPage() {
                                         </div>
                                     </div>
 
-                                    <Button onClick={handleGenerateVideo} disabled={!canGenerateVideo}
-                                        className={`w-full h-14 text-xs font-bold uppercase tracking-[0.2em] transition-all rounded-none ${canGenerateVideo
-                                            ? 'bg-foreground text-background hover:bg-primary shadow-xl hover:shadow-2xl'
-                                            : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
-                                            }`}>
-                                        {videoLoading ? (
-                                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Rendering Cinema...</>
-                                        ) : (
-                                            <>Generate Motion <ArrowRight className="w-4 h-4 ml-2" /></>
-                                        )}
-                                    </Button>
+                                    {videoLoading ? (
+                                        <StatusPill status="rendering" />
+                                    ) : (
+                                        <Button onClick={handleGenerateVideo} disabled={!canGenerateVideo}
+                                            className={`w-full h-14 text-xs font-bold uppercase tracking-[0.2em] transition-all rounded-none ${canGenerateVideo
+                                                ? 'bg-foreground text-background hover:bg-primary shadow-xl hover:shadow-2xl'
+                                                : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
+                                                }`}>
+                                            Generate Motion <ArrowRight className="w-4 h-4 ml-2" />
+                                        </Button>
+                                    )}
                                 </div>
                             </motion.div>
                         )}
@@ -585,8 +590,8 @@ export default function StudioPage() {
                                         <div className="p-4 bg-white border-t border-nimbus/20">
                                             <div className="flex items-center justify-between mb-2">
                                                 <Badge variant="outline" className={`text-[9px] h-5 border-0 rounded-none uppercase tracking-widest ${job.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                        job.status === 'failed' ? 'bg-red-100 text-red-700' :
-                                                            'bg-yellow-100 text-yellow-700'}`}>
+                                                    job.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                                        'bg-yellow-100 text-yellow-700'}`}>
                                                     {job.status}
                                                 </Badge>
                                                 <span className="text-[9px] text-muted-foreground font-mono">ID: {job.id.slice(0, 6)}</span>

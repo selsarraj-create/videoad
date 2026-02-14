@@ -1,6 +1,6 @@
 """
 Gemini integration for selfie validation and master identity generation.
-Uses google-genai SDK.
+Uses the REST API directly via httpx — no SDK dependency.
 
 Models:
   - Validation: gemini-2.0-flash (vision) for real-time selfie analysis
@@ -11,16 +11,13 @@ import os
 import json
 import base64
 import httpx
-from google import genai
-from google.genai import types
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
-def _get_client():
-    if not GEMINI_API_KEY:
-        raise Exception("GEMINI_API_KEY not set")
-    return genai.Client(api_key=GEMINI_API_KEY)
+def _api_url(model: str) -> str:
+    return f"{API_BASE}/models/{model}:generateContent?key={GEMINI_API_KEY}"
 
 
 def _download_image_bytes(url: str) -> bytes:
@@ -37,6 +34,43 @@ def _guess_mime(url: str) -> str:
     if ".webp" in lower:
         return "image/webp"
     return "image/jpeg"
+
+
+def _parse_json_response(text: str) -> dict:
+    """Parse JSON from Gemini response, handling markdown code blocks."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        if "```" in text:
+            json_block = text.split("```")[1]
+            if json_block.startswith("json"):
+                json_block = json_block[4:]
+            return json.loads(json_block.strip())
+        raise Exception(f"Gemini returned invalid JSON: {text[:200]}")
+
+
+def _generate_content(model: str, parts: list, config: dict | None = None) -> dict:
+    """Call Gemini generateContent REST endpoint."""
+    if not GEMINI_API_KEY:
+        raise Exception("GEMINI_API_KEY not set")
+
+    body: dict = {
+        "contents": [{"parts": parts}],
+    }
+    if config:
+        body["generationConfig"] = config
+
+    resp = httpx.post(
+        _api_url(model),
+        json=body,
+        timeout=60,
+    )
+
+    if resp.status_code != 200:
+        raise Exception(f"Gemini API error {resp.status_code}: {resp.text[:500]}")
+
+    return resp.json()
 
 
 # =========================================================================
@@ -71,39 +105,22 @@ def validate_selfie(image_url: str) -> dict:
     Use Gemini Flash to validate a selfie against quality criteria.
     Returns { passed: bool, checks: [...] }
     """
-    client = _get_client()
     image_bytes = _download_image_bytes(image_url)
     mime = _guess_mime(image_url)
 
-    response = client.models.generate_content(
+    parts = [
+        {"inlineData": {"mimeType": mime, "data": base64.b64encode(image_bytes).decode()}},
+        {"text": VALIDATION_PROMPT},
+    ]
+
+    result = _generate_content(
         model="gemini-2.0-flash",
-        contents=[
-            types.Content(
-                parts=[
-                    types.Part.from_bytes(data=image_bytes, mime_type=mime),
-                    types.Part.from_text(text=VALIDATION_PROMPT),
-                ]
-            )
-        ],
-        config=types.GenerateContentConfig(
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
+        parts=parts,
+        config={"temperature": 0.1, "responseMimeType": "application/json"},
     )
 
-    raw = response.text.strip()
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        if "```" in raw:
-            json_block = raw.split("```")[1]
-            if json_block.startswith("json"):
-                json_block = json_block[4:]
-            result = json.loads(json_block.strip())
-        else:
-            raise Exception(f"Gemini returned invalid JSON: {raw[:200]}")
-
-    return result
+    text = result["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_json_response(text)
 
 
 # =========================================================================
@@ -137,8 +154,6 @@ def validate_selfie_realtime(image_base64: str) -> dict:
     Validate a base64-encoded camera frame for real-time feedback.
     Optimized for speed — shorter prompt, lower token usage.
     """
-    client = _get_client()
-
     # Parse base64 data URL
     if image_base64.startswith("data:"):
         header, b64data = image_base64.split(",", 1)
@@ -147,37 +162,19 @@ def validate_selfie_realtime(image_base64: str) -> dict:
         b64data = image_base64
         mime = "image/jpeg"
 
-    image_bytes = base64.b64decode(b64data)
+    parts = [
+        {"inlineData": {"mimeType": mime, "data": b64data}},
+        {"text": REALTIME_VALIDATION_PROMPT},
+    ]
 
-    response = client.models.generate_content(
+    result = _generate_content(
         model="gemini-2.0-flash",
-        contents=[
-            types.Content(
-                parts=[
-                    types.Part.from_bytes(data=image_bytes, mime_type=mime),
-                    types.Part.from_text(text=REALTIME_VALIDATION_PROMPT),
-                ]
-            )
-        ],
-        config=types.GenerateContentConfig(
-            temperature=0.05,
-            response_mime_type="application/json",
-        ),
+        parts=parts,
+        config={"temperature": 0.05, "responseMimeType": "application/json"},
     )
 
-    raw = response.text.strip()
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        if "```" in raw:
-            json_block = raw.split("```")[1]
-            if json_block.startswith("json"):
-                json_block = json_block[4:]
-            result = json.loads(json_block.strip())
-        else:
-            raise Exception(f"Gemini returned invalid JSON: {raw[:200]}")
-
-    return result
+    text = result["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_json_response(text)
 
 
 # =========================================================================
@@ -203,31 +200,42 @@ def generate_master_identity(image_url: str) -> dict:
     Use Gemini Flash image generation to create a 4K studio portrait
     from a selfie. Returns { image_bytes: bytes, mime_type: str }.
     """
-    client = _get_client()
+    if not GEMINI_API_KEY:
+        raise Exception("GEMINI_API_KEY not set")
+
     image_bytes = _download_image_bytes(image_url)
     mime = _guess_mime(image_url)
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-preview-image-generation",
-        contents=[
-            types.Content(
-                parts=[
-                    types.Part.from_bytes(data=image_bytes, mime_type=mime),
-                    types.Part.from_text(text=IDENTITY_PROMPT),
-                ]
-            )
-        ],
-        config=types.GenerateContentConfig(
-            response_modalities=["IMAGE", "TEXT"],
-        ),
+    body = {
+        "contents": [{
+            "parts": [
+                {"inlineData": {"mimeType": mime, "data": base64.b64encode(image_bytes).decode()}},
+                {"text": IDENTITY_PROMPT},
+            ]
+        }],
+        "generationConfig": {
+            "responseModalities": ["IMAGE", "TEXT"],
+        },
+    }
+
+    resp = httpx.post(
+        _api_url("gemini-2.0-flash-preview-image-generation"),
+        json=body,
+        timeout=120,
     )
 
+    if resp.status_code != 200:
+        raise Exception(f"Gemini image gen error {resp.status_code}: {resp.text[:500]}")
+
+    data = resp.json()
+
     # Extract the generated image from the response
-    for part in response.candidates[0].content.parts:
-        if part.inline_data is not None:
+    for part in data["candidates"][0]["content"]["parts"]:
+        if "inlineData" in part:
+            img_data = part["inlineData"]
             return {
-                "image_bytes": part.inline_data.data,
-                "mime_type": part.inline_data.mime_type or "image/png",
+                "image_bytes": base64.b64decode(img_data["data"]),
+                "mime_type": img_data.get("mimeType", "image/png"),
             }
 
     raise Exception("Gemini did not return an image in the response")

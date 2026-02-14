@@ -166,6 +166,13 @@
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
 }
 
+@utility glass-panel {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 20px 0 40px rgba(0, 0, 0, 0.05);
+}
 
 @utility text-oversized {
   font-size: clamp(4rem, 15vw, 12rem);
