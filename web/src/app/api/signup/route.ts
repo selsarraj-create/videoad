@@ -4,7 +4,8 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
     try {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        // Check for both variable names to be safe
+        const serviceRoleKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
         // Check env vars are present
         if (!supabaseUrl || !serviceRoleKey) {
