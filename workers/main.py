@@ -13,10 +13,26 @@ from .presets import get_prompt, get_preset
 
 load_dotenv()
 
-# Initialize Supabase client
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-supabase: Client = create_client(supabase_url, supabase_key)
+# Lazy Supabase client — avoids crashing at import time
+_supabase_client: Client | None = None
+
+def get_supabase() -> Client:
+    global _supabase_client
+    if _supabase_client is None:
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        if not url or not key:
+            raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
+        _supabase_client = create_client(url, key)
+    return _supabase_client
+
+# Backwards-compatible alias — all existing code uses `supabase.table(...)`
+class _LazySupabase:
+    """Proxy that defers create_client until first attribute access."""
+    def __getattr__(self, name):
+        return getattr(get_supabase(), name)
+
+supabase = _LazySupabase()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
