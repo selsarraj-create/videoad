@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { ArrowRight, Sparkles, Camera, Video, Layers, Zap, Upload, Eye } from "lucide-react"
 
 export default function Home() {
@@ -33,10 +34,21 @@ export default function Home() {
       </header>
 
       {/* ===== HERO ===== */}
-      <section className="relative pt-32 pb-20 px-6">
+      <section className="relative pt-32 pb-20 px-6 overflow-hidden">
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/hero-fashion.png"
+            alt="Fashion Studio Hero"
+            fill
+            className="object-cover opacity-40 mix-blend-overlay"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]" />
+        </div>
+
         {/* Background effects */}
-        <div className="absolute top-20 left-1/4 w-[600px] h-[600px] bg-purple-600/8 rounded-full blur-[150px] pointer-events-none" />
-        <div className="absolute top-40 right-1/4 w-[500px] h-[500px] bg-pink-600/8 rounded-full blur-[150px] pointer-events-none" />
+        <div className="absolute top-20 left-1/4 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none" />
+        <div className="absolute top-40 right-1/4 w-[500px] h-[500px] bg-pink-600/10 rounded-full blur-[150px] pointer-events-none" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_0%,_#050505_70%)] pointer-events-none" />
 
         <div className="relative max-w-5xl mx-auto text-center space-y-8">
@@ -99,18 +111,18 @@ export default function Home() {
                 <p className="text-sm text-zinc-500 leading-relaxed">
                   Upload a selfie and a clothing item. Our AI places the garment on you with photorealistic accuracy.
                 </p>
-                <div className="h-48 rounded-2xl bg-zinc-950 border border-zinc-800/50 flex items-center justify-center overflow-hidden">
-                  <div className="flex items-center gap-4">
-                    <div className="w-20 h-24 rounded-xl bg-zinc-800/50 border border-zinc-700/30 flex items-center justify-center">
-                      <Camera className="w-6 h-6 text-zinc-600" />
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-8 h-[2px] bg-gradient-to-r from-purple-600 to-pink-600" />
-                      <Sparkles className="w-4 h-4 text-purple-500 animate-pulse" />
-                      <div className="w-8 h-[2px] bg-gradient-to-r from-purple-600 to-pink-600" />
-                    </div>
-                    <div className="w-20 h-24 rounded-xl bg-gradient-to-br from-purple-900/20 to-pink-900/20 border border-purple-800/30 flex items-center justify-center">
-                      <Eye className="w-6 h-6 text-purple-400" />
+                <div className="h-48 rounded-2xl bg-zinc-950 border border-zinc-800/50 overflow-hidden relative group-hover:border-purple-500/50 transition-colors">
+                  <Image
+                    src="/step-upload.png"
+                    alt="Upload Interface"
+                    fill
+                    className="object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <div className="flex items-center gap-2 text-xs font-bold text-white">
+                      <Camera className="w-4 h-4 text-purple-400" />
+                      <span>Smart Scan</span>
                     </div>
                   </div>
                 </div>
@@ -158,11 +170,18 @@ export default function Home() {
                 <p className="text-sm text-zinc-500 leading-relaxed">
                   Powered by Veo 3.1, your on-model image becomes a cinematic 8-second fashion clip — ready for social media.
                 </p>
-                <div className="h-48 rounded-2xl bg-zinc-950 border border-zinc-800/50 flex items-center justify-center relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-t from-rose-900/10 to-transparent animate-pulse" />
-                  <div className="text-center space-y-3 relative z-10">
-                    <div className="w-12 h-12 rounded-full border-2 border-zinc-800 border-t-rose-500 mx-auto animate-[spin_3s_linear_infinite]" />
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] font-bold">8s cinematic video</p>
+                <div className="h-48 rounded-2xl bg-zinc-950 border border-zinc-800/50 overflow-hidden relative group-hover:border-rose-500/50 transition-colors">
+                  <Image
+                    src="/step-video.png"
+                    alt="Generated Video"
+                    fill
+                    className="object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-rose-900/40 to-transparent mix-blend-overlay" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform">
+                      <div className="w-0 h-0 border-l-[12px] border-l-white border-y-[8px] border-y-transparent ml-1" />
+                    </div>
                   </div>
                 </div>
               </div>
