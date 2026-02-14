@@ -12,7 +12,7 @@ import json
 import base64
 import httpx
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 

@@ -46,7 +46,18 @@ app = FastAPI(lifespan=lifespan)
 
 from .provider_factory import ProviderFactory
 
-# ... imports ...
+
+@app.get("/health")
+def health_check():
+    """Verify worker is running and env vars are configured."""
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    sb_url = os.environ.get("SUPABASE_URL", "")
+    return {
+        "status": "ok",
+        "gemini_api_key_set": bool(gemini_key),
+        "gemini_key_prefix": gemini_key[:8] + "..." if gemini_key else "MISSING",
+        "supabase_url_set": bool(sb_url),
+    }
 
 class VideoJobRequest(BaseModel):
     job_id: str
@@ -381,14 +392,16 @@ async def handle_validate_selfie_realtime(request: RealtimeValidateRequest):
         result = gemini.validate_selfie_realtime(request.image_data)
         return result
     except Exception as e:
+        err_msg = str(e)[:80]
         print(f"Realtime validation error: {str(e)}")
         return {
             "passed": False,
+            "error": err_msg,
             "checks": [
-                {"name": "pose", "passed": False, "message": "Analysis error — try again"},
-                {"name": "lighting", "passed": False, "message": "Analysis error"},
-                {"name": "attire", "passed": False, "message": "Analysis error"},
-                {"name": "resolution", "passed": False, "message": "Analysis error"},
+                {"name": "pose", "passed": False, "message": f"Error: {err_msg[:40]}"},
+                {"name": "lighting", "passed": False, "message": "Analysis failed"},
+                {"name": "attire", "passed": False, "message": "See worker logs"},
+                {"name": "resolution", "passed": False, "message": "Retry soon"},
             ]
         }
 
