@@ -3,6 +3,21 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
     try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+        // Check env vars are present
+        if (!supabaseUrl || !serviceRoleKey) {
+            console.error('Missing env vars:', {
+                hasUrl: !!supabaseUrl,
+                hasKey: !!serviceRoleKey,
+            })
+            return NextResponse.json(
+                { error: 'Server configuration error — missing environment variables' },
+                { status: 500 }
+            )
+        }
+
         const { email, password } = await request.json()
 
         if (!email || !password) {
@@ -20,11 +35,9 @@ export async function POST(request: Request) {
         }
 
         // Use service-role client to bypass email confirmation
-        const supabaseAdmin = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            { auth: { autoRefreshToken: false, persistSession: false } }
-        )
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+            auth: { autoRefreshToken: false, persistSession: false },
+        })
 
         const { data, error } = await supabaseAdmin.auth.admin.createUser({
             email,
@@ -33,6 +46,7 @@ export async function POST(request: Request) {
         })
 
         if (error) {
+            console.error('Supabase createUser error:', error.message)
             // Handle duplicate email
             if (error.message.includes('already been registered') || error.message.includes('already exists')) {
                 return NextResponse.json(
@@ -44,9 +58,10 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({ success: true, userId: data.user.id })
-    } catch {
+    } catch (err) {
+        console.error('Signup route exception:', err)
         return NextResponse.json(
-            { error: 'Internal server error' },
+            { error: err instanceof Error ? err.message : 'Internal server error' },
             { status: 500 }
         )
     }
