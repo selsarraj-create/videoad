@@ -36,19 +36,28 @@ export default function LoginPage() {
                 router.refresh()
             }
         } else {
-            const { error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    emailRedirectTo: `${window.location.origin}/dashboard`
-                }
+            // Server-side signup with auto-confirm (no email rate limits)
+            const res = await fetch('/api/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
             })
-            if (error) {
-                setError(error.message)
+            const data = await res.json()
+            if (!res.ok) {
+                setError(data.error || 'Sign up failed')
+                setLoading(false)
             } else {
-                setSuccess("Check your email for a confirmation link!")
+                // Auto-login after successful signup
+                const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+                if (loginError) {
+                    setSuccess("Account created! Sign in with your credentials.")
+                    setMode('login')
+                    setLoading(false)
+                } else {
+                    router.push('/dashboard')
+                    router.refresh()
+                }
             }
-            setLoading(false)
         }
     }
 
@@ -87,8 +96,8 @@ export default function LoginPage() {
                         <button
                             onClick={() => { setMode('login'); setError(null); setSuccess(null) }}
                             className={`flex-1 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${mode === 'login'
-                                    ? 'bg-zinc-800 text-white shadow-sm'
-                                    : 'text-zinc-500 hover:text-zinc-300'
+                                ? 'bg-zinc-800 text-white shadow-sm'
+                                : 'text-zinc-500 hover:text-zinc-300'
                                 }`}
                         >
                             Sign In
@@ -96,8 +105,8 @@ export default function LoginPage() {
                         <button
                             onClick={() => { setMode('signup'); setError(null); setSuccess(null) }}
                             className={`flex-1 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${mode === 'signup'
-                                    ? 'bg-purple-900/40 text-purple-300 shadow-sm border border-purple-800/50'
-                                    : 'text-zinc-500 hover:text-zinc-300'
+                                ? 'bg-purple-900/40 text-purple-300 shadow-sm border border-purple-800/50'
+                                : 'text-zinc-500 hover:text-zinc-300'
                                 }`}
                         >
                             Create Account
@@ -148,8 +157,8 @@ export default function LoginPage() {
                         <Button
                             type="submit"
                             className={`w-full h-11 font-bold shadow-lg transition-all mt-2 ${mode === 'login'
-                                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-purple-900/20'
-                                    : 'bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-500 hover:via-pink-500 hover:to-purple-500 text-white shadow-purple-900/20'
+                                ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-purple-900/20'
+                                : 'bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-500 hover:via-pink-500 hover:to-purple-500 text-white shadow-purple-900/20'
                                 }`}
                             disabled={loading}
                         >
