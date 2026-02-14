@@ -162,13 +162,22 @@ export default function OnboardPage() {
                 body: JSON.stringify({ image_data: frame })
             })
 
+            let result
             if (res.ok) {
-                const result = await res.json()
-                if (result.checks) {
-                    setChecks(result.checks)
-                    setAllPassed(result.passed === true)
-                    setScanCount(c => c + 1)
+                result = await res.json()
+            } else {
+                // Try to parse error response which might contain check items
+                try {
+                    result = await res.json()
+                } catch {
+                    console.error('Failed to parse error response')
                 }
+            }
+
+            if (result?.checks) {
+                setChecks(result.checks)
+                setAllPassed(result.passed === true)
+                setScanCount(c => c + 1)
             }
         } catch (e) {
             console.error('Analysis error:', e)
@@ -362,11 +371,11 @@ export default function OnboardPage() {
                     {['guide', 'camera', 'checklist', 'done'].map((s, i) => (
                         <div key={s} className="flex items-center gap-1">
                             <div className={`w-2 h-2 rounded-full transition-all ${step === s || (step === 'validating' && s === 'checklist') || (step === 'generating' && s === 'done')
-                                    ? 'bg-purple-500 scale-125'
-                                    : ['guide', 'camera', 'checklist', 'done'].indexOf(step) > i ||
-                                        (step === 'validating' && i < 2) || (step === 'generating' && i < 3)
-                                        ? 'bg-purple-800'
-                                        : 'bg-zinc-800'
+                                ? 'bg-purple-500 scale-125'
+                                : ['guide', 'camera', 'checklist', 'done'].indexOf(step) > i ||
+                                    (step === 'validating' && i < 2) || (step === 'generating' && i < 3)
+                                    ? 'bg-purple-800'
+                                    : 'bg-zinc-800'
                                 }`} />
                             {i < 3 && <div className="w-4 h-px bg-zinc-800" />}
                         </div>
@@ -462,8 +471,8 @@ export default function OnboardPage() {
                                     {/* Pass count badge */}
                                     <div className="absolute top-3 right-3">
                                         <Badge className={`border-0 text-[10px] font-bold backdrop-blur ${allPassed
-                                                ? 'bg-green-600/80 text-white'
-                                                : 'bg-zinc-900/80 text-zinc-300'
+                                            ? 'bg-green-600/80 text-white'
+                                            : 'bg-zinc-900/80 text-zinc-300'
                                             }`}>
                                             {passedCount}/4 checks
                                         </Badge>
@@ -481,8 +490,8 @@ export default function OnboardPage() {
                                         onClick={handleCapture}
                                         disabled={!allPassed}
                                         className={`h-14 px-8 font-bold text-base rounded-full transition-all ${allPassed
-                                                ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white shadow-[0_0_30px_rgba(34,197,94,0.4)] scale-105'
-                                                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+                                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white shadow-[0_0_30px_rgba(34,197,94,0.4)] scale-105'
+                                            : 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
                                             }`}
                                     >
                                         {allPassed ? (
@@ -510,10 +519,10 @@ export default function OnboardPage() {
                                     return (
                                         <div key={check.name}
                                             className={`p-4 rounded-xl border transition-all duration-500 ${check.passed
-                                                    ? 'border-green-800/50 bg-green-900/10'
-                                                    : check.message === 'Waiting...'
-                                                        ? 'border-zinc-800 bg-zinc-900/30'
-                                                        : 'border-red-800/40 bg-red-900/10'
+                                                ? 'border-green-800/50 bg-green-900/10'
+                                                : check.message === 'Waiting...'
+                                                    ? 'border-zinc-800 bg-zinc-900/30'
+                                                    : 'border-red-800/40 bg-red-900/10'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
@@ -529,8 +538,8 @@ export default function OnboardPage() {
                                                         {meta.icon} {meta.label}
                                                     </p>
                                                     <p className={`text-xs mt-0.5 ${check.passed ? 'text-green-400' :
-                                                            check.message === 'Waiting...' ? 'text-zinc-600' :
-                                                                'text-red-400'
+                                                        check.message === 'Waiting...' ? 'text-zinc-600' :
+                                                            'text-red-400'
                                                         }`}>
                                                         {check.message}
                                                     </p>
@@ -542,8 +551,8 @@ export default function OnboardPage() {
 
                                 {/* Overall status */}
                                 <div className={`p-4 rounded-xl border-2 text-center transition-all duration-500 ${allPassed
-                                        ? 'border-green-600/60 bg-green-900/15'
-                                        : 'border-zinc-800 bg-zinc-900/20'
+                                    ? 'border-green-600/60 bg-green-900/15'
+                                    : 'border-zinc-800 bg-zinc-900/20'
                                     }`}>
                                     {allPassed ? (
                                         <div>
