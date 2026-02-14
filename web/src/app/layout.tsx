@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Ad Agency Studio",
-  description: "AI Video Production Platform",
+  title: "Fashion Studio — AI Virtual Try-On & Video",
+  description: "Upload your model, try on any clothing with AI, and generate stunning fashion videos in seconds.",
 };
 
 import { TooltipProvider } from "@/components/ui/tooltip"
