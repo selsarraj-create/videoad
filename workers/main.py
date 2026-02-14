@@ -272,6 +272,56 @@ async def handle_extend_webhook(request: ExtendRequest, background_tasks: Backgr
     return {"message": "Extend job received", "job_id": request.job_id}
 
 # =========================================================================
+# Try-On Only: Claid generates on-model image (no video)
+# =========================================================================
+
+class TryOnRequest(BaseModel):
+    job_id: str
+    person_image_url: str
+    garment_image_url: str
+
+def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: str):
+    """Claid-only: person + garment → on-model image. No video generation."""
+    print(f"Try-on job {job_id}: person={person_image_url[:50]}, garment={garment_image_url[:50]}")
+
+    try:
+        supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
+
+        claid_result = claid.generate_on_model(
+            garment_image_url=garment_image_url,
+            person_image_url=person_image_url
+        )
+        on_model_image_url = claid_result["image_url"]
+        print(f"Try-on done: {on_model_image_url[:80]}")
+
+        supabase.table("jobs").update({
+            "status": "completed",
+            "output_url": on_model_image_url,
+            "provider_metadata": {
+                "type": "try_on",
+                "person_image_url": person_image_url,
+                "garment_image_url": garment_image_url
+            }
+        }).eq("id", job_id).execute()
+
+    except Exception as e:
+        print(f"Try-on job {job_id} failed: {str(e)}")
+        supabase.table("jobs").update({
+            "status": "failed",
+            "error_message": str(e)
+        }).eq("id", job_id).execute()
+
+@app.post("/webhook/try-on")
+async def handle_try_on_webhook(request: TryOnRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(
+        process_try_on_job,
+        request.job_id,
+        request.person_image_url,
+        request.garment_image_url
+    )
+    return {"message": "Try-on job received", "job_id": request.job_id}
+
+# =========================================================================
 # Two-Stage Fashion Pipeline: Claid (on-model image) → Kie (video)
 # =========================================================================
 

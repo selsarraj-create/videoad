@@ -12,13 +12,14 @@ CLAID_API_KEY = os.environ.get("CLAID_API_KEY", "")
 CLAID_API_BASE = "https://api.claid.ai/v1"
 
 
-def generate_on_model(garment_image_url: str, options: dict = None) -> dict:
+def generate_on_model(garment_image_url: str, person_image_url: str = None, options: dict = None) -> dict:
     """
-    Takes a garment image (flat-lay or mannequin) and returns a photorealistic
-    on-model fashion image via Claid.ai's AI Fashion Models endpoint.
+    Takes a garment image and optionally a person reference image, and returns
+    a photorealistic on-model fashion image via Claid.ai.
 
     Args:
         garment_image_url: Public HTTPS URL of the garment image.
+        person_image_url: Optional public HTTPS URL of the person/model reference image.
         options: Optional dict with keys like 'model_gender', 'model_ethnicity', 'pose'.
 
     Returns:
@@ -46,13 +47,19 @@ def generate_on_model(garment_image_url: str, options: dict = None) -> dict:
         }
     }
 
-    # Optional: specify model characteristics
-    if opts.get("model_gender"):
+    # Add person reference image if provided
+    if person_image_url:
         payload["input"]["model"] = payload["input"].get("model", {})
-        payload["input"]["model"]["gender"] = opts["model_gender"]
-    if opts.get("model_ethnicity"):
-        payload["input"]["model"] = payload["input"].get("model", {})
-        payload["input"]["model"]["ethnicity"] = opts["model_ethnicity"]
+        payload["input"]["model"]["url"] = person_image_url
+
+    # Optional: specify model characteristics (only if no person reference)
+    if not person_image_url:
+        if opts.get("model_gender"):
+            payload["input"]["model"] = payload["input"].get("model", {})
+            payload["input"]["model"]["gender"] = opts["model_gender"]
+        if opts.get("model_ethnicity"):
+            payload["input"]["model"] = payload["input"].get("model", {})
+            payload["input"]["model"]["ethnicity"] = opts["model_ethnicity"]
 
     url = f"{CLAID_API_BASE}/image/ai-fashion-models"
 
