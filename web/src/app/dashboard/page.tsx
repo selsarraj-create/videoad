@@ -236,15 +236,15 @@ export default function StudioPage() {
                     <div className="flex bg-zinc-900/60 rounded-lg p-0.5 border border-zinc-800 ml-4">
                         <button onClick={() => setActiveTab('try-on')}
                             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'try-on'
-                                    ? 'bg-purple-900/40 text-purple-300 border border-purple-700/40'
-                                    : 'text-zinc-500 hover:text-zinc-300'
+                                ? 'bg-purple-900/40 text-purple-300 border border-purple-700/40'
+                                : 'text-zinc-500 hover:text-zinc-300'
                                 }`}>
                             <Camera className="w-3.5 h-3.5" /> Try On
                         </button>
                         <button onClick={() => setActiveTab('video')}
                             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'video'
-                                    ? 'bg-pink-900/40 text-pink-300 border border-pink-700/40'
-                                    : 'text-zinc-500 hover:text-zinc-300'
+                                ? 'bg-pink-900/40 text-pink-300 border border-pink-700/40'
+                                : 'text-zinc-500 hover:text-zinc-300'
                                 }`}>
                             <Video className="w-3.5 h-3.5" /> Create Video
                         </button>
@@ -270,10 +270,10 @@ export default function StudioPage() {
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2">
                                         <div className="w-6 h-6 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center text-[10px] font-black text-purple-400">1</div>
-                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Upload Person Reference</Label>
+                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Upload Your Selfie</Label>
                                     </div>
                                     <UploadZone type="person" preview={personPreview} fileRef={personFileRef}
-                                        icon={User} label="Person Photo" sublabel="Full body or half body photo" />
+                                        icon={User} label="Your Selfie" sublabel="Face or full body selfie" />
                                 </div>
 
                                 {/* Step 2: Upload Clothing */}
@@ -367,8 +367,8 @@ export default function StudioPage() {
                                                 <button key={item.id}
                                                     onClick={() => setSelectedMediaItem(item)}
                                                     className={`rounded-xl overflow-hidden border-2 transition-all ${selectedMediaItem?.id === item.id
-                                                            ? 'border-pink-500 ring-2 ring-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.2)]'
-                                                            : 'border-zinc-800 hover:border-zinc-600'
+                                                        ? 'border-pink-500 ring-2 ring-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.2)]'
+                                                        : 'border-zinc-800 hover:border-zinc-600'
                                                         }`}
                                                 >
                                                     <img src={item.image_url} alt="" className="aspect-[3/4] w-full object-cover" />
@@ -457,7 +457,7 @@ export default function StudioPage() {
                                 mediaLibrary.length === 0 ? (
                                     <div className="text-center py-20">
                                         <Camera className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
-                                        <p className="text-xs text-zinc-600">Upload a person + clothing to see try-on results</p>
+                                        <p className="text-xs text-zinc-600">Upload a selfie + clothing to see try-on results</p>
                                     </div>
                                 ) : mediaLibrary.map(item => (
                                     <div key={item.id} className="group rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-all">
@@ -503,8 +503,8 @@ export default function StudioPage() {
                                         <div className="p-3">
                                             <div className="flex items-center justify-between">
                                                 <Badge variant="outline" className={`text-[10px] h-5 border-0 ${job.status === 'completed' ? 'bg-green-900/20 text-green-400' :
-                                                        job.status === 'failed' ? 'bg-red-900/20 text-red-400' :
-                                                            'bg-pink-900/20 text-pink-400'}`}>
+                                                    job.status === 'failed' ? 'bg-red-900/20 text-red-400' :
+                                                        'bg-pink-900/20 text-pink-400'}`}>
                                                     {job.status}
                                                 </Badge>
                                                 <span className="text-[10px] text-zinc-600 font-mono">

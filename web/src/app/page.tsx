@@ -62,7 +62,7 @@ export default function Home() {
 
           {/* Subheading */}
           <p className="mx-auto max-w-2xl text-lg sm:text-xl text-zinc-500 leading-relaxed">
-            Upload your model, try on any clothing with AI, and generate
+            Upload a selfie, try on any clothing with AI, and generate
             <span className="text-zinc-300 font-medium"> cinematic fashion videos </span>
             ready for Reels, TikTok, and beyond.
           </p>
@@ -97,7 +97,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-xl font-bold text-white">Upload & Try On</h3>
                 <p className="text-sm text-zinc-500 leading-relaxed">
-                  Upload a person photo and a clothing item. Our AI places the garment on the model with photorealistic accuracy.
+                  Upload a selfie and a clothing item. Our AI places the garment on you with photorealistic accuracy.
                 </p>
                 <div className="h-48 rounded-2xl bg-zinc-950 border border-zinc-800/50 flex items-center justify-center overflow-hidden">
                   <div className="flex items-center gap-4">
@@ -134,8 +134,8 @@ export default function Home() {
                 <div className="h-48 rounded-2xl bg-zinc-950 border border-zinc-800/50 p-4 grid grid-cols-3 gap-2">
                   {['🌆', '✨', '🌊', '🔥', '🌙', '💎'].map((emoji, i) => (
                     <div key={i} className={`rounded-xl border flex items-center justify-center text-lg transition-all ${i === 1
-                        ? 'border-pink-600/50 bg-pink-900/20 shadow-[0_0_10px_rgba(236,72,153,0.2)] scale-105'
-                        : 'border-zinc-800/50 bg-zinc-900/30 hover:border-zinc-700'
+                      ? 'border-pink-600/50 bg-pink-900/20 shadow-[0_0_10px_rgba(236,72,153,0.2)] scale-105'
+                      : 'border-zinc-800/50 bg-zinc-900/30 hover:border-zinc-700'
                       }`}>
                       {emoji}
                     </div>
