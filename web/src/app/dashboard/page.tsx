@@ -111,20 +111,35 @@ export default function StudioPage() {
 
     // File upload handler
     const uploadFile = async (file: File, type: 'person' | 'garment') => {
+        // Show preview and set a temporary data URL immediately
         const reader = new FileReader()
         reader.onload = (e) => {
-            if (type === 'person') setPersonPreview(e.target?.result as string)
-            else setGarmentPreview(e.target?.result as string)
+            const dataUrl = e.target?.result as string
+            if (type === 'person') {
+                setPersonPreview(dataUrl)
+                setPersonImageUrl(dataUrl) // Use data URL as fallback
+            } else {
+                setGarmentPreview(dataUrl)
+                setGarmentImageUrl(dataUrl) // Use data URL as fallback
+            }
         }
         reader.readAsDataURL(file)
 
-        const folder = type === 'person' ? 'persons' : 'garments'
-        const fileName = `${folder}/${Date.now()}_${file.name}`
-        const { error } = await supabase.storage.from('raw_assets').upload(fileName, file)
-        if (error) { console.error('Upload failed:', error); return }
-        const { data: urlData } = supabase.storage.from('raw_assets').getPublicUrl(fileName)
-        if (type === 'person') setPersonImageUrl(urlData.publicUrl)
-        else setGarmentImageUrl(urlData.publicUrl)
+        // Try uploading to Supabase storage — upgrade to public URL on success
+        try {
+            const folder = type === 'person' ? 'persons' : 'garments'
+            const fileName = `${folder}/${Date.now()}_${file.name}`
+            const { error } = await supabase.storage.from('raw_assets').upload(fileName, file)
+            if (!error) {
+                const { data: urlData } = supabase.storage.from('raw_assets').getPublicUrl(fileName)
+                if (type === 'person') setPersonImageUrl(urlData.publicUrl)
+                else setGarmentImageUrl(urlData.publicUrl)
+            } else {
+                console.warn('Storage upload failed, using data URL:', error.message)
+            }
+        } catch (err) {
+            console.warn('Storage not available, using data URL fallback')
+        }
     }
 
     // Try-On handler
@@ -178,11 +193,15 @@ export default function StudioPage() {
     const canGenerateVideo = selectedMediaItem && selectedPreset && !videoLoading
     const videoJobs = jobs.filter(j => j.tier !== 'try_on')
 
-    // Upload zone component
-    const UploadZone = ({ type, preview, fileRef, icon: Icon, label, sublabel }: {
-        type: 'person' | 'garment', preview: string | null, fileRef: React.RefObject<HTMLInputElement | null>,
-        icon: typeof User, label: string, sublabel: string
-    }) => (
+    // Render an upload drop zone inline
+    const renderUploadZone = (
+        type: 'person' | 'garment',
+        preview: string | null,
+        fileRef: React.RefObject<HTMLInputElement | null>,
+        IconComp: typeof User,
+        label: string,
+        sublabel: string
+    ) => (
         <div
             onClick={() => fileRef.current?.click()}
             className={`relative rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer overflow-hidden
@@ -207,7 +226,7 @@ export default function StudioPage() {
             ) : (
                 <div className="py-10 flex flex-col items-center gap-2">
                     <div className="w-11 h-11 rounded-xl bg-zinc-800/50 border border-zinc-700/50 flex items-center justify-center">
-                        <Icon className="w-5 h-5 text-zinc-500" />
+                        <IconComp className="w-5 h-5 text-zinc-500" />
                     </div>
                     <p className="text-xs text-zinc-400 font-medium">{label}</p>
                     <p className="text-[10px] text-zinc-600">{sublabel}</p>
@@ -272,8 +291,7 @@ export default function StudioPage() {
                                         <div className="w-6 h-6 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center text-[10px] font-black text-purple-400">1</div>
                                         <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Upload Your Selfie</Label>
                                     </div>
-                                    <UploadZone type="person" preview={personPreview} fileRef={personFileRef}
-                                        icon={User} label="Your Selfie" sublabel="Face or full body selfie" />
+                                    {renderUploadZone('person', personPreview, personFileRef, User, 'Your Selfie', 'Face or full body selfie')}
                                 </div>
 
                                 {/* Step 2: Upload Clothing */}
@@ -283,8 +301,7 @@ export default function StudioPage() {
                                             ${personImageUrl ? 'bg-purple-900/40 border-purple-700/40 text-purple-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>2</div>
                                         <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Upload Clothing Item</Label>
                                     </div>
-                                    <UploadZone type="garment" preview={garmentPreview} fileRef={garmentFileRef}
-                                        icon={Shirt} label="Clothing Item" sublabel="Flat-lay or product photo" />
+                                    {renderUploadZone('garment', garmentPreview, garmentFileRef, Shirt, 'Clothing Item', 'Flat-lay or product photo')}
                                 </div>
 
                                 {/* Try On Button */}
