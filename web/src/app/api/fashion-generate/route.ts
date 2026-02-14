@@ -4,12 +4,6 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
     const supabase = await createClient()
 
-    // Check auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     try {
         const body = await request.json()
         const { garment_image_url, preset_id, aspect_ratio = '9:16' } = body
@@ -21,11 +15,10 @@ export async function POST(request: Request) {
             )
         }
 
-        // Get user's project
+        // Get first available workspace/project (auth disabled)
         const { data: workspace } = await supabase
             .from('workspaces')
             .select('id')
-            .eq('user_id', user.id)
             .limit(1)
             .single()
 

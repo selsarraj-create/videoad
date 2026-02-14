@@ -124,15 +124,6 @@ export default function StudioPage() {
                     >
                         <Library className="w-3.5 h-3.5" /> Content Library
                     </Link>
-                    <button
-                        onClick={async () => {
-                            await supabase.auth.signOut()
-                            window.location.href = "/"
-                        }}
-                        className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-                    >
-                        Logout
-                    </button>
                 </div>
             </header>
 

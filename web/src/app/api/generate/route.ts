@@ -4,12 +4,6 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
     const supabase = await createClient()
 
-    // Check auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     try {
         const body = await request.json()
         const { shots, prompt, model, tier, provider_metadata, workspace_id, is4k, anchorStyle } = body
