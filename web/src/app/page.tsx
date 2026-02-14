@@ -95,7 +95,7 @@ export default function Home() {
 
               <div className="mt-10 flex items-center gap-6">
                 <Link href="/dashboard"
-                  className="bg-primary text-primary-foreground px-10 py-5 text-sm uppercase tracking-widest font-bold shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  className="frosted-touch text-foreground px-10 py-5 text-sm uppercase tracking-widest font-bold hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)] hover:scale-105 hover:bg-white/40 transition-all duration-300 rounded-sm"
                 >
                   Start Creating Now
                 </Link>

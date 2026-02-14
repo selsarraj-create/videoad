@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { type Preset } from "@/lib/presets"
+import { motion, AnimatePresence } from "framer-motion"
 
 interface Job {
     id: string
@@ -33,11 +34,13 @@ import { Label } from "@/components/ui/label"
 import {
     Upload, Loader2, Sparkles, Image as ImageIcon,
     FastForward, Library, ExternalLink, Camera,
-    Video, User, Shirt, Check, Plus
+    Video, User, Shirt, Check, Plus, ArrowRight
 } from "lucide-react"
 import { PresetGrid } from "@/components/preset-grid"
 import { getOrCreateDefaultProject } from "@/app/actions"
 import Link from "next/link"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { BespokeInput } from "@/components/ui/bespoke-input"
 
 type Tab = 'try-on' | 'video'
 
@@ -60,6 +63,11 @@ export default function StudioPage() {
     const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null)
     const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('9:16')
     const [videoLoading, setVideoLoading] = useState(false)
+
+    // Extension Dialog State
+    const [extensionDialogOpen, setExtensionDialogOpen] = useState(false)
+    const [extensionJob, setExtensionJob] = useState<Job | null>(null)
+    const [extensionPrompt, setExtensionPrompt] = useState("")
 
     // Shared state
     const [jobs, setJobs] = useState<Job[]>([])
@@ -213,6 +221,24 @@ export default function StudioPage() {
         setTimeout(() => setVideoLoading(false), 2000)
     }
 
+    // Extension Handler
+    const handleExtendVideo = async () => {
+        if (!extensionJob || !extensionPrompt) return;
+
+        try {
+            await fetch('/api/extend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: extensionJob.id, prompt: extensionPrompt })
+            })
+            setExtensionDialogOpen(false)
+            setExtensionPrompt("")
+            setExtensionJob(null)
+        } catch (e) {
+            console.error(e)
+        }
+    }
+
     const canTryOn = masterIdentityUrl && garmentImageUrl && !tryOnLoading
     const canGenerateVideo = selectedMediaItem && selectedPreset && !videoLoading
     const videoJobs = jobs.filter(j => j.tier !== 'try_on')
@@ -228,31 +254,34 @@ export default function StudioPage() {
     ) => (
         <div
             onClick={() => fileRef.current?.click()}
-            className={`relative rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer overflow-hidden
-                ${preview ? 'border-zinc-700 bg-zinc-900/30' : 'border-zinc-800 bg-zinc-900/20 hover:border-zinc-600 hover:bg-zinc-900/40'}`}
+            className={`relative border-b border-nimbus transition-all duration-300 cursor-pointer overflow-hidden group py-10
+                ${preview ? 'bg-white' : 'bg-transparent hover:bg-white/40'}`}
         >
             {preview ? (
-                <div className="relative aspect-[3/4] max-h-[220px]">
-                    <img src={preview} alt={label} className="w-full h-full object-contain p-3" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                    <Badge className="absolute bottom-2 left-2 bg-green-900/40 text-green-400 border-green-700/40 text-[9px]">
+                <div className="relative aspect-[3/4] max-h-[300px] mx-auto">
+                    <img src={preview} alt={label} className="w-full h-full object-contain p-4 mix-blend-multiply" />
+                    <div className="absolute top-2 right-2">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setGarmentPreview(null); setGarmentImageUrl('')
+                            }}
+                            className="bg-stretch-limo text-white w-6 h-6 flex items-center justify-center rounded-none text-[10px]"
+                        >×</button>
+                    </div>
+                    <Badge className="absolute bottom-4 left-4 bg-stretch-limo text-white border-0 rounded-none text-[9px] uppercase tracking-widest">
                         ✓ {label}
                     </Badge>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            setGarmentPreview(null); setGarmentImageUrl('')
-                        }}
-                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-zinc-800/80 text-zinc-400 hover:text-white flex items-center justify-center text-[10px]"
-                    >×</button>
                 </div>
             ) : (
-                <div className="py-10 flex flex-col items-center gap-2">
-                    <div className="w-11 h-11 rounded-xl bg-zinc-800/50 border border-zinc-700/50 flex items-center justify-center">
-                        <IconComp className="w-5 h-5 text-zinc-500" />
+                <div className="flex flex-col items-center gap-4 text-center">
+                    <div className="w-12 h-12 flex items-center justify-center border border-nimbus rounded-none group-hover:border-stretch-limo transition-colors">
+                        <IconComp className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                     </div>
-                    <p className="text-xs text-zinc-400 font-medium">{label}</p>
-                    <p className="text-[10px] text-zinc-600">{sublabel}</p>
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-[0.2em] font-bold text-muted-foreground group-hover:text-foreground transition-colors">{label}</p>
+                        <p className="text-[10px] text-muted-foreground italic font-serif">{sublabel}</p>
+                    </div>
                 </div>
             )}
             <input ref={fileRef} type="file" accept="image/*" className="hidden"
@@ -261,359 +290,355 @@ export default function StudioPage() {
     )
 
     return (
-        <div className="h-screen bg-[#0a0a0a] text-zinc-400 flex flex-col font-sans overflow-hidden">
+        <div className="min-h-screen bg-paper text-foreground flex flex-col font-sans overflow-hidden selection:bg-primary/20">
             {/* Header */}
-            <header className="h-14 border-b border-white/5 bg-[#0a0a0a]/90 backdrop-blur-xl flex items-center justify-between px-6 z-50">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center">
-                            <Sparkles className="w-4 h-4 text-white" />
+            <header className="h-20 border-b border-nimbus/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-8 z-50 sticky top-0">
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-primary flex items-center justify-center">
+                            <Sparkles className="w-4 h-4 text-primary-foreground" />
                         </div>
-                        <h1 className="font-bold text-lg tracking-tighter text-white/90">
-                            FASHION<span className="font-light text-zinc-600">STUDIO</span>
+                        <h1 className="font-serif text-xl tracking-tight text-foreground mix-blend-difference">
+                            FASHION<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">STUDIO</span>
                         </h1>
                     </div>
 
-                    {/* Tab Switcher */}
-                    <div className="flex bg-zinc-900/60 rounded-lg p-0.5 border border-zinc-800 ml-4">
+                    {/* Tab Switcher - Minimal Text Only */}
+                    <div className="flex items-center gap-8 ml-12">
                         <button onClick={() => setActiveTab('try-on')}
-                            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'try-on'
-                                ? 'bg-purple-900/40 text-purple-300 border border-purple-700/40'
-                                : 'text-zinc-500 hover:text-zinc-300'
-                                }`}>
-                            <Camera className="w-3.5 h-3.5" /> Try On
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2 
+                                ${activeTab === 'try-on' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Try On
+                            {activeTab === 'try-on' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
                         <button onClick={() => setActiveTab('video')}
-                            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'video'
-                                ? 'bg-pink-900/40 text-pink-300 border border-pink-700/40'
-                                : 'text-zinc-500 hover:text-zinc-300'
-                                }`}>
-                            <Video className="w-3.5 h-3.5" /> Create Video
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
+                                ${activeTab === 'video' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Create Video
+                            {activeTab === 'video' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
                     </div>
                 </div>
 
-                <Link href="/dashboard/content"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-all">
-                    <Library className="w-3.5 h-3.5" /> Content Vault
-                </Link>
-                <Link href="/dashboard/outfit"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-purple-400 hover:text-purple-300 hover:bg-purple-900/10 transition-all">
-                    <Sparkles className="w-3.5 h-3.5" /> Outfit Builder
-                </Link>
+                <div className="flex items-center gap-6">
+                    <Link href="/dashboard/content"
+                        className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                        <Library className="w-3.5 h-3.5" /> Content Vault
+                    </Link>
+                </div>
             </header>
 
             <main className="flex-1 grid grid-cols-12 overflow-hidden">
 
                 {/* ===== LEFT PANEL ===== */}
-                <section className="col-span-7 flex flex-col border-r border-zinc-800/50 overflow-y-auto">
-                    <div className="flex-1 p-8 max-w-2xl mx-auto w-full space-y-8">
+                <section className="col-span-12 lg:col-span-5 flex flex-col border-r border-nimbus/50 overflow-y-auto bg-white/40">
+                    <div className="flex-1 p-8 lg:p-12 max-w-xl mx-auto w-full space-y-12">
 
                         {activeTab === 'try-on' ? (
                             /* ---- TRY ON TAB ---- */
-                            <>
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
                                 {/* Identity Banner */}
                                 {!identityLoading && !masterIdentityUrl && (
-                                    <div className="rounded-2xl border border-purple-800/40 bg-purple-900/10 p-5 flex items-center justify-between">
-                                        <div className="space-y-1">
-                                            <p className="text-sm font-bold text-white">Set Up Your Identity First</p>
-                                            <p className="text-xs text-zinc-500">We need a selfie to create your AI identity for virtual try-on.</p>
+                                    <div className="p-6 border border-nimbus bg-white/50 flex flex-col gap-4">
+                                        <div className="space-y-2">
+                                            <p className="font-serif text-lg text-primary">Identity Required</p>
+                                            <p className="text-xs text-muted-foreground leading-relaxed">To begin your collection, we must first capture your digital essence.</p>
                                         </div>
                                         <Link href="/dashboard/onboard">
-                                            <Button className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold">
-                                                <User className="w-3.5 h-3.5 mr-1.5" /> Set Up Identity
+                                            <Button className="w-full bg-foreground text-background rounded-none hover:bg-primary transition-colors h-12 text-xs uppercase tracking-widest">
+                                                Initialize Identity
                                             </Button>
                                         </Link>
                                     </div>
                                 )}
 
                                 {/* Step 1: Master Identity */}
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center text-[10px] font-black text-purple-400">1</div>
-                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Your Identity</Label>
+                                <div className="space-y-6">
+                                    <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">01 / Identity</Label>
+                                        {masterIdentityUrl && <span className="text-[10px] text-primary italic font-serif">Active</span>}
                                     </div>
+
                                     {masterIdentityUrl ? (
-                                        <div className="rounded-2xl border border-green-800/30 bg-zinc-900/30 overflow-hidden">
-                                            <div className="relative aspect-[3/4] max-h-[220px]">
-                                                <img src={masterIdentityUrl} alt="Master Identity" className="w-full h-full object-contain p-3" />
-                                                <Badge className="absolute bottom-2 left-2 bg-green-900/40 text-green-400 border-green-700/40 text-[9px]">✓ Master Identity</Badge>
-                                            </div>
+                                        <div className="relative aspect-[3/4] w-2/3 mx-auto shadow-xl bg-white p-2 rotate-1 transition-transform hover:rotate-0 duration-500">
+                                            <img src={masterIdentityUrl} alt="Master Identity" className="w-full h-full object-cover grayscale-[20%]" />
                                         </div>
                                     ) : (
-                                        <div className="rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/20 py-10 text-center">
-                                            <User className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
-                                            <p className="text-xs text-zinc-500">Complete identity setup to start trying on</p>
+                                        <div className="py-12 text-center border border-dashed border-nimbus">
+                                            <p className="text-xs text-muted-foreground italic">No identity configured</p>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Step 2: Upload Clothing */}
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-black transition-all
-                                            ${masterIdentityUrl ? 'bg-purple-900/40 border-purple-700/40 text-purple-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>2</div>
-                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Upload Clothing Item</Label>
+                                <div className="space-y-6">
+                                    <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">02 / Garment</Label>
+                                        <span className="text-[10px] text-muted-foreground italic font-serif">Upload flat-lay</span>
                                     </div>
-                                    {renderUploadZone('garment', garmentPreview, garmentFileRef, Shirt, 'Clothing Item', 'Flat-lay or product photo')}
+                                    {renderUploadZone('garment', garmentPreview, garmentFileRef, Shirt, 'Upload Garment', 'High resolution flat-lay')}
                                 </div>
 
                                 {/* Try On Button */}
-                                <div className="space-y-3">
+                                <div className="space-y-6 pt-8">
                                     <Button
                                         onClick={handleTryOn}
                                         disabled={!canTryOn}
-                                        className={`w-full h-14 text-sm font-bold tracking-wide transition-all rounded-xl ${canTryOn
-                                            ? 'bg-gradient-to-r from-purple-600 via-violet-600 to-purple-600 hover:from-purple-500 hover:via-violet-500 hover:to-purple-500 text-white shadow-[0_0_30px_rgba(168,85,247,0.3)]'
-                                            : 'bg-zinc-900 text-zinc-600 cursor-not-allowed border border-zinc-800'
+                                        className={`w-full h-14 text-xs font-bold uppercase tracking-[0.2em] transition-all rounded-none ${canTryOn
+                                            ? 'bg-foreground text-background hover:bg-primary shadow-xl hover:shadow-2xl'
+                                            : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
                                             }`}
                                     >
                                         {tryOnLoading ? (
-                                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Try-On...</>
+                                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing Geometry...</>
                                         ) : (
-                                            <><Camera className="w-4 h-4 mr-2" /> Try On Clothing</>
+                                            <>Generate Try-On <ArrowRight className="w-4 h-4 ml-2" /></>
                                         )}
                                     </Button>
 
                                     {tryOnError && (
-                                        <div className="flex items-start gap-2 p-3 rounded-xl border border-red-800/40 bg-red-900/10">
-                                            <span className="text-red-400 text-xs flex-shrink-0 mt-0.5">⚠</span>
-                                            <p className="text-xs text-red-400">{tryOnError}</p>
+                                        <div className="p-4 border-l-2 border-primary bg-primary/5">
+                                            <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Error</p>
+                                            <p className="text-xs text-muted-foreground">{tryOnError}</p>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Try-On Result */}
-                                {tryOnResult && (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <Check className="w-4 h-4 text-green-400" />
-                                            <Label className="text-xs font-bold text-green-400 uppercase tracking-widest">Try-On Result</Label>
-                                            <Badge className="bg-green-900/20 text-green-400 border-green-700/30 text-[9px]">Saved to Media Library</Badge>
-                                        </div>
-                                        <div className="rounded-2xl overflow-hidden border border-green-800/30 bg-zinc-900/30">
-                                            <img src={tryOnResult} alt="Try-on result" className="w-full max-h-[400px] object-contain bg-zinc-950" />
-                                        </div>
-                                        <Button
-                                            onClick={() => {
-                                                setActiveTab('video')
-                                                const item = mediaLibrary.find(m => m.image_url === tryOnResult)
-                                                if (item) setSelectedMediaItem(item)
-                                            }}
-                                            className="w-full h-10 bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold rounded-xl"
-                                        >
-                                            <Video className="w-3.5 h-3.5 mr-1.5" /> Use This for Video →
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {/* Recent Try-On Results */}
-                                {mediaLibrary.length > 0 && (
-                                    <div className="space-y-3 pb-8">
-                                        <Label className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Your Media Library ({mediaLibrary.length})</Label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {mediaLibrary.slice(0, 6).map(item => (
-                                                <div key={item.id} className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900/30 group cursor-pointer hover:border-zinc-600 transition-all"
-                                                    onClick={() => { setActiveTab('video'); setSelectedMediaItem(item) }}>
-                                                    <img src={item.image_url} alt="" className="aspect-[3/4] w-full object-cover" />
-                                                    <div className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <p className="text-[9px] text-purple-400 font-bold text-center">Use for video →</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </>
+                                <AnimatePresence>
+                                    {tryOnResult && (
+                                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 pt-12 border-t border-nimbus">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-[10px] font-bold text-primary uppercase tracking-[0.2em]">Result</Label>
+                                                <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Saved to Archive</Badge>
+                                            </div>
+                                            <div className="relative aspect-[3/4] bg-white p-4 shadow-2xl">
+                                                <img src={tryOnResult} alt="Try-on result" className="w-full h-full object-contain" />
+                                            </div>
+                                            <Button
+                                                onClick={() => {
+                                                    setActiveTab('video')
+                                                    const item = mediaLibrary.find(m => m.image_url === tryOnResult)
+                                                    if (item) setSelectedMediaItem(item)
+                                                }}
+                                                className="w-full h-12 bg-white text-foreground border border-nimbus hover:bg-foreground hover:text-white rounded-none text-xs uppercase tracking-widest transition-colors"
+                                            >
+                                                Motion Process →
+                                            </Button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </motion.div>
                         ) : (
                             /* ---- VIDEO TAB ---- */
-                            <>
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
                                 {/* Step 1: Pick from Media Library */}
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-pink-900/40 border border-pink-700/40 flex items-center justify-center text-[10px] font-black text-pink-400">1</div>
-                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Select from Media Library</Label>
+                                <div className="space-y-6">
+                                    <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">01 / Select Asset</Label>
                                     </div>
                                     {mediaLibrary.length === 0 ? (
-                                        <div className="rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/20 py-12 text-center">
-                                            <ImageIcon className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
-                                            <p className="text-xs text-zinc-500">No images yet! Go to <button onClick={() => setActiveTab('try-on')} className="text-purple-400 hover:text-purple-300 font-bold">Try On</button> to create one.</p>
+                                        <div className="py-20 text-center border border-dashed border-nimbus">
+                                            <ImageIcon className="w-6 h-6 text-nimbus mx-auto mb-4" />
+                                            <p className="text-xs text-muted-foreground font-serif italic">Archive empty.</p>
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-4 gap-2">
+                                        <div className="grid grid-cols-3 gap-4">
                                             {mediaLibrary.map(item => (
                                                 <button key={item.id}
                                                     onClick={() => setSelectedMediaItem(item)}
-                                                    className={`rounded-xl overflow-hidden border-2 transition-all ${selectedMediaItem?.id === item.id
-                                                        ? 'border-pink-500 ring-2 ring-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.2)]'
-                                                        : 'border-zinc-800 hover:border-zinc-600'
+                                                    className={`relative aspect-[3/4] transition-all bg-white p-2 shadow-sm hover:shadow-md ${selectedMediaItem?.id === item.id
+                                                        ? 'ring-1 ring-primary shadow-lg scale-[1.02]'
+                                                        : 'opacity-70 hover:opacity-100'
                                                         }`}
                                                 >
-                                                    <img src={item.image_url} alt="" className="aspect-[3/4] w-full object-cover" />
+                                                    <img src={item.image_url} alt="" className="w-full h-full object-cover" />
                                                 </button>
                                             ))}
-                                            <button onClick={() => setActiveTab('try-on')}
-                                                className="rounded-xl border-2 border-dashed border-zinc-800 hover:border-zinc-600 aspect-[3/4] flex flex-col items-center justify-center gap-1 transition-all">
-                                                <Plus className="w-5 h-5 text-zinc-600" />
-                                                <span className="text-[9px] text-zinc-600 font-bold">New Try-On</span>
-                                            </button>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Step 2: Select Preset */}
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-black transition-all
-                                            ${selectedMediaItem ? 'bg-pink-900/40 border-pink-700/40 text-pink-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>2</div>
-                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Choose Your Vibe</Label>
+                                <div className="space-y-6">
+                                    <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">02 / Motion Grade</Label>
                                     </div>
                                     <PresetGrid selectedPresetId={selectedPreset?.id || null} onSelect={setSelectedPreset} />
                                 </div>
 
                                 {/* Step 3: Format & Generate */}
-                                <div className="space-y-4 pb-12">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-black transition-all
-                                            ${selectedPreset ? 'bg-pink-900/40 border-pink-700/40 text-pink-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>3</div>
-                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Format & Generate</Label>
+                                <div className="space-y-8 pb-12">
+                                    <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">03 / Output</Label>
                                     </div>
 
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-[10px] uppercase font-bold text-zinc-600">Aspect Ratio</span>
-                                        <div className="flex bg-zinc-900 rounded-lg p-0.5 gap-0.5 border border-zinc-800">
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest w-24">Aspect Ratio</span>
+                                        <div className="flex gap-2">
                                             {(['9:16', '16:9', '1:1'] as const).map(ratio => (
                                                 <button key={ratio} onClick={() => setAspectRatio(ratio)}
-                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded-md transition-all ${aspectRatio === ratio ? 'bg-pink-900/40 text-pink-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
+                                                    className={`text-[10px] border px-4 py-2 uppercase tracking-widest transition-all ${aspectRatio === ratio ? 'bg-primary text-primary-foreground border-primary' : 'bg-transparent text-muted-foreground border-nimbus hover:border-foreground'
                                                         }`}>
-                                                    {ratio === '9:16' ? '9:16 Reels' : ratio === '16:9' ? '16:9 Wide' : '1:1 Square'}
+                                                    {ratio}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
 
                                     <Button onClick={handleGenerateVideo} disabled={!canGenerateVideo}
-                                        className={`w-full h-14 text-sm font-bold tracking-wide transition-all rounded-xl ${canGenerateVideo
-                                            ? 'bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white shadow-[0_0_30px_rgba(236,72,153,0.3)]'
-                                            : 'bg-zinc-900 text-zinc-600 cursor-not-allowed border border-zinc-800'
+                                        className={`w-full h-14 text-xs font-bold uppercase tracking-[0.2em] transition-all rounded-none ${canGenerateVideo
+                                            ? 'bg-foreground text-background hover:bg-primary shadow-xl hover:shadow-2xl'
+                                            : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
                                             }`}>
                                         {videoLoading ? (
-                                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating Fashion Video...</>
+                                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Rendering Cinema...</>
                                         ) : (
-                                            <><Sparkles className="w-4 h-4 mr-2" /> Generate Fashion Video</>
+                                            <>Generate Motion <ArrowRight className="w-4 h-4 ml-2" /></>
                                         )}
                                     </Button>
-
-                                    {selectedPreset && (
-                                        <p className="text-[10px] text-zinc-600 text-center">
-                                            {selectedPreset.emoji} {selectedPreset.name} • Veo 3.1 Fast • 8s clip
-                                        </p>
-                                    )}
                                 </div>
-                            </>
+                            </motion.div>
                         )}
                     </div>
                 </section>
 
-                {/* ===== RIGHT: Archive ===== */}
-                <aside className="col-span-5 bg-zinc-900/20 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b border-zinc-800/50 flex justify-between items-center">
-                        <h2 className="text-zinc-100/90 font-bold tracking-tight text-sm uppercase flex items-center gap-2">
-                            <span className={`w-1.5 h-4 rounded-sm ${activeTab === 'try-on' ? 'bg-purple-600' : 'bg-pink-600'}`} />
-                            {activeTab === 'try-on' ? 'Try-On Results' : 'Video Generations'}
+                {/* ===== RIGHT: Archive (Gallery Masonry) ===== */}
+                <aside className="col-span-12 lg:col-span-7 bg-[#FBFBFB] flex flex-col overflow-hidden relative">
+                    {/* Background Detail */}
+                    <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                        <h2 className="text-[120px] font-serif text-primary leading-none">
+                            {activeTab === 'try-on' ? 'ARCHIVE' : 'CINEMA'}
                         </h2>
-                        <Link href="/dashboard/content"
-                            className="text-[10px] text-purple-400 hover:text-purple-300 font-bold uppercase tracking-wider flex items-center gap-1">
-                            View All <ExternalLink className="w-3 h-3" />
-                        </Link>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4">
-                        <div className="grid grid-cols-1 gap-4">
+                    <div className="flex-1 overflow-y-auto p-12 lg:p-16 relative z-10">
+
+                        {/* Asymmetrical Masonry Grid */}
+                        <div className="columns-1 md:columns-2 gap-8 space-y-8 [&>div]:break-inside-avoid">
+
+                            {/* Empty State */}
+                            {((activeTab === 'try-on' && mediaLibrary.length === 0) || (activeTab === 'video' && videoJobs.length === 0)) && (
+                                <div className="h-full flex flex-col items-center justify-center py-32 text-center opacity-40">
+                                    <div className="text-6xl mb-4 font-serif italic text-nimbus">Empty</div>
+                                    <p className="text-xs uppercase tracking-widest text-muted-foreground">Begin creation to populate archive</p>
+                                </div>
+                            )}
+
                             {activeTab === 'try-on' ? (
-                                /* Try-on results */
-                                mediaLibrary.length === 0 ? (
-                                    <div className="text-center py-20">
-                                        <Camera className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
-                                        <p className="text-xs text-zinc-600">Upload a selfie + clothing to see try-on results</p>
-                                    </div>
-                                ) : mediaLibrary.map(item => (
-                                    <div key={item.id} className="group rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-all">
-                                        <div className="aspect-[3/4] max-h-[300px] bg-zinc-950 relative">
-                                            <img src={item.image_url} alt="" className="w-full h-full object-contain" />
+                                /* Try-on Masonry */
+                                mediaLibrary.map((item, i) => (
+                                    <motion.div
+                                        key={item.id}
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: i * 0.1 }}
+                                        className={`relative group bg-white p-3 shadow-sm hover:shadow-xl transition-all duration-500
+                                            ${i % 3 === 0 ? 'mt-12' : ''} /* Asymmetrical Stagger */
+                                            ${i % 2 === 0 ? 'rotate-1' : '-rotate-1 hover:rotate-0'}
+                                        `}
+                                    >
+                                        <div className="relative overflow-hidden aspect-[3/4] bg-[#f9f9f9]">
+                                            <img src={item.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" />
+
+                                            {/* Hover HUD */}
+                                            <div className="absolute inset-0 bg-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                                                <Button variant="outline" size="sm"
+                                                    onClick={() => { setActiveTab('video'); setSelectedMediaItem(item) }}
+                                                    className="h-10 text-[10px] uppercase tracking-widest border-primary text-primary hover:bg-primary hover:text-white rounded-none">
+                                                    Create Video
+                                                </Button>
+                                            </div>
                                         </div>
-                                        <div className="p-3 flex items-center justify-between">
-                                            <span className="text-[10px] text-zinc-600 font-mono">
-                                                {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                            <Button variant="ghost" size="sm"
-                                                onClick={() => { setActiveTab('video'); setSelectedMediaItem(item) }}
-                                                className="h-6 text-[10px] text-pink-400 hover:text-pink-300 hover:bg-pink-900/20">
-                                                <Video className="w-3 h-3 mr-1" /> Make Video
-                                            </Button>
+                                        <div className="pt-3 flex justify-between items-center opacity-60">
+                                            <span className="text-[9px] font-mono uppercase tracking-widest">NO. {item.id.slice(0, 4)}</span>
+                                            <span className="text-[9px] font-serif italic">{new Date(item.created_at).toLocaleDateString()}</span>
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 ))
                             ) : (
-                                /* Video results */
-                                videoJobs.length === 0 ? (
-                                    <div className="text-center py-20">
-                                        <Video className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
-                                        <p className="text-xs text-zinc-600">Your generated videos will appear here</p>
-                                    </div>
-                                ) : videoJobs.map(job => (
-                                    <div key={job.id} className="group rounded-xl overflow-hidden bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-all">
-                                        <div className="aspect-video bg-zinc-950 relative">
+                                /* Video Masonry */
+                                videoJobs.map((job, i) => (
+                                    <motion.div
+                                        key={job.id}
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: i * 0.1 }}
+                                        className={`relative group bg-white shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden
+                                            ${i % 3 === 0 ? 'mb-12' : 'mb-0'} /* Asymmetrical Spacing */
+                                        `}
+                                    >
+                                        <div className="relative aspect-video bg-[#000]">
                                             {job.output_url ? (
                                                 <video src={job.output_url} controls className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="absolute inset-0 flex items-center justify-center">
-                                                    <div className="text-center space-y-2">
-                                                        <div className="w-8 h-8 rounded-full border-2 border-zinc-800 border-t-pink-500 animate-spin mx-auto" />
-                                                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
-                                                            {job.status === 'failed' ? 'Failed' : 'Generating...'}
+                                                    <div className="text-center space-y-4">
+                                                        <div className="w-8 h-8 rounded-none border-2 border-white/20 border-t-white animate-spin mx-auto" />
+                                                        <p className="text-[10px] text-white/60 uppercase tracking-widest font-bold animate-pulse">
+                                                            {job.status === 'failed' ? 'Rendering Failed' : 'Rendering Cinema...'}
                                                         </p>
                                                     </div>
-                                                    {job.status !== 'failed' && <div className="absolute inset-0 bg-gradient-to-t from-pink-900/10 to-transparent animate-pulse" />}
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="p-3">
-                                            <div className="flex items-center justify-between">
-                                                <Badge variant="outline" className={`text-[10px] h-5 border-0 ${job.status === 'completed' ? 'bg-green-900/20 text-green-400' :
-                                                    job.status === 'failed' ? 'bg-red-900/20 text-red-400' :
-                                                        'bg-pink-900/20 text-pink-400'}`}>
+                                        <div className="p-4 bg-white border-t border-nimbus/20">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <Badge variant="outline" className={`text-[9px] h-5 border-0 rounded-none uppercase tracking-widest ${job.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                        job.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                                            'bg-yellow-100 text-yellow-700'}`}>
                                                     {job.status}
                                                 </Badge>
-                                                <span className="text-[10px] text-zinc-600 font-mono">
-                                                    {new Date(job.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </span>
+                                                <span className="text-[9px] text-muted-foreground font-mono">ID: {job.id.slice(0, 6)}</span>
                                             </div>
-                                            {job.error_message && <p className="text-[10px] text-red-400 mt-1 line-clamp-1">{job.error_message}</p>}
 
-                                            {job.status === 'completed' && job.output_url && job.model === 'veo-3.1-fast' && (
-                                                <Button variant="ghost" size="sm"
-                                                    className="w-full h-7 mt-2 text-[10px] text-pink-400 hover:text-pink-300 hover:bg-pink-900/20"
-                                                    onClick={async () => {
-                                                        const prompt = window.prompt("What happens next?")
-                                                        if (!prompt) return
-                                                        await fetch('/api/extend', {
-                                                            method: 'POST',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({ job_id: job.id, prompt })
-                                                        })
-                                                    }}>
-                                                    <FastForward className="w-3 h-3 mr-1" /> Extend +7s
-                                                </Button>
+                                            {job.status === 'completed' && job.output_url && (
+                                                <div className="mt-4 pt-4 border-t border-nimbus/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button variant="ghost" size="sm"
+                                                        className="w-full h-8 text-[10px] uppercase tracking-widest hover:bg-nimbus/20 rounded-none border border-nimbus"
+                                                        onClick={() => {
+                                                            setExtensionJob(job)
+                                                            setExtensionDialogOpen(true)
+                                                        }}>
+                                                        Extend Scene +7s
+                                                    </Button>
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 ))
                             )}
                         </div>
                     </div>
                 </aside>
             </main>
+
+            {/* Extension Dialog */}
+            <Dialog open={extensionDialogOpen} onOpenChange={setExtensionDialogOpen}>
+                <DialogContent className="sm:max-w-md rounded-none border-primary bg-background p-8">
+                    <DialogHeader>
+                        <DialogTitle className="font-serif text-2xl text-primary">Extend Sequence</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6 py-4">
+                        <div className="space-y-2">
+                            <Label className="uppercase tracking-widest text-[10px] font-bold text-muted-foreground">Current Scene</Label>
+                            <div className="aspect-video bg-black overflow-hidden relative">
+                                {extensionJob && <video src={extensionJob.output_url!} className="w-full h-full object-cover opacity-50" />}
+                            </div>
+                        </div>
+                        <BespokeInput
+                            value={extensionPrompt}
+                            onChange={(e) => setExtensionPrompt(e.target.value)}
+                            label="Narrative Continuation (Prompt)"
+                            placeholder="Describe what happens next..."
+                        />
+                    </div>
+                    <DialogFooter className="sm:justify-between items-center gap-4">
+                        <Button variant="ghost" onClick={() => setExtensionDialogOpen(false)} className="text-xs uppercase tracking-widest rounded-none">Cancel</Button>
+                        <Button onClick={handleExtendVideo} className="bg-primary text-primary-foreground hover:bg-primary/90 text-xs uppercase tracking-widest rounded-none px-8 h-10">Run Extension</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

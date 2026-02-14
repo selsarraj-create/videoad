@@ -56,50 +56,50 @@
 }
 
 :root {
-  /* Cloud Dancer Theme */
-  --background: 0 0% 95%;
-  /* #F2F2F2 */
-  --foreground: 0 0% 10%;
-  /* #1A1A1A - Soft Black */
-
-  --card: 0 0% 98%;
-  --card-foreground: 0 0% 10%;
-
-  --popover: 0 0% 98%;
-  --popover-foreground: 0 0% 10%;
-
-  /* Walnut Retro - Low saturation brown/earth */
-  --primary: 14 26% 29%;
+  /* Cloud Dancer Palette */
+  --cloud-dancer: 38 15% 93%;
+  /* #F0EEE9 */
+  --stretch-limo: 0 0% 17%;
+  /* #2B2B2B */
+  --walnut-retro: 14 26% 29%;
   /* #5D4037 */
-  --primary-foreground: 36 29% 95%;
-  /* Off-white text on primary */
-
-  /* Sunwashed Grey */
-  --secondary: 0 0% 66%;
+  --sunwashed-grey: 0 0% 66%;
   /* #A8A8A8 */
-  --secondary-foreground: 0 0% 10%;
+  --nimbus: 45 14% 79%;
+  /* #D1CDC2 */
 
-  --muted: 0 0% 90%;
+  --background: var(--cloud-dancer);
+  --foreground: var(--stretch-limo);
+
+  --card: 38 15% 96%;
+  --card-foreground: var(--stretch-limo);
+
+  --popover: 38 15% 96%;
+  --popover-foreground: var(--stretch-limo);
+
+  --primary: var(--walnut-retro);
+  --primary-foreground: 38 15% 93%;
+
+  --secondary: var(--sunwashed-grey);
+  --secondary-foreground: var(--stretch-limo);
+
+  --muted: 45 14% 85%;
   --muted-foreground: 0 0% 45%;
 
   --accent: 33 24% 94%;
-  /* Warm paper tone */
-  --accent-foreground: 14 26% 29%;
+  --accent-foreground: var(--walnut-retro);
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 0 0% 85%;
-  --input: 0 0% 85%;
-  --ring: 14 26% 29%;
+  --border: var(--nimbus);
+  --input: var(--nimbus);
+  --ring: var(--walnut-retro);
 
   --radius: 0rem;
-  /* Sharp edges for high fashion */
 }
 
-/* Dark mode - Optional / Inverted version if needed, 
-   but user requested Cloud Dancer which implies light/airy. 
-   Keeping dark mode variables just in case, tuned to 'Midnight Editorial' */
+/* Dark mode - Kept for compatibility but styled to Midnight Editorial */
 .dark {
   --background: 0 0% 7%;
   --foreground: 0 0% 95%;
@@ -131,11 +131,22 @@
 }
 
 @utility bg-noise {
+  position: relative;
+}
+
+@utility bg-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+  opacity: 0.4;
+  pointer-events: none;
+  mix-blend-mode: overlay;
 }
 
 @utility bg-paper {
-  background-color: #F2F2F2;
+  background-color: #F0EEE9;
   background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
 }
 
@@ -146,6 +157,15 @@
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 }
+
+@utility frosted-touch {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+}
+
 
 @utility text-oversized {
   font-size: clamp(4rem, 15vw, 12rem);
@@ -159,6 +179,7 @@
   }
 
   body {
-    @apply bg-background text-foreground bg-noise font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
   }
 }
