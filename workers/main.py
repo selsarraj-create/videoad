@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from .kie import generate_video, get_task_status
+from . import claid
+from .presets import get_prompt, get_preset
 
 load_dotenv()
 
@@ -268,6 +270,145 @@ async def handle_extend_webhook(request: ExtendRequest, background_tasks: Backgr
         request.aspect_ratio
     )
     return {"message": "Extend job received", "job_id": request.job_id}
+
+# =========================================================================
+# Two-Stage Fashion Pipeline: Claid (on-model image) → Kie (video)
+# =========================================================================
+
+class FashionJobRequest(BaseModel):
+    job_id: str
+    garment_image_url: str
+    preset_id: str
+    aspect_ratio: str = "9:16"
+    model_options: dict = {}  # gender, ethnicity for Claid
+
+def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, aspect_ratio: str, model_options: dict):
+    """
+    Two-stage fashion pipeline:
+    1. Claid.ai: garment flat-lay → on-model fashion image
+    2. Kie.ai: on-model image + hidden preset prompt → fashion video
+    """
+    print(f"Fashion job {job_id}: preset={preset_id}, garment={garment_image_url[:60]}...")
+
+    try:
+        # Stage 0: Update status
+        supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
+
+        # Stage 1: Claid.ai — generate on-model image
+        print(f"Stage 1: Calling Claid.ai for on-model image...")
+        claid_result = claid.generate_on_model(garment_image_url, model_options)
+        on_model_image_url = claid_result["image_url"]
+        print(f"Stage 1 done: {on_model_image_url[:80]}")
+
+        # Update job with intermediate result
+        supabase.table("jobs").update({
+            "provider_metadata": {
+                "stage": "video_generation",
+                "on_model_image_url": on_model_image_url,
+                "preset_id": preset_id
+            }
+        }).eq("id", job_id).execute()
+
+        # Stage 2: Kie.ai — generate video from on-model image + preset prompt
+        preset = get_preset(preset_id)
+        hidden_prompt = preset["prompt"]
+        print(f"Stage 2: Calling Kie.ai Veo with preset '{preset_id}': {hidden_prompt[:60]}...")
+
+        from .kie import generate_video as kie_generate
+        task_info = kie_generate(
+            prompt=hidden_prompt,
+            model="veo-3.1-fast",
+            aspectRatio=aspect_ratio,
+            duration=preset.get("duration", 8),
+            image_url=on_model_image_url  # image-to-video with the on-model result
+        )
+
+        print(f"Kie response: {task_info}")
+
+        # Extract task ID
+        data = task_info.get("data") or {}
+        task_id = None
+        if isinstance(data, dict):
+            task_id = data.get("taskId") or data.get("task_id") or data.get("id")
+        if not task_id:
+            task_id = task_info.get("taskId") or task_info.get("task_id") or task_info.get("id")
+
+        if not task_id:
+            raise Exception(f"No task_id from Kie response: {task_info}")
+
+        print(f"Video task started: {task_id}")
+
+        # Stage 3: Poll for video completion
+        model = "veo-3.1-fast"
+        while True:
+            from .kie import get_task_status as kie_status
+            status_data = kie_status(task_id, model)
+
+            poll_data = status_data.get("data") if isinstance(status_data, dict) else None
+            if not isinstance(poll_data, dict):
+                poll_data = {}
+
+            raw_status = poll_data.get("status", "")
+            success_flag = poll_data.get("successFlag")
+
+            if raw_status in ("SUCCESS", "success") or success_flag == 1:
+                status = "completed"
+            elif raw_status in ("GENERATE_FAILED", "CREATE_TASK_FAILED", "fail") or success_flag in (2, 3):
+                status = "failed"
+            else:
+                status = "processing"
+
+            print(f"Fashion job {job_id} poll: {status} (raw={raw_status}, flag={success_flag})")
+
+            if status == "completed":
+                results = poll_data.get("results") or poll_data.get("works") or []
+                video_url = None
+                if results and isinstance(results, list):
+                    first = results[0] if isinstance(results[0], dict) else {}
+                    video_url = first.get("url") or first.get("videoUrl") or first.get("video_url")
+                if not video_url:
+                    video_url = poll_data.get("videoUrl") or poll_data.get("url") or poll_data.get("video_url")
+
+                if not video_url:
+                    raise Exception(f"Video completed but no URL: {status_data}")
+
+                supabase.table("jobs").update({
+                    "status": "completed",
+                    "output_url": video_url,
+                    "provider_metadata": {
+                        "task_id": task_id,
+                        "preset_id": preset_id,
+                        "on_model_image_url": on_model_image_url,
+                        "aspect_ratio": aspect_ratio
+                    }
+                }).eq("id", job_id).execute()
+                print(f"Fashion job {job_id} completed: {video_url}")
+                break
+
+            elif status == "failed":
+                error_msg = poll_data.get("error") or poll_data.get("msg") or "Unknown error"
+                raise Exception(f"Video generation failed: {error_msg}")
+
+            time.sleep(5)
+
+    except Exception as e:
+        print(f"Fashion job {job_id} failed: {str(e)}")
+        supabase.table("jobs").update({
+            "status": "failed",
+            "error_message": str(e)
+        }).eq("id", job_id).execute()
+
+@app.post("/webhook/fashion-generate")
+async def handle_fashion_webhook(request: FashionJobRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(
+        process_fashion_job,
+        request.job_id,
+        request.garment_image_url,
+        request.preset_id,
+        request.aspect_ratio,
+        request.model_options
+    )
+    return {"message": "Fashion job received", "job_id": request.job_id}
 
 import requests
 import tempfile
