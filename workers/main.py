@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from .kie import generate_video, get_task_status
 from . import claid
+from . import gemini
 from .presets import get_prompt, get_preset
 
 load_dotenv()
@@ -320,6 +321,137 @@ async def handle_try_on_webhook(request: TryOnRequest, background_tasks: Backgro
         request.garment_image_url
     )
     return {"message": "Try-on job received", "job_id": request.job_id}
+
+# =========================================================================
+# Identity Pipeline: Validate Selfie + Generate Master Identity
+# =========================================================================
+
+class ValidateSelfieRequest(BaseModel):
+    identity_id: str
+    selfie_url: str
+
+def process_validate_selfie(identity_id: str, selfie_url: str):
+    """Run Gemini Flash vision validation on a selfie."""
+    print(f"Validating selfie for identity {identity_id}")
+    try:
+        result = gemini.validate_selfie(selfie_url)
+        new_status = "validated" if result.get("passed") else "pending"
+        supabase.table("identities").update({
+            "validation_result": result,
+            "status": new_status
+        }).eq("id", identity_id).execute()
+        print(f"Validation done: passed={result.get('passed')}")
+    except Exception as e:
+        print(f"Validation failed for {identity_id}: {str(e)}")
+        supabase.table("identities").update({
+            "validation_result": {"error": str(e)},
+            "status": "failed"
+        }).eq("id", identity_id).execute()
+
+@app.post("/webhook/validate-selfie")
+async def handle_validate_selfie(request: ValidateSelfieRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(process_validate_selfie, request.identity_id, request.selfie_url)
+    return {"message": "Validation started", "identity_id": request.identity_id}
+
+
+# Real-time validation — synchronous, no DB write
+class RealtimeValidateRequest(BaseModel):
+    image_data: str  # base64 data URL from camera
+
+@app.post("/webhook/validate-selfie-realtime")
+async def handle_validate_selfie_realtime(request: RealtimeValidateRequest):
+    """Synchronous validation that returns checklist immediately."""
+    try:
+        result = gemini.validate_selfie_realtime(request.image_data)
+        return result
+    except Exception as e:
+        print(f"Realtime validation error: {str(e)}")
+        return {
+            "passed": False,
+            "checks": [
+                {"name": "pose", "passed": False, "message": "Analysis error — try again"},
+                {"name": "lighting", "passed": False, "message": "Analysis error"},
+                {"name": "attire", "passed": False, "message": "Analysis error"},
+                {"name": "resolution", "passed": False, "message": "Analysis error"},
+            ]
+        }
+
+
+class GenerateIdentityRequest(BaseModel):
+    identity_id: str
+    selfie_url: str
+
+def process_generate_identity(identity_id: str, selfie_url: str):
+    """Generate a 4K master identity portrait using Gemini."""
+    print(f"Generating master identity for {identity_id}")
+    try:
+        supabase.table("identities").update({"status": "generating"}).eq("id", identity_id).execute()
+
+        result = gemini.generate_master_identity(selfie_url)
+        image_bytes = result["image_bytes"]
+        mime_type = result["mime_type"]
+        ext = "png" if "png" in mime_type else "jpeg"
+
+        # Upload to Supabase storage
+        file_path = f"identities/{identity_id}/master.{ext}"
+        supabase.storage.from_("raw_assets").upload(
+            file_path, image_bytes,
+            file_options={"content-type": mime_type, "upsert": "true"}
+        )
+        public_url = supabase.storage.from_("raw_assets").get_public_url(file_path)
+
+        supabase.table("identities").update({
+            "master_identity_url": public_url,
+            "status": "ready"
+        }).eq("id", identity_id).execute()
+        print(f"Master identity ready: {public_url[:80]}")
+
+    except Exception as e:
+        print(f"Identity generation failed for {identity_id}: {str(e)}")
+        supabase.table("identities").update({
+            "status": "failed"
+        }).eq("id", identity_id).execute()
+
+@app.post("/webhook/generate-identity")
+async def handle_generate_identity(request: GenerateIdentityRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(process_generate_identity, request.identity_id, request.selfie_url)
+    return {"message": "Identity generation started", "identity_id": request.identity_id}
+
+# =========================================================================
+# Outfit Try-On: Multi-layer Claid draping
+# =========================================================================
+
+class OutfitTryOnRequest(BaseModel):
+    look_id: str
+    identity_url: str
+    garment_urls: list[str]
+
+def process_outfit_tryon(look_id: str, identity_url: str, garment_urls: list[str]):
+    """Multi-layer Claid: drape each garment sequentially onto the identity."""
+    print(f"Outfit try-on for look {look_id}: {len(garment_urls)} garments")
+    try:
+        supabase.table("current_looks").update({"status": "rendering"}).eq("id", look_id).execute()
+
+        result = claid.generate_multi_layer(identity_url, garment_urls)
+        composite_url = result["image_url"]
+        print(f"Outfit composite ready: {composite_url[:80]}")
+
+        supabase.table("current_looks").update({
+            "claid_result_url": composite_url,
+            "status": "ready"
+        }).eq("id", look_id).execute()
+
+    except Exception as e:
+        print(f"Outfit try-on failed for {look_id}: {str(e)}")
+        supabase.table("current_looks").update({
+            "status": "failed"
+        }).eq("id", look_id).execute()
+
+@app.post("/webhook/outfit-tryon")
+async def handle_outfit_tryon(request: OutfitTryOnRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(process_outfit_tryon, request.look_id, request.identity_url, request.garment_urls)
+    return {"message": "Outfit try-on started", "look_id": request.look_id}
+
 
 # =========================================================================
 # Two-Stage Fashion Pipeline: Claid (on-model image) → Kie (video)

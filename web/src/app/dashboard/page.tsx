@@ -44,9 +44,11 @@ type Tab = 'try-on' | 'video'
 export default function StudioPage() {
     const [activeTab, setActiveTab] = useState<Tab>('try-on')
 
+    // Identity state
+    const [masterIdentityUrl, setMasterIdentityUrl] = useState<string | null>(null)
+    const [identityLoading, setIdentityLoading] = useState(true)
+
     // Try-On state
-    const [personImageUrl, setPersonImageUrl] = useState("")
-    const [personPreview, setPersonPreview] = useState<string | null>(null)
     const [garmentImageUrl, setGarmentImageUrl] = useState("")
     const [garmentPreview, setGarmentPreview] = useState<string | null>(null)
     const [tryOnLoading, setTryOnLoading] = useState(false)
@@ -63,15 +65,20 @@ export default function StudioPage() {
     const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>([])
     const [projectId, setProjectId] = useState<string | null>(null)
 
-    const personFileRef = useRef<HTMLInputElement>(null)
     const garmentFileRef = useRef<HTMLInputElement>(null)
     const supabase = createClient()
 
-    // Initialize
+    // Initialize + check for master identity
     useEffect(() => {
         getOrCreateDefaultProject().then(({ projectId: pid }) => {
             if (pid) setProjectId(pid)
         })
+        // Check for a ready identity
+        supabase.from('identities').select('master_identity_url').eq('status', 'ready').limit(1).single()
+            .then(({ data }: { data: { master_identity_url?: string } | null }) => {
+                if (data?.master_identity_url) setMasterIdentityUrl(data.master_identity_url)
+                setIdentityLoading(false)
+            }, () => setIdentityLoading(false))
     }, [])
 
     // Poll jobs + media library
@@ -109,31 +116,24 @@ export default function StudioPage() {
         }
     }, [jobs])
 
-    // File upload handler
-    const uploadFile = async (file: File, type: 'person' | 'garment') => {
+    // File upload handler (garments only — person uses Master Identity)
+    const uploadFile = async (file: File) => {
         // Show preview and set a temporary data URL immediately
         const reader = new FileReader()
         reader.onload = (e) => {
             const dataUrl = e.target?.result as string
-            if (type === 'person') {
-                setPersonPreview(dataUrl)
-                setPersonImageUrl(dataUrl) // Use data URL as fallback
-            } else {
-                setGarmentPreview(dataUrl)
-                setGarmentImageUrl(dataUrl) // Use data URL as fallback
-            }
+            setGarmentPreview(dataUrl)
+            setGarmentImageUrl(dataUrl) // Use data URL as fallback
         }
         reader.readAsDataURL(file)
 
         // Try uploading to Supabase storage — upgrade to public URL on success
         try {
-            const folder = type === 'person' ? 'persons' : 'garments'
-            const fileName = `${folder}/${Date.now()}_${file.name}`
+            const fileName = `garments/${Date.now()}_${file.name}`
             const { error } = await supabase.storage.from('raw_assets').upload(fileName, file)
             if (!error) {
                 const { data: urlData } = supabase.storage.from('raw_assets').getPublicUrl(fileName)
-                if (type === 'person') setPersonImageUrl(urlData.publicUrl)
-                else setGarmentImageUrl(urlData.publicUrl)
+                setGarmentImageUrl(urlData.publicUrl)
             } else {
                 console.warn('Storage upload failed, using data URL:', error.message)
             }
@@ -144,14 +144,14 @@ export default function StudioPage() {
 
     // Try-On handler
     const handleTryOn = async () => {
-        if (!personImageUrl || !garmentImageUrl) return
+        if (!masterIdentityUrl || !garmentImageUrl) return
         setTryOnLoading(true)
         setTryOnResult(null)
         try {
             const res = await fetch('/api/try-on', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ person_image_url: personImageUrl, garment_image_url: garmentImageUrl })
+                body: JSON.stringify({ person_image_url: masterIdentityUrl, garment_image_url: garmentImageUrl })
             })
             const data = await res.json()
             if (data.job?.id) {
@@ -189,7 +189,7 @@ export default function StudioPage() {
         setTimeout(() => setVideoLoading(false), 2000)
     }
 
-    const canTryOn = personImageUrl && garmentImageUrl && !tryOnLoading
+    const canTryOn = masterIdentityUrl && garmentImageUrl && !tryOnLoading
     const canGenerateVideo = selectedMediaItem && selectedPreset && !videoLoading
     const videoJobs = jobs.filter(j => j.tier !== 'try_on')
 
@@ -217,8 +217,7 @@ export default function StudioPage() {
                     <button
                         onClick={(e) => {
                             e.stopPropagation()
-                            if (type === 'person') { setPersonPreview(null); setPersonImageUrl('') }
-                            else { setGarmentPreview(null); setGarmentImageUrl('') }
+                            setGarmentPreview(null); setGarmentImageUrl('')
                         }}
                         className="absolute top-2 right-2 w-5 h-5 rounded-full bg-zinc-800/80 text-zinc-400 hover:text-white flex items-center justify-center text-[10px]"
                     >×</button>
@@ -233,7 +232,7 @@ export default function StudioPage() {
                 </div>
             )}
             <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f, type) }} />
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f) }} />
         </div>
     )
 
@@ -272,7 +271,11 @@ export default function StudioPage() {
 
                 <Link href="/dashboard/content"
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-all">
-                    <Library className="w-3.5 h-3.5" /> Content Library
+                    <Library className="w-3.5 h-3.5" /> Content Vault
+                </Link>
+                <Link href="/dashboard/outfit"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-purple-400 hover:text-purple-300 hover:bg-purple-900/10 transition-all">
+                    <Sparkles className="w-3.5 h-3.5" /> Outfit Builder
                 </Link>
             </header>
 
@@ -285,20 +288,47 @@ export default function StudioPage() {
                         {activeTab === 'try-on' ? (
                             /* ---- TRY ON TAB ---- */
                             <>
-                                {/* Step 1: Upload Person */}
+                                {/* Identity Banner */}
+                                {!identityLoading && !masterIdentityUrl && (
+                                    <div className="rounded-2xl border border-purple-800/40 bg-purple-900/10 p-5 flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-bold text-white">Set Up Your Identity First</p>
+                                            <p className="text-xs text-zinc-500">We need a selfie to create your AI identity for virtual try-on.</p>
+                                        </div>
+                                        <Link href="/dashboard/onboard">
+                                            <Button className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold">
+                                                <User className="w-3.5 h-3.5 mr-1.5" /> Set Up Identity
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                )}
+
+                                {/* Step 1: Master Identity */}
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2">
                                         <div className="w-6 h-6 rounded-full bg-purple-900/40 border border-purple-700/40 flex items-center justify-center text-[10px] font-black text-purple-400">1</div>
-                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Upload Your Selfie</Label>
+                                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Your Identity</Label>
                                     </div>
-                                    {renderUploadZone('person', personPreview, personFileRef, User, 'Your Selfie', 'Face or full body selfie')}
+                                    {masterIdentityUrl ? (
+                                        <div className="rounded-2xl border border-green-800/30 bg-zinc-900/30 overflow-hidden">
+                                            <div className="relative aspect-[3/4] max-h-[220px]">
+                                                <img src={masterIdentityUrl} alt="Master Identity" className="w-full h-full object-contain p-3" />
+                                                <Badge className="absolute bottom-2 left-2 bg-green-900/40 text-green-400 border-green-700/40 text-[9px]">✓ Master Identity</Badge>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/20 py-10 text-center">
+                                            <User className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
+                                            <p className="text-xs text-zinc-500">Complete identity setup to start trying on</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Step 2: Upload Clothing */}
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2">
                                         <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-black transition-all
-                                            ${personImageUrl ? 'bg-purple-900/40 border-purple-700/40 text-purple-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>2</div>
+                                            ${masterIdentityUrl ? 'bg-purple-900/40 border-purple-700/40 text-purple-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>2</div>
                                         <Label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Upload Clothing Item</Label>
                                     </div>
                                     {renderUploadZone('garment', garmentPreview, garmentFileRef, Shirt, 'Clothing Item', 'Flat-lay or product photo')}

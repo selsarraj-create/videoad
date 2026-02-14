@@ -60,22 +60,53 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Failed to create job' }, { status: 500 })
         }
 
-        // Call worker
+        // Call worker — FAIL LOUDLY if not configured
         const workerUrl = process.env.RAILWAY_WORKER_URL
-        if (workerUrl) {
-            try {
-                await fetch(`${workerUrl}/webhook/try-on`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        job_id: job.id,
-                        person_image_url,
-                        garment_image_url
-                    })
+        if (!workerUrl) {
+            console.error('RAILWAY_WORKER_URL not set — cannot process try-on')
+            // Mark job as failed so the UI can pick it up
+            await supabase.from('jobs').update({
+                status: 'failed',
+                error_message: 'Worker not configured (RAILWAY_WORKER_URL not set)'
+            }).eq('id', job.id)
+            return NextResponse.json({
+                error: 'Worker not configured. Set RAILWAY_WORKER_URL in environment.',
+                job: { ...job, status: 'failed' }
+            }, { status: 503 })
+        }
+
+        try {
+            const workerRes = await fetch(`${workerUrl}/webhook/try-on`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    job_id: job.id,
+                    person_image_url,
+                    garment_image_url
                 })
-            } catch (workerError) {
-                console.error('Worker call failed:', workerError)
+            })
+            if (!workerRes.ok) {
+                const errText = await workerRes.text()
+                console.error('Worker returned error:', workerRes.status, errText)
+                await supabase.from('jobs').update({
+                    status: 'failed',
+                    error_message: `Worker error: ${workerRes.status}`
+                }).eq('id', job.id)
+                return NextResponse.json({
+                    error: `Worker returned ${workerRes.status}`,
+                    job: { ...job, status: 'failed' }
+                }, { status: 502 })
             }
+        } catch (workerError) {
+            console.error('Worker call failed:', workerError)
+            await supabase.from('jobs').update({
+                status: 'failed',
+                error_message: 'Worker unreachable'
+            }).eq('id', job.id)
+            return NextResponse.json({
+                error: 'Worker unreachable',
+                job: { ...job, status: 'failed' }
+            }, { status: 502 })
         }
 
         return NextResponse.json({ success: true, job })

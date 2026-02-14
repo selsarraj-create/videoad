@@ -98,3 +98,34 @@ def generate_on_model(garment_image_url: str, person_image_url: str = None, opti
     except Exception as e:
         logger.error(f"Claid.ai request failed: {e}")
         raise
+
+
+def generate_multi_layer(identity_url: str, garment_urls: list[str]) -> dict:
+    """
+    Sequentially drape multiple garments onto the identity.
+    Each call uses the previous result as the base person image.
+
+    Args:
+        identity_url: Master Identity portrait URL.
+        garment_urls: List of garment image URLs to layer.
+
+    Returns:
+        dict with 'image_url' — the final composite on-model image.
+    """
+    if not garment_urls:
+        raise Exception("No garment URLs provided")
+
+    current_base = identity_url
+    result = None
+
+    for i, garment_url in enumerate(garment_urls):
+        logger.info(f"Multi-layer step {i+1}/{len(garment_urls)}: garment={garment_url[:60]}")
+        result = generate_on_model(
+            garment_image_url=garment_url,
+            person_image_url=current_base
+        )
+        current_base = result["image_url"]
+
+    logger.info(f"Multi-layer complete: {len(garment_urls)} garments applied")
+    return result
+
