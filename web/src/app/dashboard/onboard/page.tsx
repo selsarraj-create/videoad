@@ -133,8 +133,26 @@ export default function OnboardPage() {
         }
     }, [step, startCamera, stopCamera])
 
-    // ---- Capture camera frame as base64 ----
-    const captureFrame = useCallback((): string | null => {
+    // ---- Capture frame for analysis (downscaled for speed) ----
+    const captureAnalysisFrame = useCallback((): string | null => {
+        const video = videoRef.current
+        const canvas = canvasRef.current
+        if (!video || !canvas || video.readyState < 2) return null
+
+        // Downscale to max 1280px width for faster transmission
+        const scale = Math.min(1, 1280 / video.videoWidth)
+        canvas.width = video.videoWidth * scale
+        canvas.height = video.videoHeight * scale
+
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return null
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        return canvas.toDataURL('image/jpeg', 0.8) // slightly lower quality for speed
+    }, [])
+
+    // ---- Capture high-res frame for final identity ----
+    const captureHighResFrame = useCallback((): string | null => {
         const video = videoRef.current
         const canvas = canvasRef.current
         if (!video || !canvas || video.readyState < 2) return null
@@ -145,13 +163,13 @@ export default function OnboardPage() {
         if (!ctx) return null
 
         ctx.drawImage(video, 0, 0)
-        return canvas.toDataURL('image/jpeg', 0.85)
+        return canvas.toDataURL('image/jpeg', 0.95) // high quality
     }, [])
 
     // ---- Real-time analysis ----
     const analyzeFrame = useCallback(async () => {
         if (analyzing) return
-        const frame = captureFrame()
+        const frame = captureAnalysisFrame()
         if (!frame) return
 
         setAnalyzing(true)
@@ -183,7 +201,7 @@ export default function OnboardPage() {
             console.error('Analysis error:', e)
         }
         setAnalyzing(false)
-    }, [analyzing, captureFrame])
+    }, [analyzing, captureAnalysisFrame])
 
     // Auto-analyze every 4 seconds when camera is active
     useEffect(() => {
@@ -206,7 +224,7 @@ export default function OnboardPage() {
 
     // ---- Capture selfie (freeze frame) ----
     const handleCapture = async () => {
-        const frame = captureFrame()
+        const frame = captureHighResFrame()
         if (!frame) return
 
         stopCamera()

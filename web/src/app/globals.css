@@ -2,10 +2,9 @@
 
 @plugin "tailwindcss-animate";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme {
   --font-sans: var(--font-inter);
+  --font-serif: var(--font-playfair);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -57,93 +56,101 @@
 }
 
 :root {
-  /* Premium Dark Studio Theme */
-  /* Background: #121212 */
-  --background: 0 0% 7%;
-  --foreground: 0 0% 98%;
-  /* White */
-  /* Surface/Cards: #1E1E1E */
-  --card: 0 0% 12%;
-  --card-foreground: 240 5% 96%;
-  /* Zinc-100 */
+  /* Cloud Dancer Theme */
+  --background: 0 0% 95%;
+  /* #F2F2F2 */
+  --foreground: 0 0% 10%;
+  /* #1A1A1A - Soft Black */
 
-  --popover: 0 0% 12%;
-  /* Match card */
-  --popover-foreground: 240 5% 96%;
+  --card: 0 0% 98%;
+  --card-foreground: 0 0% 10%;
 
-  /* Primary: Cyber Blue (approx #3b82f6) */
-  --primary: 221 83% 53%;
-  --primary-foreground: 0 0% 100%;
+  --popover: 0 0% 98%;
+  --popover-foreground: 0 0% 10%;
 
-  --secondary: 240 4% 16%;
-  /* Zinc-800 */
-  --secondary-foreground: 240 5% 96%;
+  /* Walnut Retro - Low saturation brown/earth */
+  --primary: 14 26% 29%;
+  /* #5D4037 */
+  --primary-foreground: 36 29% 95%;
+  /* Off-white text on primary */
 
-  --muted: 240 4% 16%;
-  --muted-foreground: 240 5% 65%;
-  /* Zinc-300 approx */
+  /* Sunwashed Grey */
+  --secondary: 0 0% 66%;
+  /* #A8A8A8 */
+  --secondary-foreground: 0 0% 10%;
 
-  --accent: 240 4% 16%;
-  --accent-foreground: 240 5% 96%;
+  --muted: 0 0% 90%;
+  --muted-foreground: 0 0% 45%;
 
-  --destructive: 0 62% 30%;
-  --destructive-foreground: 240 5% 96%;
+  --accent: 33 24% 94%;
+  /* Warm paper tone */
+  --accent-foreground: 14 26% 29%;
 
-  /* Borders: Subtle Zinc-800 (#27272a is ~ 240 4% 16%) */
-  --border: 240 4% 16%;
-  --input: 240 4% 16%;
-  --ring: 221 83% 53%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
 
-  --radius: 0.75rem;
+  --border: 0 0% 85%;
+  --input: 0 0% 85%;
+  --ring: 14 26% 29%;
+
+  --radius: 0rem;
+  /* Sharp edges for high fashion */
 }
 
+/* Dark mode - Optional / Inverted version if needed, 
+   but user requested Cloud Dancer which implies light/airy. 
+   Keeping dark mode variables just in case, tuned to 'Midnight Editorial' */
 .dark {
-  /* Premium Dark Studio - Force Sync */
   --background: 0 0% 7%;
-  /* #121212 */
-  --foreground: 0 0% 98%;
+  --foreground: 0 0% 95%;
 
-  --card: 0 0% 12%;
-  /* #1E1E1E */
-  --card-foreground: 240 5% 96%;
+  --card: 0 0% 10%;
+  --card-foreground: 0 0% 95%;
 
-  --popover: 0 0% 12%;
-  --popover-foreground: 240 5% 96%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 95%;
 
-  /* Cyber Blue Primary */
-  --primary: 221 83% 53%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 14 26% 45%;
+  --primary-foreground: 0 0% 98%;
 
-  --secondary: 240 4% 16%;
-  --secondary-foreground: 240 5% 96%;
+  --secondary: 0 0% 20%;
+  --secondary-foreground: 0 0% 98%;
 
-  --muted: 240 4% 16%;
-  --muted-foreground: 240 5% 65%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 65%;
 
-  --accent: 240 4% 16%;
-  --accent-foreground: 240 5% 96%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 98%;
 
   --destructive: 0 62% 30%;
-  --destructive-foreground: 240 5% 96%;
+  --destructive-foreground: 0 0% 98%;
 
-  --border: 240 4% 16%;
-  --input: 240 4% 16%;
-  --ring: 221 83% 53%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 14 26% 45%;
 }
 
 @utility bg-noise {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
 }
 
-@utility cyber-gradient {
-  background-image: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+@utility bg-paper {
+  background-color: #F2F2F2;
+  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
 }
 
-@utility text-gradient {
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+@utility glass-button {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+@utility text-oversized {
+  font-size: clamp(4rem, 15vw, 12rem);
+  line-height: 0.85;
+  letter-spacing: -0.04em;
 }
 
 @layer base {
@@ -152,20 +159,6 @@
   }
 
   body {
-    @apply bg-background text-foreground bg-noise;
-  }
-
-  /* Custom Scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-zinc-800 rounded-full hover:bg-zinc-700 transition-colors;
+    @apply bg-background text-foreground bg-noise font-sans antialiased;
   }
 }

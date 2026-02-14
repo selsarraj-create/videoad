@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google"; // RedHat is also good, but Inter is standard tech
+import { Inter, Playfair_Display } from "next/font/google"; // RedHat is also good, but Inter is standard tech
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
   title: "Fashion Studio — AI Virtual Try-On & Video",
@@ -17,9 +18,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body
-        className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
+        className={`${inter.variable} ${playfair.variable} font-sans antialiased bg-background text-foreground`}
       >
         <TooltipProvider>
           {children}

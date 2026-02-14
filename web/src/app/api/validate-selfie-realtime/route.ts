@@ -30,9 +30,9 @@ export async function POST(request: Request) {
             })
         }
 
-        // Add 8s timeout for worker call so it doesn't hang forever
+        // Add 15s timeout for worker call (tolerates cold starts)
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 8000)
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
 
         try {
             const res = await fetch(`${workerUrl}/webhook/validate-selfie-realtime`, {
