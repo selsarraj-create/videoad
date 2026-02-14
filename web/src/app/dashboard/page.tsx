@@ -53,6 +53,7 @@ export default function StudioPage() {
     const [garmentPreview, setGarmentPreview] = useState<string | null>(null)
     const [tryOnLoading, setTryOnLoading] = useState(false)
     const [tryOnResult, setTryOnResult] = useState<string | null>(null)
+    const [tryOnError, setTryOnError] = useState<string | null>(null)
 
     // Video state
     const [selectedMediaItem, setSelectedMediaItem] = useState<MediaItem | null>(null)
@@ -144,9 +145,17 @@ export default function StudioPage() {
 
     // Try-On handler
     const handleTryOn = async () => {
-        if (!masterIdentityUrl || !garmentImageUrl) return
+        if (!masterIdentityUrl) {
+            setTryOnError('No Master Identity found. Complete onboarding first.')
+            return
+        }
+        if (!garmentImageUrl) {
+            setTryOnError('Upload a garment image first.')
+            return
+        }
         setTryOnLoading(true)
         setTryOnResult(null)
+        setTryOnError(null)
         try {
             const res = await fetch('/api/try-on', {
                 method: 'POST',
@@ -154,6 +163,13 @@ export default function StudioPage() {
                 body: JSON.stringify({ person_image_url: masterIdentityUrl, garment_image_url: garmentImageUrl })
             })
             const data = await res.json()
+
+            if (!res.ok) {
+                setTryOnError(data.error || `Server error (${res.status})`)
+                setTryOnLoading(false)
+                return
+            }
+
             if (data.job?.id) {
                 // Poll for result
                 const pollInterval = setInterval(async () => {
@@ -163,12 +179,20 @@ export default function StudioPage() {
                         setTryOnLoading(false)
                         clearInterval(pollInterval)
                     } else if (job?.status === 'failed') {
+                        setTryOnError(job.error_message || 'Try-on failed. Please try again.')
                         setTryOnLoading(false)
                         clearInterval(pollInterval)
                     }
                 }, 3000)
+            } else {
+                setTryOnError('No job created — unexpected response.')
+                setTryOnLoading(false)
             }
-        } catch (e) { console.error(e); setTryOnLoading(false) }
+        } catch (e) {
+            console.error(e)
+            setTryOnError('Network error — check your connection.')
+            setTryOnLoading(false)
+        }
     }
 
     // Video generation handler
@@ -350,6 +374,13 @@ export default function StudioPage() {
                                             <><Camera className="w-4 h-4 mr-2" /> Try On Clothing</>
                                         )}
                                     </Button>
+
+                                    {tryOnError && (
+                                        <div className="flex items-start gap-2 p-3 rounded-xl border border-red-800/40 bg-red-900/10">
+                                            <span className="text-red-400 text-xs flex-shrink-0 mt-0.5">⚠</span>
+                                            <p className="text-xs text-red-400">{tryOnError}</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Try-On Result */}
