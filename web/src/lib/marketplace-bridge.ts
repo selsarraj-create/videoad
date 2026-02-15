@@ -48,6 +48,17 @@ export class MarketplaceBridge {
                     category: 'Outerwear'
                 },
                 {
+                    id: `skim-1b`,
+                    source: 'skimlinks',
+                    title: 'Loro Piana Storm System Parka',
+                    price: '2850.00',
+                    currency: 'USD',
+                    imageUrl: 'https://images.unsplash.com/photo-1544022613-e87fd75a784a?q=80&w=1000&auto=format&fit=crop',
+                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/parka&xcust=${userId}`,
+                    brand: 'Loro Piana',
+                    category: 'Outerwear'
+                },
+                {
                     id: `skim-2`,
                     source: 'skimlinks',
                     title: 'Silk Evening Blouse',
@@ -57,6 +68,28 @@ export class MarketplaceBridge {
                     affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/shirt&xcust=${userId}`,
                     brand: 'Vince',
                     category: 'Shirts'
+                },
+                {
+                    id: `skim-2b`,
+                    source: 'skimlinks',
+                    title: 'Poplin Oversized Shirt',
+                    price: '325.00',
+                    currency: 'USD',
+                    imageUrl: 'https://images.unsplash.com/photo-1598033129183-c4f50c7176c8?q=80&w=1000&auto=format&fit=crop',
+                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/poplin&xcust=${userId}`,
+                    brand: 'Theory',
+                    category: 'Shirts'
+                },
+                {
+                    id: `skim-3`,
+                    source: 'skimlinks',
+                    title: 'Leather Chelsea Boots',
+                    price: '595.00',
+                    currency: 'USD',
+                    imageUrl: 'https://images.unsplash.com/photo-1638247025967-b4e38f787b76?q=80&w=1000&auto=format&fit=crop',
+                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/boots&xcust=${userId}`,
+                    brand: 'Common Projects',
+                    category: 'Shoes'
                 }
             ];
 
@@ -94,6 +127,18 @@ export class MarketplaceBridge {
                     authenticityGuaranteed: true
                 },
                 {
+                    id: `ebay-1b`,
+                    source: 'ebay',
+                    title: 'Classic Chanel Brooch',
+                    price: '650.00',
+                    currency: 'USD',
+                    imageUrl: 'https://images.unsplash.com/photo-1611085583191-a3b1ae8407ac?q=80&w=1000&auto=format&fit=crop',
+                    affiliateUrl: `https://www.ebay.com/itm/CHANEL-BROOCH?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
+                    brand: 'Chanel',
+                    category: 'Accessories',
+                    authenticityGuaranteed: true
+                },
+                {
                     id: `ebay-2`,
                     source: 'ebay',
                     title: 'Archival Kelly Bag 35',
@@ -102,6 +147,18 @@ export class MarketplaceBridge {
                     imageUrl: 'https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?q=80&w=1000&auto=format&fit=crop',
                     affiliateUrl: `https://www.ebay.com/itm/KELLY-35?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
                     brand: 'Hermès',
+                    category: 'Bags',
+                    authenticityGuaranteed: true
+                },
+                {
+                    id: `ebay-2b`,
+                    source: 'ebay',
+                    title: 'Louis Vuitton Speedy 30',
+                    price: '1800.00',
+                    currency: 'USD',
+                    imageUrl: 'https://images.unsplash.com/photo-1547949003-9792a18a2601?q=80&w=1000&auto=format&fit=crop',
+                    affiliateUrl: `https://www.ebay.com/itm/LV-SPEEDY?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
+                    brand: 'Louis Vuitton',
                     category: 'Bags',
                     authenticityGuaranteed: true
                 }
