@@ -5,10 +5,12 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const query = searchParams.get('q');
+        const query = searchParams.get('q') || ''; // Allow empty query if category is set
+        const category = searchParams.get('category');
+        const brand = searchParams.get('brand');
 
-        if (!query) {
-            return NextResponse.json({ error: 'Query parameter "q" is required' }, { status: 400 });
+        if (!query && !category && !brand) {
+            return NextResponse.json({ error: 'Search query, category, or brand is required' }, { status: 400 });
         }
 
         const supabase = await createClient();
@@ -18,7 +20,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const items = await marketplaceBridge.searchAll(query, user.id);
+        const items = await marketplaceBridge.searchAll(query, user.id, category || undefined, brand || undefined);
 
         return NextResponse.json({ items });
     } catch (error: any) {

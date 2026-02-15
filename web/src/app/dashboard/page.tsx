@@ -104,6 +104,8 @@ export default function StudioPage() {
     const [marketplaceQuery, setMarketplaceQuery] = useState("")
     const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([])
     const [marketplaceLoading, setMarketplaceLoading] = useState(false)
+    const [marketplaceCategory, setMarketplaceCategory] = useState("All")
+    const [marketplaceBrand, setMarketplaceBrand] = useState("All")
 
     // Revenue state
     const [revenueData, setRevenueData] = useState<any[]>([])
@@ -359,10 +361,17 @@ export default function StudioPage() {
     // Marketplace Search
     const handleMarketplaceSearch = async (e?: React.FormEvent) => {
         if (e) e.preventDefault()
-        if (!marketplaceQuery) return
+        // If everything is empty, don't search unless it's an initial reload or category change
+        if (!marketplaceQuery && marketplaceCategory === 'All' && marketplaceBrand === 'All') return
+
         setMarketplaceLoading(true)
         try {
-            const res = await fetch(`/api/marketplace?q=${encodeURIComponent(marketplaceQuery)}`)
+            const params = new URLSearchParams()
+            if (marketplaceQuery) params.set('q', marketplaceQuery)
+            if (marketplaceCategory !== 'All') params.set('category', marketplaceCategory)
+            if (marketplaceBrand !== 'All') params.set('brand', marketplaceBrand)
+
+            const res = await fetch(`/api/marketplace?${params.toString()}`)
             const data = await res.json()
             if (data.items) setMarketplaceItems(data.items)
         } catch (err) {
@@ -371,6 +380,13 @@ export default function StudioPage() {
             setMarketplaceLoading(false)
         }
     }
+
+    // Auto-search on filter change
+    useEffect(() => {
+        if (activeTab === 'marketplace') {
+            handleMarketplaceSearch()
+        }
+    }, [marketplaceCategory, marketplaceBrand])
 
     // Revenue Payouts
     const handlePayoutAction = async (action: 'onboard' | 'payout') => {
@@ -668,6 +684,37 @@ export default function StudioPage() {
                                             {marketplaceLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                                         </Button>
                                     </form>
+
+                                    {/* Category Chips */}
+                                    <div className="flex flex-wrap gap-2">
+                                        {['All', 'Outerwear', 'Shirts', 'Bags', 'Accessories', 'Shoes'].map((cat) => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => setMarketplaceCategory(cat)}
+                                                className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-bold border transition-all
+                                                    ${marketplaceCategory === cat
+                                                        ? 'bg-primary text-primary-foreground border-primary'
+                                                        : 'bg-transparent text-muted-foreground border-nimbus hover:border-foreground'}`}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Brand Quick Links (Optional secondary filter) */}
+                                    <div className="flex items-center gap-4 border-t border-nimbus/20 pt-4 overflow-x-auto no-scrollbar">
+                                        <span className="text-[9px] uppercase tracking-tighter text-muted-foreground whitespace-nowrap">Top Brands:</span>
+                                        {['All', 'Hermès', 'Theory', 'Vince', 'Prada', 'Gucci'].map((brand) => (
+                                            <button
+                                                key={brand}
+                                                onClick={() => setMarketplaceBrand(brand)}
+                                                className={`text-[9px] uppercase tracking-[0.1em] whitespace-nowrap transition-colors
+                                                    ${marketplaceBrand === brand ? 'text-primary font-bold' : 'text-muted-foreground hover:text-foreground'}`}
+                                            >
+                                                {brand}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 <div className="space-y-6 overflow-y-auto max-h-[600px] pr-2 scrollbar-thin">
