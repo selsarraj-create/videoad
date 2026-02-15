@@ -85,13 +85,15 @@ export class MarketplaceBridge {
         try {
             console.log(`[Marketplace] Fetching Skimlinks Offers V4: "${searchTerm}" (Original Q: "${query}", Cat: ${category})`);
 
-            // Migrated to Offers V4 endpoint: https://developers.skimlinks.com/merchant.html#offers
+            // CORRECT V4 SPEC: 
+            // - access_token must be a query parameter
+            // - keyword parameter is 'search' (not 'q')
             const resp = await axios.get(`https://merchants.skimapis.com/v4/publisher/${this.skimlinksPublisherId}/offers`, {
                 params: {
-                    q: searchTerm,
-                    limit: 20
-                },
-                headers: { 'Authorization': `Bearer ${token}` }
+                    search: searchTerm,
+                    limit: 20,
+                    access_token: token
+                }
             });
 
             console.log(`[Marketplace] Skimlinks V4 Response: ${resp.data.offers?.length || 0} items found`);
