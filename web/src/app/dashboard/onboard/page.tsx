@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from "framer-motion"
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Step = 'guide' | 'mode_select' | 'ai_director' | 'manual_import' | 'synthesis' | 'generating' | 'done'
-type Angle = 'front' | 'profile' | 'three_quarter'
+type Angle = 'front' | 'profile' | 'three_quarter' | 'face_front' | 'face_side'
 
 interface Identity {
     id: string
@@ -90,6 +90,8 @@ const REQUIRED_ANGLES: { key: Angle; label: string; icon: string; desc: string }
     { key: 'front', label: 'Frontal', icon: '🧍', desc: 'Face the camera directly — symmetrical shoulders, arms slightly away from body.' },
     { key: 'profile', label: 'Profile 90°', icon: '🧍‍♂️', desc: 'Turn 90° to your left — one shoulder facing camera, side of face visible.' },
     { key: 'three_quarter', label: '3/4 View', icon: '🧍‍♀️', desc: 'Turn 45° — both eyes visible, body slightly angled to camera.' },
+    { key: 'face_front', label: 'Face Front', icon: '😊', desc: 'Close-up of your face — head and shoulders only, looking directly at camera.' },
+    { key: 'face_side', label: 'Face Side', icon: '🗣️', desc: 'Close-up of your face in profile — head and shoulders, turned 90° to camera.' },
 ]
 
 const GUIDE_CARDS = [
@@ -140,6 +142,8 @@ export default function OnboardPage() {
         front: { preview: null, url: null, validated: false },
         profile: { preview: null, url: null, validated: false },
         three_quarter: { preview: null, url: null, validated: false },
+        face_front: { preview: null, url: null, validated: false },
+        face_side: { preview: null, url: null, validated: false },
     })
 
     // Camera refs
@@ -148,7 +152,7 @@ export default function OnboardPage() {
     const streamRef = useRef<MediaStream | null>(null)
     const detectTimerRef = useRef<NodeJS.Timeout | null>(null)
     const fileRefs = useRef<Record<Angle, HTMLInputElement | null>>({
-        front: null, profile: null, three_quarter: null
+        front: null, profile: null, three_quarter: null, face_front: null, face_side: null
     })
 
     const supabase = createClient()
@@ -156,7 +160,7 @@ export default function OnboardPage() {
     const personaName = searchParams.get('name') || 'Default'
 
     const capturedCount = Object.values(captures).filter(c => c.validated).length
-    const allCaptured = capturedCount === 3
+    const allCaptured = capturedCount === REQUIRED_ANGLES.length
     const currentAngle = REQUIRED_ANGLES[currentAngleIdx]
 
     // ── Camera Management ─────────────────────────────────────────────────
@@ -288,7 +292,7 @@ export default function OnboardPage() {
     // Auto-advance to next angle after capture
     useEffect(() => {
         if (step !== 'ai_director') return
-        if (captures[currentAngle.key].validated && currentAngleIdx < 2) {
+        if (captures[currentAngle.key].validated && currentAngleIdx < REQUIRED_ANGLES.length - 1) {
             setTimeout(() => setCurrentAngleIdx(i => i + 1), 1500)
         } else if (allCaptured) {
             setTimeout(() => setStep('synthesis'), 1500)
@@ -501,6 +505,8 @@ export default function OnboardPage() {
             front: { preview: null, url: null, validated: false },
             profile: { preview: null, url: null, validated: false },
             three_quarter: { preview: null, url: null, validated: false },
+            face_front: { preview: null, url: null, validated: false },
+            face_side: { preview: null, url: null, validated: false },
         })
     }
 
@@ -550,7 +556,7 @@ export default function OnboardPage() {
                             <div className="text-center space-y-4">
                                 <h1 className="font-serif text-5xl text-primary">Identity Calibration</h1>
                                 <p className="text-muted-foreground max-w-lg mx-auto leading-relaxed">
-                                    Our neural engine requires multi-angle baseline data. We&apos;ll capture your likeness from 3 perspectives for precision draping.
+                                    Our neural engine requires multi-angle baseline data. We&apos;ll capture your likeness from 5 perspectives — 3 full-body and 2 face close-ups — for precision draping.
                                 </p>
                             </div>
 
@@ -747,7 +753,7 @@ export default function OnboardPage() {
                                 {/* Captured Thumbnails */}
                                 <div className="space-y-4">
                                     <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold border-b border-nimbus pb-2">
-                                        Captured Angles ({capturedCount}/3)
+                                        Captured Angles ({capturedCount}/{REQUIRED_ANGLES.length})
                                     </p>
                                     {REQUIRED_ANGLES.map((a) => (
                                         <div key={a.key} className={`p-3 border transition-all ${captures[a.key].validated ? 'border-primary/50 bg-primary/5' : 'border-nimbus bg-white'
@@ -787,7 +793,7 @@ export default function OnboardPage() {
                         <motion.div key="manual_import" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-12">
                             <div className="text-center space-y-4">
                                 <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">
-                                    Manual Import — {capturedCount}/3 Validated
+                                    Manual Import — {capturedCount}/{REQUIRED_ANGLES.length} Validated
                                 </Badge>
                                 <h1 className="font-serif text-4xl text-primary">Upload Your Angles</h1>
                                 <p className="text-muted-foreground max-w-lg mx-auto text-sm">
@@ -795,8 +801,8 @@ export default function OnboardPage() {
                                 </p>
                             </div>
 
-                            {/* 3-Zone Upload Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* 5-Zone Upload Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                                 {REQUIRED_ANGLES.map((angle) => {
                                     const cap = captures[angle.key]
                                     const validation = cap.validation
@@ -910,7 +916,7 @@ export default function OnboardPage() {
                                         Missing: {REQUIRED_ANGLES.filter(a => !captures[a.key].validated).map(a => a.label).join(', ')}
                                     </p>
                                     <p className="text-[10px] text-muted-foreground mt-1">
-                                        Upload the remaining angle{3 - capturedCount > 1 ? 's' : ''} to complete your Digital Essence profile.
+                                        Upload the remaining angle{REQUIRED_ANGLES.length - capturedCount > 1 ? 's' : ''} to complete your Digital Essence profile.
                                     </p>
                                 </div>
                             )}
@@ -943,7 +949,7 @@ export default function OnboardPage() {
                             <div className="text-center space-y-4">
                                 <h2 className="font-serif text-4xl text-primary">Profile Complete</h2>
                                 <p className="text-muted-foreground max-w-lg mx-auto">
-                                    All 3 angles captured and validated. Ready to synthesize your Master Identity portrait.
+                                    All {REQUIRED_ANGLES.length} angles captured and validated. Ready to synthesize your Master Identity portrait.
                                 </p>
                             </div>
 
@@ -982,6 +988,8 @@ export default function OnboardPage() {
                             { key: 'front', label: 'Front Profile', icon: '👤' },
                             { key: 'profile', label: 'Side Profile', icon: '👥' },
                             { key: 'three_quarter', label: '¾ View', icon: '🎭' },
+                            { key: 'face_front', label: 'Face Front', icon: '😊' },
+                            { key: 'face_side', label: 'Face Side', icon: '🗣️' },
                         ]
                         const tips = [
                             'Sculpting front profile from your selfie data…',
@@ -1004,7 +1012,7 @@ export default function OnboardPage() {
                                 <div className="space-y-2">
                                     <h2 className="font-serif text-3xl text-primary">Synthesizing Identity</h2>
                                     <p className="text-muted-foreground text-xs uppercase tracking-[0.2em]">
-                                        Generating 3 master portraits from your multi-angle data
+                                        Generating {REQUIRED_ANGLES.length} master portraits from your multi-angle data
                                     </p>
                                 </div>
 

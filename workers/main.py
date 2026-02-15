@@ -604,7 +604,7 @@ async def handle_save_identity_view(request: SaveIdentityViewRequest):
         ).eq("status", "validated").execute()
 
         collected = [v["angle"] for v in views.data] if views.data else []
-        required = {"front", "profile", "three_quarter"}
+        required = {"front", "profile", "three_quarter", "face_front", "face_side"}
         missing = list(required - set(collected))
 
         return {

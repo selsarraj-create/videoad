@@ -312,20 +312,22 @@ POSE_ANGLE_PROMPT = """You are a computer vision pose angle detector for a fashi
 Analyze this camera frame and determine the person's body angle relative to the camera.
 
 Classify as ONE of:
-- "front" — Person facing camera directly (chest and face visible, symmetrical shoulders)
-- "profile" — Person turned ~90° to camera (one shoulder visible, side of face)
-- "three_quarter" — Person at ~45° angle (both eyes visible but body slightly turned)
+- "front" — Full body, person facing camera directly (chest and face visible, symmetrical shoulders)
+- "profile" — Full body, person turned ~90° to camera (one shoulder visible, side of face)
+- "three_quarter" — Full body, person at ~45° angle (both eyes visible but body slightly turned)
+- "face_front" — Close-up of face only (head and shoulders, facing camera directly)
+- "face_side" — Close-up of face only (head and shoulders, turned ~90° showing side profile)
 - "unknown" — No person detected, or angle is ambiguous
 
 Also evaluate capture quality:
-- Is the FULL BODY visible (head to feet, no cropping)?
-- Are arms away from body (A-pose or arms slightly spread)?
+- Is the FULL BODY visible for body shots, or HEAD AND SHOULDERS for face close-ups?
+- Are arms away from body (A-pose or arms slightly spread) for body shots?
 - Is the person NOT holding a phone or object?
 - Is the silhouette clearly visible against the background?
 
 Return ONLY this JSON (no markdown):
 {
-  "angle": "front|profile|three_quarter|unknown",
+  "angle": "front|profile|three_quarter|face_front|face_side|unknown",
   "confidence": 0.0 to 1.0,
   "full_body_visible": true/false,
   "arms_clear": true/false,
@@ -382,17 +384,20 @@ This image will be used to drape virtual garments onto the person using AI. Fabr
    - NOT holding a phone, bag, or any object?
    - NOT hiding their silhouette (arms crossed, hands in pockets)?
    - Standing in a clear, unobstructed pose?
+   (For face close-ups: head and shoulders clearly visible, face well-lit)
 
 6. **ANGLE CLASSIFICATION** — What angle is this photo taken from?
-   - "front" — facing camera, symmetrical shoulders
-   - "profile" — turned ~90°, one shoulder visible
-   - "three_quarter" — ~45° angle, both eyes but body turned
+   - "front" — Full body, facing camera, symmetrical shoulders
+   - "profile" — Full body, turned ~90°, one shoulder visible
+   - "three_quarter" — Full body, ~45° angle, both eyes but body turned
+   - "face_front" — Close-up of face, head and shoulders, facing camera directly
+   - "face_side" — Close-up of face, head and shoulders, turned ~90° showing side profile
    - "other" — back shot, overhead, etc. (REJECT)
 
 Return ONLY this JSON:
 {
   "suitable": true/false,
-  "angle": "front|profile|three_quarter|other",
+  "angle": "front|profile|three_quarter|face_front|face_side|other",
   "checks": {
     "whole_product": {"passed": true/false, "message": "max 12 words"},
     "texture_clarity": {"passed": true/false, "message": "max 12 words"},
@@ -404,6 +409,7 @@ Return ONLY this JSON:
   "overall_message": "one-line summary, max 15 words"
 }
 
+IMPORTANT: For face close-ups (face_front, face_side), the "whole_product" check should pass if head and shoulders are clearly visible — full body is NOT required.
 "suitable" is true ONLY if ALL checks pass AND angle is not "other"."""
 
 
