@@ -12,22 +12,37 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing identity_id' }, { status: 400 })
         }
 
-        // Get identity
-        const { data: identity, error: fetchErr } = await supabase
-            .from('identities')
-            .select('*')
-            .eq('id', identity_id)
-            .single()
+        // Poll until identity is validated (worker may still be processing)
+        let identity = null
+        for (let attempt = 0; attempt < 15; attempt++) {
+            const { data: row, error: fetchErr } = await supabase
+                .from('identities')
+                .select('*')
+                .eq('id', identity_id)
+                .single()
 
-        if (fetchErr || !identity) {
-            return NextResponse.json({ error: 'Identity not found' }, { status: 404 })
+            if (fetchErr || !row) {
+                return NextResponse.json({ error: 'Identity not found' }, { status: 404 })
+            }
+
+            if (row.status === 'validated') {
+                identity = row
+                break
+            }
+
+            if (row.status === 'failed') {
+                return NextResponse.json({ error: 'Identity validation failed' }, { status: 400 })
+            }
+
+            // Wait 2s before retrying (up to 30s total)
+            await new Promise(resolve => setTimeout(resolve, 2000))
         }
 
-        if (identity.status !== 'validated') {
-            return NextResponse.json({ error: 'Identity not validated yet' }, { status: 400 })
+        if (!identity) {
+            return NextResponse.json({ error: 'Identity validation timed out' }, { status: 408 })
         }
 
-        // Update status
+        // Update status to generating
         await supabase.from('identities').update({ status: 'generating' }).eq('id', identity_id)
 
         // Call worker for master identity generation
@@ -45,6 +60,8 @@ export async function POST(request: Request) {
             } catch (workerError) {
                 console.error('Worker call failed:', workerError)
             }
+        } else {
+            console.error('RAILWAY_WORKER_URL is not set')
         }
 
         return NextResponse.json({ success: true, identity_id })
