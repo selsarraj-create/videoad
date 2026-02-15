@@ -75,17 +75,22 @@ export class MarketplaceBridge {
         const token = await this.getSkimlinksToken();
         if (!token) return [];
 
+        // Fallback: If no query, use category or a generic term to avoid empty results
+        const searchTerm = query || (category && category !== 'All' ? category : 'luxury');
+
         try {
-            console.log(`[Marketplace] Fetching Skimlinks: ${query}`);
+            console.log(`[Marketplace] Fetching Skimlinks: "${searchTerm}" (Original Q: "${query}", Cat: ${category})`);
             const resp = await axios.get('https://api.skimlinks.com/v1/products/search', {
                 params: {
-                    q: query,
+                    q: searchTerm,
                     category: category !== 'All' ? category : undefined,
-                    limit: 10,
+                    limit: 20,
                     publisher_id: this.skimlinksPublisherId
                 },
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+
+            console.log(`[Marketplace] Skimlinks Response: ${resp.data.products?.length || 0} items found`);
 
             return (resp.data.products || []).map((p: any) => ({
                 id: `skim-${p.id}`,
@@ -98,8 +103,8 @@ export class MarketplaceBridge {
                 brand: p.brand,
                 category: p.category
             }));
-        } catch (error) {
-            console.error('[Marketplace] Skimlinks Search Error:', error);
+        } catch (error: any) {
+            console.error('[Marketplace] Skimlinks Search Error:', error.response?.status, error.response?.data || error.message);
             return [];
         }
     }
@@ -122,18 +127,23 @@ export class MarketplaceBridge {
         const token = await this.getEbayToken();
         if (!token) return [];
 
+        // Fallback for eBay as well
+        const searchTerm = query || (category && category !== 'All' ? category : 'vintage luxury');
+
         try {
-            console.log(`[Marketplace] Fetching eBay: ${query}`);
+            console.log(`[Marketplace] Fetching eBay: "${searchTerm}"`);
             const ebayCatId = this.getEbayCategoryId(category);
 
             const resp = await axios.get('https://api.ebay.com/buy/browse/v1/item_summary/search', {
                 params: {
-                    q: query,
-                    limit: 10,
+                    q: searchTerm,
+                    limit: 20,
                     filter: ebayCatId ? `categoryIds:{${ebayCatId}}` : undefined,
                 },
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+
+            console.log(`[Marketplace] eBay Response: ${resp.data.itemSummaries?.length || 0} items found`);
 
             return (resp.data.itemSummaries || []).map((item: any) => ({
                 id: `ebay-${item.itemId}`,
@@ -146,8 +156,8 @@ export class MarketplaceBridge {
                 brand: item.brand,
                 authenticityGuaranteed: item.topRatedListing || false
             }));
-        } catch (error) {
-            console.error('[Marketplace] eBay Search Error:', error);
+        } catch (error: any) {
+            console.error('[Marketplace] eBay Search Error:', error.response?.status, error.response?.data || error.message);
             return [];
         }
     }
