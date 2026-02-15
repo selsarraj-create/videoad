@@ -36,15 +36,13 @@ def generate_on_model(garment_image_url: str, person_image_url: str = None, opti
     opts = options or {}
 
     # Build payload matching Claid's expected schema:
-    # - input.clothing must be a LIST of objects with "url"
-    # - input.model must have a "url" string
+    # - input.clothing must be a LIST of URL strings
+    # - input.model must be a URL string
     # - output should specify format only (no quality)
     # - options is REQUIRED
     payload = {
         "input": {
-            "clothing": [
-                {"url": garment_image_url}
-            ]
+            "clothing": [garment_image_url]
         },
         "output": {
             "format": "png"
@@ -54,7 +52,7 @@ def generate_on_model(garment_image_url: str, person_image_url: str = None, opti
 
     # Add person reference image if provided
     if person_image_url:
-        payload["input"]["model"] = {"url": person_image_url}
+        payload["input"]["model"] = person_image_url
 
     # Optional: specify model characteristics (only if no person reference)
     if not person_image_url:
