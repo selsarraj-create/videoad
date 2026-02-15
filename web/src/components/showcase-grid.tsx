@@ -6,6 +6,7 @@ import { Heart, RefreshCw, User, ShoppingBag, Sparkles, ShieldCheck } from 'luci
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
 import { createClient } from '@/lib/supabase/client'
+import { generateCompositeId, appendTrackingToUrl } from '@/lib/viral-link-generator'
 
 interface ShowcaseItem {
     id: string
@@ -15,6 +16,8 @@ interface ShowcaseItem {
     garment_metadata: any[]
     ai_labeled: boolean
     created_at: string
+    allow_remix: boolean
+    original_creator_id?: string | null
 }
 
 export function ShowcaseGrid({ onRemix }: { onRemix?: (data: any) => void }) {
@@ -100,14 +103,36 @@ export function ShowcaseGrid({ onRemix }: { onRemix?: (data: any) => void }) {
                                     </div>
                                 </div>
 
-                                {/* Remix Button */}
-                                <Button
-                                    onClick={() => onRemix?.(item)}
-                                    className="w-full h-10 bg-white text-black hover:bg-foreground hover:text-white border-0 rounded-none text-[10px] uppercase tracking-[0.2em] font-bold"
-                                >
-                                    <RefreshCw className="w-3.5 h-3.5 mr-2" />
-                                    Remix Look
-                                </Button>
+                                {/* Action Buttons */}
+                                <div className="flex flex-col gap-2">
+                                    {item.allow_remix !== false && (
+                                        <Button
+                                            onClick={() => onRemix?.(item)}
+                                            className="w-full h-10 bg-white text-black hover:bg-foreground hover:text-white border-0 rounded-none text-[10px] uppercase tracking-[0.2em] font-bold"
+                                        >
+                                            <RefreshCw className="w-3.5 h-3.5 mr-2" />
+                                            Remix Look
+                                        </Button>
+                                    )}
+
+                                    {item.garment_metadata?.[0]?.affiliateUrl && (
+                                        <Button
+                                            onClick={() => {
+                                                const compositeId = generateCompositeId({
+                                                    userId: item.user_id,
+                                                    originalCreatorId: item.original_creator_id
+                                                });
+                                                const source = item.garment_metadata[0].id?.startsWith('skim') ? 'skimlinks' : 'ebay';
+                                                const viralUrl = appendTrackingToUrl(item.garment_metadata[0].affiliateUrl, compositeId, source);
+                                                window.open(viralUrl, '_blank');
+                                            }}
+                                            className="w-full h-10 bg-primary text-white hover:bg-primary/90 border-0 rounded-none text-[10px] uppercase tracking-[0.2em] font-bold shadow-xl"
+                                        >
+                                            <ShoppingBag className="w-3.5 h-3.5 mr-2" />
+                                            Shop This Look
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Compliance Badge */}

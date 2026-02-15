@@ -8,15 +8,17 @@
         "build": "tsc"
     },
     "dependencies": {
-        "sharp": "^0.33.2",
-        "fastify": "^4.26.1",
+        "@supabase/supabase-js": "^2.39.7",
+        "@types/stripe": "^8.0.416",
         "axios": "^1.6.7",
         "dotenv": "^16.4.5",
-        "@supabase/supabase-js": "^2.39.7"
+        "fastify": "^4.26.1",
+        "sharp": "^0.33.2",
+        "stripe": "^20.3.1"
     },
     "devDependencies": {
+        "@types/node": "^20.11.19",
         "ts-node": "^10.9.2",
-        "typescript": "^5.3.3",
-        "@types/node": "^20.11.19"
+        "typescript": "^5.3.3"
     }
 }

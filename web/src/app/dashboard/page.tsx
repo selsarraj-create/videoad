@@ -128,6 +128,12 @@ export default function StudioPage() {
     const [projectId, setProjectId] = useState<string | null>(null)
     const [user, setUser] = useState<any>(null)
 
+    // Viral Showcase state
+    const [originalCreatorId, setOriginalCreatorId] = useState<string | null>(null)
+    const [originalShowcaseId, setOriginalShowcaseId] = useState<string | null>(null)
+    const [remixEnabled, setRemixEnabled] = useState(true)
+    const [adoptionMetrics, setAdoptionMetrics] = useState({ remixCount: 0, bonusEarned: 0 })
+
 
     const garmentFileRef = useRef<HTMLInputElement>(null)
     const supabase = createClient()
@@ -194,6 +200,11 @@ export default function StudioPage() {
                     return { date: dateStr, amount: dayTotal || Math.random() * 5 } // Random for demo if empty
                 })
                 setRevenueData(last7Days)
+
+                // Fetch Adoption Metrics
+                const { count: remixes } = await supabase.from('public_showcase').select('*', { count: 'exact', head: true }).eq('original_creator_id', user?.id)
+                const bonusTotal = ledgerData.filter(l => l.metadata?.role === 'original_creator').reduce((sum, item) => sum + Number(item.user_share), 0)
+                setAdoptionMetrics({ remixCount: remixes || 0, bonusEarned: bonusTotal })
             }
 
             // Fetch Today's Trend
@@ -549,6 +560,8 @@ export default function StudioPage() {
                                         setGarmentImageUrl(item.garment_metadata[0].imageUrl)
                                         setGarmentPreview(item.garment_metadata[0].imageUrl)
                                         if (item.persona_id) setSelectedPersonaId(item.persona_id)
+                                        setOriginalCreatorId(item.user_id)
+                                        setOriginalShowcaseId(item.id)
                                         setActiveTab('try-on')
                                     }
                                 }} />
@@ -797,27 +810,25 @@ export default function StudioPage() {
                             /* ---- REVENUE TAB ---- */
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
                                 {/* Bento KPI Cards */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-6 bg-white border border-nimbus space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Total Earnings</p>
-                                            <DollarSign className="w-3 h-3 text-primary" />
-                                        </div>
-                                        <p className="text-2xl font-serif">${stats.total.toFixed(2)}</p>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
+                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Total Payouts</span>
+                                        <span className="text-2xl font-serif">${stats.total.toFixed(2)}</span>
                                     </div>
-                                    <div className="p-6 bg-white border border-nimbus space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Pending</p>
-                                            <Clock className="w-3 h-3 text-muted-foreground" />
-                                        </div>
-                                        <p className="text-2xl font-serif text-muted-foreground">${stats.pending.toFixed(2)}</p>
+                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
+                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Look Adoption</span>
+                                        <span className="text-2xl font-serif">{adoptionMetrics.remixCount} Remixes</span>
                                     </div>
-                                    <div className="p-6 bg-white border border-nimbus col-span-2 space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Growth Curve</p>
-                                            <TrendingUp className="w-3 h-3 text-primary" />
+                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
+                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Passive Bonus</span>
+                                        <span className="text-2xl font-serif">${adoptionMetrics.bonusEarned.toFixed(2)}</span>
+                                    </div>
+                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
+                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Status</span>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <div className="w-2 h-2 bg-green-500 rounded-full" />
+                                            <span className="text-[10px] uppercase tracking-widest font-bold">Live</span>
                                         </div>
-                                        <RevenueChart data={revenueData} />
                                     </div>
                                 </div>
 
@@ -1047,6 +1058,18 @@ export default function StudioPage() {
 
                                                 {job.status === 'completed' && job.output_url && (
                                                     <div className="mt-4 pt-4 border-t border-nimbus/20 space-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="flex items-center justify-between p-2 bg-primary/5 border border-primary/20">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[8px] font-bold uppercase tracking-widest text-primary">Enable Remixing</span>
+                                                                <span className="text-[7px] text-muted-foreground uppercase leading-tight">Earn 5% bonus on adoption</span>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setRemixEnabled(!remixEnabled)}
+                                                                className={`w-8 h-4 rounded-full transition-colors relative ${remixEnabled ? 'bg-primary' : 'bg-nimbus'}`}
+                                                            >
+                                                                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${remixEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                                                            </button>
+                                                        </div>
                                                         <Button variant="ghost" size="sm"
                                                             className="w-full h-8 text-[10px] uppercase tracking-widest hover:bg-nimbus/20 rounded-none border border-nimbus"
                                                             onClick={async () => {
@@ -1059,7 +1082,10 @@ export default function StudioPage() {
                                                                             title: selectedMediaItem?.label || 'Designer Piece',
                                                                             imageUrl: selectedMediaItem?.garment_image_url || selectedMediaItem?.image_url
                                                                         }],
-                                                                        ai_labeled: true
+                                                                        ai_labeled: true,
+                                                                        allow_remix: remixEnabled,
+                                                                        original_creator_id: originalCreatorId,
+                                                                        original_showcase_id: originalShowcaseId
                                                                     });
                                                                     if (!error) alert("Published to Showcase!");
                                                                 }
