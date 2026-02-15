@@ -966,6 +966,31 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
             except Exception as face_err:
                 print(f"  Could not fetch face angles (continuing): {str(face_err)}")
 
+        def _find_video_url_deep(obj, depth=0):
+            """Recursively search for a video URL in a nested response."""
+            if depth > 5:
+                return None
+            if isinstance(obj, str):
+                if any(ext in obj.lower() for ext in (".mp4", ".webm", ".mov")) and obj.startswith("http"):
+                    return obj
+            elif isinstance(obj, dict):
+                # Priority keys
+                for key in ("videoUrl", "url", "video_url", "resultUrl", "resource", "output_url"):
+                    val = obj.get(key)
+                    if isinstance(val, str) and val.startswith("http") and any(ext in val.lower() for ext in (".mp4", ".webm", ".mov")):
+                        return val
+                # Recurse
+                for val in obj.values():
+                    found = _find_video_url_deep(val, depth + 1)
+                    if found:
+                        return found
+            elif isinstance(obj, list):
+                for item in obj:
+                    found = _find_video_url_deep(item, depth + 1)
+                    if found:
+                        return found
+            return None
+
         preset = get_preset(preset_id)
         hidden_prompt = preset["prompt"]
         print(f"Stage 2: Calling Kie.ai Veo with {len(veo_ingredients)} ingredient(s)")
@@ -1022,9 +1047,20 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
                 video_url = None
                 if results and isinstance(results, list):
                     first = results[0] if isinstance(results[0], dict) else {}
-                    video_url = first.get("url") or first.get("videoUrl") or first.get("video_url")
+                    video_url = (
+                        first.get("url") or first.get("videoUrl") or first.get("video_url")
+                    )
+                    # Kie sometimes nests in resource.resource
+                    if not video_url and isinstance(first.get("resource"), dict):
+                        video_url = first["resource"].get("resource") or first["resource"].get("url")
                 if not video_url:
-                    video_url = poll_data.get("videoUrl") or poll_data.get("url") or poll_data.get("video_url")
+                    video_url = (
+                        poll_data.get("videoUrl") or poll_data.get("url")
+                        or poll_data.get("video_url") or poll_data.get("resultUrl")
+                    )
+                # Deep fallback: search entire response for any .mp4/.webm URL
+                if not video_url:
+                    video_url = _find_video_url_deep(status_data)
 
                 if not video_url:
                     raise Exception(f"Video completed but no URL: {status_data}")

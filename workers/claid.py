@@ -25,18 +25,24 @@ def _extract_output_url(data: dict) -> str | None:
                     val = obj.get(key)
                     if val and isinstance(val, str) and val.startswith("http"):
                         return val
+    # Check data.output nesting (seen in DONE responses)
+    data_inner = data.get("data", data)
+    if isinstance(data_inner, dict) and data_inner is not data:
+        found = _extract_output_url(data_inner)
+        if found:
+            return found
+    # Check output.tmp_url / output.url
+    output = data.get("output")
+    if isinstance(output, dict):
+        for key in ("tmp_url", "url", "image_url"):
+            val = output.get(key)
+            if val and isinstance(val, str) and val.startswith("http"):
+                return val
     # Fallback: try common top-level paths
-    for key in ("output_url", "url", "image_url", "tmp_url"):
+    for key in ("output_url", "url", "image_url", "tmp_url", "result_url"):
         val = data.get(key)
         if val and isinstance(val, str) and val.startswith("http"):
             return val
-    # Try nested output dict
-    output = data.get("output")
-    if isinstance(output, dict):
-        for key in ("url", "image_url", "tmp_url"):
-            val = output.get(key)
-            if val and isinstance(val, str):
-                return val
     return None
 
 
@@ -62,6 +68,19 @@ def generate_on_model(garment_image_url: str, person_image_url: str = None, opti
     }
 
     opts = options or {}
+
+    # Validate URLs — Claid returns 422 for non-public URLs
+    def _validate_url(url: str, label: str):
+        if not url or not isinstance(url, str):
+            raise Exception(f"Claid {label} URL is empty or invalid")
+        if not url.startswith("https://"):
+            raise Exception(
+                f"Claid {label} URL must be a public HTTPS URL, got: {url[:80]}"
+            )
+
+    _validate_url(garment_image_url, "garment")
+    if person_image_url:
+        _validate_url(person_image_url, "person/model")
 
     # Build payload matching Claid's expected schema:
     # - input.clothing must be a LIST of URL strings
