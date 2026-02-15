@@ -35,31 +35,36 @@ def generate_on_model(garment_image_url: str, person_image_url: str = None, opti
 
     opts = options or {}
 
+    # Build payload matching Claid's expected schema:
+    # - input.clothing must be a LIST of objects with "url"
+    # - input.model must have a "url" string
+    # - output should specify format only (no quality)
+    # - options is REQUIRED
     payload = {
         "input": {
-            "clothing": {
-                "url": garment_image_url
-            }
+            "clothing": [
+                {"url": garment_image_url}
+            ]
         },
         "output": {
-            "format": "jpeg",
-            "quality": 90
-        }
+            "format": "png"
+        },
+        "options": {}
     }
 
     # Add person reference image if provided
     if person_image_url:
-        payload["input"]["model"] = payload["input"].get("model", {})
-        payload["input"]["model"]["url"] = person_image_url
+        payload["input"]["model"] = {"url": person_image_url}
 
     # Optional: specify model characteristics (only if no person reference)
     if not person_image_url:
+        model_opts = {}
         if opts.get("model_gender"):
-            payload["input"]["model"] = payload["input"].get("model", {})
-            payload["input"]["model"]["gender"] = opts["model_gender"]
+            model_opts["gender"] = opts["model_gender"]
         if opts.get("model_ethnicity"):
-            payload["input"]["model"] = payload["input"].get("model", {})
-            payload["input"]["model"]["ethnicity"] = opts["model_ethnicity"]
+            model_opts["ethnicity"] = opts["model_ethnicity"]
+        if model_opts:
+            payload["input"]["model"] = model_opts
 
     url = f"{CLAID_API_BASE}/image/ai-fashion-models"
 
