@@ -1,0 +1,44 @@
+# VideoAds Worker — Horizontal Pod Autoscaling Manifest
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# This manifest defines autoscaling rules for the Railway worker service.
+# Railway Pro Plan: configure via Settings → Scaling or railway.json.
+# The /autoscale endpoint (workers/autoscaler.py) exposes queue-depth
+# metrics for Railway's custom metrics webhook.
+
+service: videoads-worker
+provider: railway
+
+scaling:
+  # Each replica runs one queue-consumer thread.
+  # Min 1 keeps the consumer always alive; max 8 prevents runaway cost.
+  min_replicas: 1
+  max_replicas: 8
+
+  # Scale based on Redis queue depth, not CPU/RAM.
+  # Target: ≤5 pending jobs per replica.
+  # When queue_depth / current_replicas > 5, add a replica.
+  metric: redis_queue_depth
+  redis_key: "taskqueue:jobs"
+  target_value_per_replica: 5
+
+  # Cooldowns prevent flapping.
+  # Scale UP aggressively (30s) — users are waiting.
+  # Scale DOWN conservatively (120s) — avoid killing in-flight work.
+  scale_up_cooldown: 30s
+  scale_down_cooldown: 120s
+
+  # Scaling formula:
+  #   desired = ceil(queue_depth / target_value_per_replica)
+  #   desired = clamp(desired, min_replicas, max_replicas)
+
+health_check:
+  path: /health
+  interval: 10s
+  timeout: 5s
+  healthy_threshold: 2
+  unhealthy_threshold: 3
+
+resources:
+  # Per-replica resource limits (Railway Pro)
+  memory: 2Gi
+  cpu: 1.0

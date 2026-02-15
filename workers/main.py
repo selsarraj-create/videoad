@@ -17,6 +17,7 @@ from . import queue as task_queue
 from . import rate_limiter
 from . import fallback_limiter
 from . import metrics
+from . import autoscaler
 
 load_dotenv()
 
@@ -26,7 +27,7 @@ _supabase_client: Client | None = None
 def get_supabase() -> Client:
     global _supabase_client
     if _supabase_client is None:
-        url = os.environ.get("SUPABASE_URL")
+        url = os.environ.get("SUPABASE_POOLER_URL") or os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
         if not url or not key:
             raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
@@ -175,6 +176,13 @@ def metrics_endpoint():
             pass
     metrics.set_gauge("active_fallback_jobs", fallback_limiter.get_active_jobs())
     return metrics.get_snapshot()
+
+
+@app.get("/autoscale")
+def autoscale_endpoint():
+    """Return desired replica count based on queue depth. Polled by Railway HPA."""
+    r = get_redis()
+    return autoscaler.get_scaling_decision(r)
 
 
 @app.get("/queue/status")

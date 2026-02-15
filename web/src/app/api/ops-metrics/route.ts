@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/db"
 
 const WORKER_URL = process.env.RAILWAY_WORKER_URL || ""
 const WORKER_SECRET = process.env.WORKER_SHARED_SECRET || ""
@@ -13,6 +13,8 @@ const MODEL_COSTS: Record<string, number> = {
     "kling-2.0": 0.06,
     default: 0.05,
 }
+
+export const revalidate = 10 // ISR: revalidate every 10s
 
 export async function GET() {
     try {
@@ -30,8 +32,8 @@ export async function GET() {
             }
         }
 
-        // 2. Enrich with Supabase job history
-        const supabase = await createClient()
+        // 2. Enrich with Supabase job history (uses pooled admin client)
+        const supabase = supabaseAdmin
 
         // Last 24h jobs
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
