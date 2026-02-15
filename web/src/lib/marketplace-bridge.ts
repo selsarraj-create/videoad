@@ -48,6 +48,10 @@ export class MarketplaceBridge {
     }
 
     private async getEbayToken(): Promise<string | null> {
+        if (!this.ebayClientId || !this.ebayClientSecret) {
+            console.log('[Marketplace] eBay credentials missing, skipping auth.');
+            return null;
+        }
         if (this.ebayToken) return this.ebayToken;
         try {
             const auth = Buffer.from(`${this.ebayClientId}:${this.ebayClientSecret}`).toString('base64');
@@ -79,8 +83,9 @@ export class MarketplaceBridge {
         const searchTerm = query || (category && category !== 'All' ? category : 'luxury');
 
         try {
-            console.log(`[Marketplace] Fetching Skimlinks: "${searchTerm}" (Original Q: "${query}", Cat: ${category})`);
-            const resp = await axios.get('https://api.skimlinks.com/v1/products/search', {
+            console.log(`[Marketplace] Fetching Skimlinks V4: "${searchTerm}" (Original Q: "${query}", Cat: ${category})`);
+            // Migrated to V4 Publisher Search endpoint
+            const resp = await axios.get('https://api.skimlinks.com/v4/publisher/products/search', {
                 params: {
                     q: searchTerm,
                     category: category !== 'All' ? category : undefined,
@@ -163,6 +168,48 @@ export class MarketplaceBridge {
     }
 
     /**
+     * getFallbackItems: Premium mock data for empty/failed states
+     */
+    private getFallbackItems(): UnifiedGarment[] {
+        return [
+            {
+                id: 'fallback-1',
+                source: 'skimlinks',
+                title: 'Loro Piana - Open Walk Suede Boots',
+                price: '950.00',
+                currency: 'USD',
+                imageUrl: 'https://images.clothes.com/mock/loropiana-boots.jpg',
+                affiliateUrl: '#',
+                brand: 'Loro Piana',
+                category: 'Shoes'
+            },
+            {
+                id: 'fallback-2',
+                source: 'ebay',
+                title: 'Vintage Hermès Birkin 35 - Gold Hardware',
+                price: '12500.00',
+                currency: 'USD',
+                imageUrl: 'https://images.clothes.com/mock/hermes-birkin.jpg',
+                affiliateUrl: '#',
+                brand: 'Hermès',
+                category: 'Bags',
+                authenticityGuaranteed: true
+            },
+            {
+                id: 'fallback-3',
+                source: 'skimlinks',
+                title: 'Brunello Cucinelli - Double-Breasted Cashmere Coat',
+                price: '4800.00',
+                currency: 'USD',
+                imageUrl: 'https://images.clothes.com/mock/cucinelli-coat.jpg',
+                affiliateUrl: '#',
+                brand: 'Brunello Cucinelli',
+                category: 'Outerwear'
+            }
+        ];
+    }
+
+    /**
      * searchAll: Primary entry point with user-scoped tracking
      */
     async searchAll(query: string, userId: string, category?: string, brand?: string): Promise<UnifiedGarment[]> {
@@ -172,6 +219,12 @@ export class MarketplaceBridge {
         ]);
 
         let combined = [...skimlinks, ...ebay];
+
+        // If both fail, provide premium fallbacks
+        if (combined.length === 0) {
+            console.log('[Marketplace] APIs offline/empty. Loading premium fallbacks.');
+            combined = this.getFallbackItems();
+        }
 
         if (brand && brand !== 'All') {
             combined = combined.filter(i => i.brand?.toLowerCase() === brand.toLowerCase());
