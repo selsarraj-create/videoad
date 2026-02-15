@@ -411,29 +411,78 @@ class GenerateIdentityRequest(BaseModel):
     selfie_url: str
 
 def process_generate_identity(identity_id: str, selfie_url: str):
-    """Generate a 4K master identity portrait using Gemini."""
-    print(f"Generating master identity for {identity_id}")
+    """Generate 3 master identity portraits (front, profile, 3/4) using Gemini."""
+    print(f"Generating master identities for {identity_id}")
     try:
         supabase.table("identities").update({"status": "generating"}).eq("id", identity_id).execute()
 
-        result = gemini.generate_master_identity(selfie_url)
-        image_bytes = result["image_bytes"]
-        mime_type = result["mime_type"]
-        ext = "png" if "png" in mime_type else "jpeg"
+        # Fetch all validated views for this identity
+        views_resp = supabase.table("identity_views").select("*").eq(
+            "identity_id", identity_id
+        ).eq("status", "validated").execute()
 
-        # Upload to Supabase storage
-        file_path = f"identities/{identity_id}/master.{ext}"
-        supabase.storage.from_("raw_assets").upload(
-            file_path, image_bytes,
-            file_options={"content-type": mime_type, "upsert": "true"}
-        )
-        public_url = supabase.storage.from_("raw_assets").get_public_url(file_path)
+        views = views_resp.data if views_resp.data else []
+        print(f"Found {len(views)} validated views for identity {identity_id}")
+
+        # Fallback: if no views found, use the selfie_url as front view
+        if not views:
+            views = [{"angle": "front", "image_url": selfie_url, "id": None}]
+
+        master_urls = {}
+        front_master_url = None
+
+        for view in views:
+            angle = view.get("angle", "front")
+            image_url = view.get("image_url")
+            view_id = view.get("id")
+
+            if not image_url:
+                print(f"Skipping view {angle}: no image_url")
+                continue
+
+            print(f"Generating master for angle: {angle}")
+
+            try:
+                result = gemini.generate_master_identity(image_url)
+                image_bytes = result["image_bytes"]
+                mime_type = result["mime_type"]
+                ext = "png" if "png" in mime_type else "jpeg"
+
+                # Upload to Supabase storage with angle in filename
+                file_path = f"identities/{identity_id}/master_{angle}.{ext}"
+                supabase.storage.from_("raw_assets").upload(
+                    file_path, image_bytes,
+                    file_options={"content-type": mime_type, "upsert": "true"}
+                )
+                public_url = supabase.storage.from_("raw_assets").get_public_url(file_path)
+                master_urls[angle] = public_url
+
+                # Update identity_views with the master URL
+                if view_id:
+                    supabase.table("identity_views").update({
+                        "master_url": public_url
+                    }).eq("id", view_id).execute()
+
+                if angle == "front":
+                    front_master_url = public_url
+
+                print(f"Master for {angle} ready: {public_url[:80]}")
+
+            except Exception as angle_err:
+                print(f"Master generation failed for {angle}: {str(angle_err)}")
+                # Continue with other angles even if one fails
+
+        if not master_urls:
+            raise Exception("No masters were generated successfully")
+
+        # Use front master as the primary, or first available
+        primary_url = front_master_url or next(iter(master_urls.values()))
 
         supabase.table("identities").update({
-            "master_identity_url": public_url,
+            "master_identity_url": primary_url,
             "status": "ready"
         }).eq("id", identity_id).execute()
-        print(f"Master identity ready: {public_url[:80]}")
+        print(f"All masters ready ({len(master_urls)} angles): {list(master_urls.keys())}")
 
     except Exception as e:
         print(f"Identity generation failed for {identity_id}: {str(e)}")

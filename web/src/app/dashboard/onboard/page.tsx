@@ -412,9 +412,9 @@ export default function OnboardPage() {
                 throw new Error(data.error || 'Generation failed')
             }
 
-            // Poll for completion (up to 3 minutes)
+            // Poll for completion (up to 8 minutes — generates 3 angle masters)
             let pollCount = 0
-            const maxPolls = 60 // 60 × 3s = 3 min
+            const maxPolls = 160 // 160 × 3s = 8 min
             const pollInterval = setInterval(async () => {
                 pollCount++
                 if (pollCount > maxPolls) {
