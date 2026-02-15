@@ -10,6 +10,7 @@ import {
     Volume2, VolumeX
 } from "lucide-react"
 import { useDirectorVoice } from "@/hooks/useDirectorVoice"
+import { SpeechQueue, playShutterClick } from "@/lib/speech-utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -163,6 +164,11 @@ export default function OnboardPage() {
         front: null, profile: null, three_quarter: null, face_front: null, face_side: null
     })
 
+    // Voice coaching refs (direct queue access for detection loop)
+    const voiceQueueRef = useRef<SpeechQueue | null>(null)
+    const lastCoachTimeRef = useRef<number>(0)
+    const countdownActiveRef = useRef<boolean>(false)
+
     const supabase = createClient()
     const searchParams = useSearchParams()
     const personaName = searchParams.get('name') || 'Default'
@@ -183,6 +189,20 @@ export default function OnboardPage() {
     // Persist mute preference
     useEffect(() => {
         localStorage.setItem('directorVoiceMuted', String(voiceMuted))
+    }, [voiceMuted])
+
+    // Initialize direct voice queue for detection loop coaching
+    useEffect(() => {
+        if (!userHasInteracted) return
+        if (voiceQueueRef.current) return
+        voiceQueueRef.current = new SpeechQueue({ muted: voiceMuted })
+    }, [userHasInteracted, voiceMuted])
+
+    // Sync mute state to direct voice queue
+    useEffect(() => {
+        if (voiceQueueRef.current) {
+            voiceQueueRef.current.muted = voiceMuted
+        }
     }, [voiceMuted])
 
     // ── Camera Management ─────────────────────────────────────────────────
@@ -240,7 +260,7 @@ export default function OnboardPage() {
     // ── AI-Director: Pose Detection Loop ──────────────────────────────────
 
     const detectPose = useCallback(async () => {
-        if (detecting || autoCapturing) return
+        if (detecting || autoCapturing || countdownActiveRef.current) return
         const frame = captureFrame(0.7, 1024)
         if (!frame) return
 
@@ -271,29 +291,65 @@ export default function OnboardPage() {
                     coaching_tip: angleResult.overall_message || 'Adjusting...',
                 })
 
-                // Auto-shutter: capture when correct angle detected with high confidence
                 const targetAngle = currentAngle.key
+                const vq = voiceQueueRef.current
+                const now = Date.now()
+
                 if (
                     angleResult.suitable &&
                     angleResult.angle === targetAngle &&
                     !captures[targetAngle].validated
                 ) {
+                    // ── Correct angle detected → spoken countdown then capture ──
+                    countdownActiveRef.current = true
                     setAutoCapturing(true)
-                    // Brief flash, then capture
-                    setTimeout(async () => {
-                        const hiRes = captureFrame(0.95, 2560)
-                        if (hiRes) {
-                            await saveAngleCapture(targetAngle, hiRes, 'camera', angleResult)
-                        }
-                        setAutoCapturing(false)
-                    }, 500)
+
+                    if (vq && !voiceMuted) {
+                        vq.speak('countdown', () => {
+                            // Countdown finished → capture
+                            const hiRes = captureFrame(0.95, 2560)
+                            if (hiRes) {
+                                playShutterClick()
+                                saveAngleCapture(targetAngle, hiRes, 'camera', angleResult)
+                            }
+                            setAutoCapturing(false)
+                            countdownActiveRef.current = false
+                        })
+                    } else {
+                        // Muted fallback — capture after brief delay
+                        setTimeout(async () => {
+                            const hiRes = captureFrame(0.95, 2560)
+                            if (hiRes) {
+                                playShutterClick()
+                                await saveAngleCapture(targetAngle, hiRes, 'camera', angleResult)
+                            }
+                            setAutoCapturing(false)
+                            countdownActiveRef.current = false
+                        }, 500)
+                    }
+                } else if (
+                    !captures[targetAngle].validated &&
+                    vq && !voiceMuted &&
+                    now - lastCoachTimeRef.current > 10000
+                ) {
+                    // ── Wrong position → speak coaching (throttled to 10s) ──
+                    lastCoachTimeRef.current = now
+
+                    if (!angleResult.suitable && !(angleResult.checks?.whole_product?.passed)) {
+                        vq.speak('coach_body')
+                    } else if (!angleResult.suitable && !(angleResult.checks?.pose?.passed)) {
+                        vq.speak('coach_silhouette')
+                    } else if (angleResult.angle !== targetAngle) {
+                        // Speak angle-specific coaching
+                        vq.speak(`coach_${targetAngle}`)
+                    }
                 }
             }
         } catch (e) {
             console.error('Detection error:', e)
         }
         setDetecting(false)
-    }, [detecting, autoCapturing, captureFrame, currentAngle, captures])
+    }, [detecting, autoCapturing, captureFrame, currentAngle, captures, voiceMuted])
 
     // Start detection loop
     useEffect(() => {
@@ -518,6 +574,9 @@ export default function OnboardPage() {
     const handleStartOver = () => {
         stopCamera()
         resetVoice()
+        voiceQueueRef.current?.cancel()
+        lastCoachTimeRef.current = 0
+        countdownActiveRef.current = false
         setStep('guide')
         setMode(null)
         setIdentity(null)

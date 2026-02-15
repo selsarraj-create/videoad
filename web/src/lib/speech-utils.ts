@@ -80,9 +80,29 @@ export const DIRECTOR_LINES: Record<string, string> = {
     captured_face_side:
         'Captured.',
 
-    // Coaching
+    // Coaching — wrong position
     hold_steady:
         'Hold position. Scanning.',
+    wrong_angle:
+        'Wrong angle. Adjust your position.',
+    coach_front:
+        'Face the lens directly. Square your shoulders.',
+    coach_profile:
+        'Turn further. I need a full ninety-degree profile.',
+    coach_three_quarter:
+        'Adjust. Forty-five degrees to the lens. Both eyes must be visible.',
+    coach_face_front:
+        'Step closer. Head and shoulders only. Eyes forward.',
+    coach_face_side:
+        'Turn your head fully to the side. Hold the profile.',
+    coach_body:
+        'Full body must be visible. Step back.',
+    coach_silhouette:
+        'Arms away from the body. Clear the silhouette.',
+
+    // Countdown (used before auto-capture)
+    countdown:
+        'Three. Two. One.',
 
     // Completion
     all_complete:
