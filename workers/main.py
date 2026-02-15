@@ -27,7 +27,7 @@ _supabase_client: Client | None = None
 def get_supabase() -> Client:
     global _supabase_client
     if _supabase_client is None:
-        url = os.environ.get("SUPABASE_POOLER_URL") or os.environ.get("SUPABASE_URL")
+        url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
         if not url or not key:
             raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
