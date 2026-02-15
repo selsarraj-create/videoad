@@ -104,14 +104,14 @@ export class MarketplaceBridge {
             return (resp.data.offers || []).map((o: any) => ({
                 id: `skim-${o.id}`,
                 source: 'skimlinks',
-                title: o.offer_name || o.title || 'Designer Piece',
+                title: o.description || o.offer_name || o.title || 'Designer Piece',
                 price: o.price || '0.00',
                 currency: o.currency || 'USD',
-                // Check multiple possible image fields
-                imageUrl: o.image_url || o.image || o.merchant_details?.logo || '',
-                affiliateUrl: `${o.offer_url}${o.offer_url?.includes('?') ? '&' : '?'}xcust=${userId}`,
-                brand: o.merchant_details?.name || 'Retailer',
-                category: category // Pass through filter category
+                // Correct path: merchant_details.metadata.logo (verified from live response)
+                imageUrl: o.image_url || o.image || o.merchant_details?.metadata?.logo || o.merchant_details?.logo || '',
+                affiliateUrl: `${o.url || o.offer_url || '#'}${(o.url || o.offer_url || '').includes('?') ? '&' : '?'}xcust=${userId}`,
+                brand: o.merchant_details?.name || o.merchant_details?.domain || 'Retailer',
+                category: category
             }));
         } catch (error: any) {
             console.error('[Marketplace] Skimlinks V4 Search Error:', error.response?.status, error.response?.data || error.message);
