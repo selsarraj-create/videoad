@@ -15,6 +15,7 @@ from .presets import get_prompt, get_preset
 from .auth_middleware import WorkerAuthMiddleware
 from . import queue as task_queue
 from . import rate_limiter
+from . import fallback_limiter
 
 load_dotenv()
 
@@ -57,10 +58,10 @@ def get_redis():
                 _redis_client = None
     return _redis_client
 
-# ── Queue consumer thread ─────────────────────────────────────────────────────
+# ── Queue consumer thread (reliable) ──────────────────────────────────────────
 def _queue_consumer_loop():
-    """Background thread that continuously dequeues and processes tasks."""
-    print("Queue consumer thread started")
+    """Background thread: dequeues via BRPOPLPUSH, acks on success, nacks on failure."""
+    print("Queue consumer thread started (reliable mode)")
     while True:
         try:
             r = get_redis()
@@ -68,6 +69,7 @@ def _queue_consumer_loop():
                 time.sleep(5)
                 continue
 
+            # Atomic dequeue → processing list
             job_id = task_queue.dequeue_task(r, timeout=5)
             if job_id is None:
                 continue  # timeout — loop again
@@ -75,40 +77,49 @@ def _queue_consumer_loop():
             meta = task_queue.get_task_meta(r, job_id)
             if not meta:
                 print(f"Queue consumer: no metadata for job {job_id}, skipping")
+                task_queue.ack_task(r, job_id)  # Clear from processing list
                 continue
 
             task_type = meta.get("task_type", "")
             payload = json.loads(meta.get("payload", "{}"))
             task_queue.update_task_status(r, job_id, "processing")
+            retries = int(meta.get("retries", "0"))
 
-            print(f"Queue consumer: processing {task_type} job {job_id}")
+            print(f"Queue consumer: processing {task_type} job {job_id} (attempt {retries + 1})")
 
-            if task_type == "video_generate":
-                process_video_job(
-                    job_id=payload["job_id"],
-                    prompt=payload["prompt"],
-                    model=payload.get("model", "veo-3.1-fast"),
-                    tier=payload.get("tier", "draft"),
-                    image_refs=payload.get("image_refs", []),
-                    duration=payload.get("duration", 5),
-                    provider_metadata=payload.get("provider_metadata", {}),
-                )
-            elif task_type == "fashion_generate":
-                process_fashion_job(
-                    job_id=payload["job_id"],
-                    garment_image_url=payload["garment_image_url"],
-                    preset_id=payload["preset_id"],
-                    aspect_ratio=payload.get("aspect_ratio", "9:16"),
-                    model_options=payload.get("model_options", {}),
-                    identity_id=payload.get("identity_id", ""),
-                )
-            else:
-                print(f"Queue consumer: unknown task type '{task_type}'")
+            try:
+                if task_type == "video_generate":
+                    process_video_job(
+                        job_id=payload["job_id"],
+                        prompt=payload["prompt"],
+                        model=payload.get("model", "veo-3.1-fast"),
+                        tier=payload.get("tier", "draft"),
+                        image_refs=payload.get("image_refs", []),
+                        duration=payload.get("duration", 5),
+                        provider_metadata=payload.get("provider_metadata", {}),
+                    )
+                elif task_type == "fashion_generate":
+                    process_fashion_job(
+                        job_id=payload["job_id"],
+                        garment_image_url=payload["garment_image_url"],
+                        preset_id=payload["preset_id"],
+                        aspect_ratio=payload.get("aspect_ratio", "9:16"),
+                        model_options=payload.get("model_options", {}),
+                        identity_id=payload.get("identity_id", ""),
+                    )
+                else:
+                    print(f"Queue consumer: unknown task type '{task_type}'")
 
-            task_queue.update_task_status(r, job_id, "completed")
+                # ✅ Success — remove from processing list
+                task_queue.ack_task(r, job_id)
+
+            except Exception as task_err:
+                # ❌ Failure — nack (retry or dead-letter)
+                print(f"Queue consumer: task {job_id} failed: {task_err}")
+                task_queue.nack_task(r, job_id, str(task_err))
 
         except Exception as e:
-            print(f"Queue consumer error: {e}")
+            print(f"Queue consumer loop error: {e}")
             time.sleep(2)
 
 
@@ -118,11 +129,16 @@ async def lifespan(app: FastAPI):
     print("Worker starting up...")
     r = get_redis()
     if r:
+        # Recover any in-flight tasks from a previous crash
+        recovered = task_queue.recover_stale_tasks(r)
+        if recovered:
+            print(f"Recovered {recovered} stale task(s) from previous session")
+
         consumer = threading.Thread(target=_queue_consumer_loop, daemon=True)
         consumer.start()
-        print("Queue consumer thread launched")
+        print("Queue consumer thread launched (reliable mode)")
     else:
-        print("No Redis — using direct task processing (no queue)")
+        print("No Redis — using fallback limiter + direct task processing")
     yield
     print("Worker shutting down...")
 
@@ -297,9 +313,18 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
     r = get_redis()
     user_id = request.provider_metadata.get("user_id", "anonymous") if request.provider_metadata else "anonymous"
 
-    # Rate limiting (if Redis available)
+    # Rate limiting
     if r:
         allowed, remaining, retry_after = rate_limiter.check_rate_limit(r, user_id)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Try again in {retry_after}s.",
+                headers={"Retry-After": str(retry_after)}
+            )
+    else:
+        # Fallback: in-memory rate limiter
+        allowed, remaining, retry_after = fallback_limiter.check_rate_limit(user_id)
         if not allowed:
             raise HTTPException(
                 status_code=429,
@@ -325,11 +350,23 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
         }).eq("id", request.job_id).execute()
         return {"message": "Job queued", "job_id": request.job_id, "queue_position": position}
     else:
-        background_tasks.add_task(
-            process_video_job,
-            request.job_id, request.prompt, request.model, request.tier,
-            request.image_refs, duration, request.provider_metadata
-        )
+        # Guard concurrent jobs
+        if not fallback_limiter.acquire_job_slot():
+            raise HTTPException(
+                status_code=503,
+                detail=f"Server at capacity ({fallback_limiter.MAX_CONCURRENT_JOBS} concurrent jobs). Try again shortly.",
+            )
+
+        def _run_and_release():
+            try:
+                process_video_job(
+                    request.job_id, request.prompt, request.model, request.tier,
+                    request.image_refs, duration, request.provider_metadata
+                )
+            finally:
+                fallback_limiter.release_job_slot()
+
+        background_tasks.add_task(_run_and_release)
         return {"message": "Job received", "job_id": request.job_id}
 
 class ExtendRequest(BaseModel):
@@ -1005,9 +1042,18 @@ async def handle_fashion_webhook(request: FashionJobRequest, background_tasks: B
     r = get_redis()
     user_id = request.model_options.get("user_id", "anonymous") if request.model_options else "anonymous"
 
-    # Rate limiting (if Redis available)
+    # Rate limiting
     if r:
         allowed, remaining, retry_after = rate_limiter.check_rate_limit(r, user_id)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Try again in {retry_after}s.",
+                headers={"Retry-After": str(retry_after)}
+            )
+    else:
+        # Fallback: in-memory rate limiter
+        allowed, remaining, retry_after = fallback_limiter.check_rate_limit(user_id)
         if not allowed:
             raise HTTPException(
                 status_code=429,
@@ -1032,15 +1078,27 @@ async def handle_fashion_webhook(request: FashionJobRequest, background_tasks: B
         }).eq("id", request.job_id).execute()
         return {"message": "Fashion job queued", "job_id": request.job_id, "queue_position": position}
     else:
-        background_tasks.add_task(
-            process_fashion_job,
-            request.job_id,
-            request.garment_image_url,
-            request.preset_id,
-            request.aspect_ratio,
-            request.model_options,
-            request.identity_id
-        )
+        # Guard concurrent jobs
+        if not fallback_limiter.acquire_job_slot():
+            raise HTTPException(
+                status_code=503,
+                detail=f"Server at capacity ({fallback_limiter.MAX_CONCURRENT_JOBS} concurrent jobs). Try again shortly.",
+            )
+
+        def _run_and_release_fashion():
+            try:
+                process_fashion_job(
+                    request.job_id,
+                    request.garment_image_url,
+                    request.preset_id,
+                    request.aspect_ratio,
+                    request.model_options,
+                    request.identity_id
+                )
+            finally:
+                fallback_limiter.release_job_slot()
+
+        background_tasks.add_task(_run_and_release_fashion)
         return {"message": "Fashion job received", "job_id": request.job_id}
 
 import requests
