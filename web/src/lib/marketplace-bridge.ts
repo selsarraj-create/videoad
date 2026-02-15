@@ -33,7 +33,8 @@ export class MarketplaceBridge {
     private async getSkimlinksToken(): Promise<string | null> {
         if (this.skimlinksToken) return this.skimlinksToken;
         try {
-            const resp = await axios.post('https://authentication.skimlinks.com/oauth2/token', {
+            // Updated endpoint to fix 405 error
+            const resp = await axios.post('https://authentication.skimapis.com/access_token', {
                 client_id: this.skimlinksClientId,
                 client_secret: this.skimlinksClientSecret,
                 grant_type: 'client_credentials'
