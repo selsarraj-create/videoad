@@ -214,14 +214,14 @@ def generate_master_identity(image_url: str) -> dict:
             ]
         }],
         "generationConfig": {
-            "responseModalities": ["IMAGE", "TEXT"],
+            "responseModalities": ["TEXT", "IMAGE"],
         },
     }
 
     resp = httpx.post(
         _api_url("gemini-2.0-flash-preview-image-generation"),
         json=body,
-        timeout=120,
+        timeout=180,
     )
 
     if resp.status_code != 200:
