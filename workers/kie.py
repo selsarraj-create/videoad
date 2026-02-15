@@ -54,6 +54,9 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
     """
     Starts a video generation task on Kie.ai.
     Returns the task info (including task_id).
+    
+    When image URLs are provided, uses REFERENCE_2_VIDEO mode with veo3_fast
+    so Veo uses the reference image instead of ignoring it.
     """
     headers = {
         "Authorization": f"Bearer {KIE_API_KEY}",
@@ -67,11 +70,33 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
     # Map internal model ID to Kie.ai API model name
     api_model_name = MODEL_API_NAMES.get(model, model)
     
+    # Collect image URLs from various kwargs
+    image_urls = []
+    if kwargs.get("imageUrls"):
+        image_urls = kwargs["imageUrls"] if isinstance(kwargs["imageUrls"], list) else [kwargs["imageUrls"]]
+    elif kwargs.get("image_url"):
+        image_urls = [kwargs["image_url"]]
+    elif kwargs.get("image_refs"):
+        image_urls = kwargs["image_refs"]
+    
     payload = {
-        "model": api_model_name,
         "prompt": prompt,
-        "aspectRatio": kwargs.get("aspect_ratio", "16:9"),
+        "aspectRatio": kwargs.get("aspectRatio", kwargs.get("aspect_ratio", "9:16")),
     }
+    
+    if image_urls:
+        # REFERENCE_2_VIDEO mode — must use veo3_fast for 9:16 compatibility
+        payload["mode"] = "REFERENCE_2_VIDEO"
+        payload["model"] = "veo3_fast"
+        payload["imageUrls"] = image_urls
+        logger.info(f"Kie.ai REFERENCE_2_VIDEO mode with {len(image_urls)} image(s)")
+    else:
+        # Standard TEXT_2_VIDEO mode
+        payload["model"] = api_model_name
+    
+    # Add callback URL if provided
+    if kwargs.get("callBackUrl"):
+        payload["callBackUrl"] = kwargs["callBackUrl"]
     
     # Add optional params if provided
     if kwargs.get("duration"):
@@ -79,7 +104,7 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
     if kwargs.get("resolution"):
         payload["quality"] = kwargs["resolution"]
     
-    logger.info(f"Kie.ai request to {url}: {payload}")
+    logger.info(f"Kie.ai request to {url}: model={payload.get('model')}, mode={payload.get('mode', 'TEXT_2_VIDEO')}")
     
     try:
         response = requests.post(url, json=payload, headers=headers)
