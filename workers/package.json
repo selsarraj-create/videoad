@@ -1,0 +1,22 @@
+{
+    "name": "worker-stitcher",
+    "version": "1.0.0",
+    "description": "High-performance image stitching service using Sharp",
+    "main": "stitcher.ts",
+    "scripts": {
+        "start": "ts-node stitcher.ts",
+        "build": "tsc"
+    },
+    "dependencies": {
+        "sharp": "^0.33.2",
+        "fastify": "^4.26.1",
+        "axios": "^1.6.7",
+        "dotenv": "^16.4.5",
+        "@supabase/supabase-js": "^2.39.7"
+    },
+    "devDependencies": {
+        "ts-node": "^10.9.2",
+        "typescript": "^5.3.3",
+        "@types/node": "^20.11.19"
+    }
+}

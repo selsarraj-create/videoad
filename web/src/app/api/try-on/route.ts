@@ -1,22 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getActiveIdentity } from '@/lib/identity-middleware'
 
 export async function POST(request: Request) {
     const supabase = await createClient()
 
+    // Auth check
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     try {
         const body = await request.json()
-        let { person_image_url, garment_image_url, identity_id } = body
+        let { person_image_url, garment_image_url, identity_id, marketplace_source } = body
 
-        // If identity_id is provided, resolve person_image_url from identities table
-        if (identity_id && !person_image_url) {
-            const { data: identity } = await supabase
-                .from('identities')
-                .select('master_identity_url')
-                .eq('id', identity_id)
-                .single()
-            if (identity?.master_identity_url) {
-                person_image_url = identity.master_identity_url
+        // Resolve identity via middleware (validates ownership + falls back to default)
+        if (!person_image_url) {
+            const activeIdentity = await getActiveIdentity(supabase, user.id, identity_id)
+            if (activeIdentity?.master_identity_url) {
+                person_image_url = activeIdentity.master_identity_url
+                identity_id = activeIdentity.id
             }
         }
 
@@ -96,7 +100,8 @@ export async function POST(request: Request) {
                 body: JSON.stringify({
                     job_id: job.id,
                     person_image_url,
-                    garment_image_url
+                    garment_image_url,
+                    marketplace_source
                 })
             })
             if (!workerRes.ok) {

@@ -11,6 +11,7 @@ from supabase import create_client, Client
 from .kie import generate_video, get_task_status
 from . import claid
 from . import gemini
+from .upscale import upscale_image, upscale_batch
 from .presets import get_prompt, get_preset
 from .auth_middleware import WorkerAuthMiddleware
 from . import queue as task_queue
@@ -18,6 +19,43 @@ from . import rate_limiter
 from . import fallback_limiter
 from . import metrics
 from . import autoscaler
+import httpx
+
+def stitch_collage_via_sharp(image_urls: list[str], layout: str = "horizontal", identity_id: str = None) -> dict:
+    """Call the local Node.js Sharp stitcher service."""
+    stitcher_port = os.environ.get("STITCHER_PORT", "8081")
+    url = f"http://localhost:{stitcher_port}/api/stitch-collage"
+    
+    try:
+        print(f"Calling Sharp stitcher: {len(image_urls)} images, layout={layout}, id={identity_id}")
+        resp = httpx.post(url, json={
+            "image_urls": image_urls,
+            "layout": layout,
+            "identity_id": identity_id
+        }, timeout=60)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Sharp stitching failed: {str(e)}")
+        return {}
+
+def refine_garment_via_sharp(image_url: str, source: str) -> dict:
+    """Call the local Node.js Sharp stitcher service for garment refinement."""
+    stitcher_port = os.environ.get("STITCHER_PORT", "8081")
+    url = f"http://localhost:{stitcher_port}/api/refine-garment"
+    
+    try:
+        print(f"Calling Sharp garment refiner: {source}")
+        resp = httpx.post(url, json={
+            "image_url": image_url,
+            "source": source,
+            "add_label": True
+        }, timeout=60)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Sharp garment refinement failed: {str(e)}")
+        return {}
 
 load_dotenv()
 
@@ -503,16 +541,27 @@ class TryOnRequest(BaseModel):
     job_id: str
     person_image_url: str
     garment_image_url: str
+    marketplace_source: str = None # amazon or ebay
 
-def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: str):
+def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: str, marketplace_source: str = None):
     """Claid-only: person + garment → on-model image. No video generation."""
-    print(f"Try-on job {job_id}: person={person_image_url[:50]}, garment={garment_image_url[:50]}")
+    print(f"Try-on job {job_id}: person={person_image_url[:50]}, garment={garment_image_url[:50]}, source={marketplace_source}")
 
     try:
         supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
 
+        final_garment_url = garment_image_url
+        
+        # 1. Marketplace Refinement (eBay/Amazon)
+        if marketplace_source:
+            print(f"Refining {marketplace_source} garment for 2026 production...")
+            refine_result = refine_garment_via_sharp(garment_image_url, marketplace_source)
+            if refine_result and refine_result.get("url"):
+                final_garment_url = refine_result["url"]
+                print(f"Refined garment ready: {final_garment_url[:80]}")
+
         claid_result = claid.generate_on_model(
-            garment_image_url=garment_image_url,
+            garment_image_url=final_garment_url,
             person_image_url=person_image_url
         )
         on_model_image_url = claid_result["image_url"]
@@ -539,7 +588,12 @@ def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: st
 async def handle_try_on_webhook(request: TryOnRequest):
     """Run synchronously so Railway keeps the container alive."""
     try:
-        process_try_on_job(request.job_id, request.person_image_url, request.garment_image_url)
+        process_try_on_job(
+            request.job_id, 
+            request.person_image_url, 
+            request.garment_image_url,
+            request.marketplace_source
+        )
         return {"message": "Try-on job completed", "job_id": request.job_id}
     except Exception as e:
         print(f"Try-on endpoint error: {str(e)}")
@@ -651,6 +705,15 @@ def process_generate_identity(identity_id: str, selfie_url: str):
                     file_options={"content-type": mime_type, "upsert": "true"}
                 )
                 public_url = supabase.storage.from_("raw_assets").get_public_url(file_path)
+
+                # 4K Upscale: gentle mode preserves facial identity
+                upscale_path = f"identities/{identity_id}/master_{angle}_4k.png"
+                public_url = upscale_image(
+                    public_url, mode="gentle",
+                    supabase_client=supabase, storage_path=upscale_path
+                )
+                print(f"  4K upscale ({angle}): {public_url[:60]}")
+
                 master_urls[angle] = public_url
 
                 # Update identity_views with the master URL
@@ -674,25 +737,47 @@ def process_generate_identity(identity_id: str, selfie_url: str):
         # Use front master as the primary, or first available
         primary_url = front_master_url or next(iter(master_urls.values()))
 
-        # Generate body collage from all master angles (Nano Banana Pro / Gemini 3 Pro Image)
+        # Generate body collage via Sharp (2x2 Grid for Faces)
         collage_url = None
         if len(master_urls) >= 2:
             try:
-                print(f"Generating body collage from {len(master_urls)} master angles...")
-                collage_result = gemini.generate_body_collage(list(master_urls.values()))
-                collage_bytes = collage_result["image_bytes"]
-                collage_mime = collage_result["mime_type"]
-                collage_ext = "png" if "png" in collage_mime else "jpeg"
-
-                collage_path = f"identities/{identity_id}/master_body_collage.{collage_ext}"
-                supabase.storage.from_("raw_assets").upload(
-                    collage_path, collage_bytes,
-                    file_options={"content-type": collage_mime, "upsert": "true"}
+                print(f"Stitching {len(master_urls)} face angles via Sharp (2x2 Grid)...")
+                stitch_result = stitch_collage_via_sharp(
+                    list(master_urls.values()), 
+                    layout="2x2", 
+                    identity_id=identity_id
                 )
-                collage_url = supabase.storage.from_("raw_assets").get_public_url(collage_path)
-                print(f"Body collage ready: {collage_url[:80]}")
+                if stitch_result and stitch_result.get("url"):
+                    collage_url = stitch_result["url"]
+                    print(f"Body collage ready (Sharp): {collage_url[:80]}")
+                    
+                    # Log compute savings
+                    try:
+                        supabase.table("identities").update({
+                            "provider_metadata": {
+                                "last_stitching": "sharp",
+                                "compute_savings": "1.5 Gemini tokens"
+                            }
+                        }).eq("id", identity_id).execute()
+                    except: pass
+                else:
+                    raise Exception("Sharp stitcher returned no URL")
             except Exception as collage_err:
-                print(f"Body collage generation failed (non-fatal): {str(collage_err)}")
+                print(f"Sharp stitching failed, falling back to Gemini: {str(collage_err)}")
+                try:
+                    collage_result = gemini.generate_body_collage(list(master_urls.values()))
+                    collage_bytes = collage_result["image_bytes"]
+                    collage_mime = collage_result["mime_type"]
+                    collage_ext = "png" if "png" in collage_mime else "jpeg"
+
+                    collage_path = f"identities/{identity_id}/master_body_collage.{collage_ext}"
+                    supabase.storage.from_("raw_assets").upload(
+                        collage_path, collage_bytes,
+                        file_options={"content-type": collage_mime, "upsert": "true"}
+                    )
+                    collage_url = supabase.storage.from_("raw_assets").get_public_url(collage_path)
+                except Exception as gem_err:
+                    print(f"Gemini fallback also failed: {str(gem_err)}")
 
         update_fields = {
             "master_identity_url": primary_url,
@@ -906,6 +991,15 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
                         person_image_url=person_url
                     )
                     url = claid_result["image_url"]
+
+                    # 4K Upscale: fabric mode preserves garment texture
+                    upscale_path = f"jobs/{job_id}/on_model_{i}_4k.png"
+                    url = upscale_image(
+                        url, mode="fabric",
+                        supabase_client=supabase, storage_path=upscale_path
+                    )
+                    print(f"  4K upscale (on-model {i+1}): {url[:60]}")
+
                     on_model_urls.append(url)
                     print(f"  Claid {i+1} done: {url[:80]}")
                 except Exception as claid_err:
@@ -936,27 +1030,67 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
         # 3. Face side close-up
         veo_ingredients = []
 
-        # 1. Generate collage from on-model Claid images using Gemini
+        # 1. Generate collage from on-model Claid images using Sharp (3x1 Vertical)
         try:
-            print(f"Creating on-model collage from {len(on_model_urls)} Claid image(s)...")
-            collage_result = gemini.generate_body_collage(on_model_urls)
-            collage_bytes = collage_result["image_bytes"]
-            collage_mime = collage_result["mime_type"]
-            collage_ext = "png" if "png" in collage_mime else "jpeg"
-
-            # Upload collage to storage
-            collage_path = f"jobs/{job_id}/on_model_collage.{collage_ext}"
-            supabase.storage.from_("raw_assets").upload(
-                collage_path, collage_bytes,
-                file_options={"content-type": collage_mime, "upsert": "true"}
+            print(f"Stitching {len(on_model_urls)} on-model image(s) via Sharp (3x1 Vertical)...")
+            stitch_result = stitch_collage_via_sharp(
+                on_model_urls, 
+                layout="3x1_vertical", 
+                identity_id=identity_id
             )
-            collage_url = supabase.storage.from_("raw_assets").get_public_url(collage_path)
-            veo_ingredients.append(collage_url)
-            print(f"  Ingredient 1 (on-model collage): {collage_url[:60]}")
+            
+            if stitch_result and stitch_result.get("url"):
+                collage_url = stitch_result["url"]
+                
+                # 4K Upscale: final Master Ingredient for Veo
+                collage_url = upscale_image(
+                    collage_url, mode="gentle",
+                    supabase_client=supabase,
+                    storage_path=f"jobs/{job_id}/on_model_collage_4k.png"
+                )
+                print(f"  4K Master Ingredient (Sharp) upscaled: {collage_url[:60]}")
+
+                # Record compute savings in job metadata
+                current_metadata = {}
+                try:
+                    job_resp = supabase.table("jobs").select("provider_metadata").eq("id", job_id).single().execute()
+                    current_metadata = job_resp.data.get("provider_metadata", {}) if job_resp.data else {}
+                except: pass
+                
+                current_metadata.update({
+                    "compute_savings": "1.5 Gemini tokens",
+                    "stitching_mode": "sharp",
+                    "collage_url": collage_url
+                })
+                
+                supabase.table("jobs").update({
+                    "provider_metadata": current_metadata
+                }).eq("id", job_id).execute()
+
+                veo_ingredients.append(collage_url)
+                print(f"  Ingredient 1 (on-model collage): {collage_url[:60]}")
+            else:
+                raise Exception("Sharp stitcher returned no URL")
+                
         except Exception as collage_err:
-            print(f"  On-model collage failed, using individual images: {str(collage_err)[:100]}")
-            # Fallback: use individual on-model images if collage fails
-            veo_ingredients.extend(on_model_urls)
+            print(f"  Sharp collage failed, falling back to Gemini: {str(collage_err)[:100]}")
+            try:
+                collage_result = gemini.generate_body_collage(on_model_urls)
+                collage_bytes = collage_result["image_bytes"]
+                collage_mime = collage_result["mime_type"]
+                collage_ext = "png" if "png" in collage_mime else "jpeg"
+
+                collage_path = f"jobs/{job_id}/on_model_collage.{collage_ext}"
+                supabase.storage.from_("raw_assets").upload(
+                    collage_path, collage_bytes,
+                    file_options={"content-type": collage_mime, "upsert": "true"}
+                )
+                collage_url = supabase.storage.from_("raw_assets").get_public_url(collage_path)
+                collage_url = upscale_image(collage_url, mode="gentle", supabase_client=supabase, storage_path=f"jobs/{job_id}/on_model_collage_4k.png")
+                veo_ingredients.append(collage_url)
+            except Exception as gem_err:
+                print(f"  Gemini fallback also failed: {str(gem_err)}")
+                veo_ingredients.extend(on_model_urls)
 
         # 2 & 3. Face close-up angles (face_front, face_side)
         if identity_id:

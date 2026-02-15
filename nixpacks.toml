@@ -1,2 +1,9 @@
 [phases.setup]
-aptPkgs = ["ffmpeg"]
+aptPkgs = ["ffmpeg", "libvips-dev"]
+nixPkgs = ["python311", "nodejs"]
+
+[phases.install]
+cmds = [
+  "pip install -r workers/requirements.txt",
+  "cd workers && npm install"
+]

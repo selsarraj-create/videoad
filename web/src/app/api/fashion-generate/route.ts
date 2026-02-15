@@ -1,12 +1,19 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getActiveIdentity } from '@/lib/identity-middleware'
 
 export async function POST(request: Request) {
     const supabase = await createClient()
 
+    // Auth check
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     try {
         const body = await request.json()
-        const { garment_image_url, preset_id, aspect_ratio = '9:16', identity_id } = body
+        let { garment_image_url, preset_id, aspect_ratio = '9:16', identity_id } = body
 
         if (!garment_image_url || !preset_id) {
             return NextResponse.json(
@@ -15,7 +22,13 @@ export async function POST(request: Request) {
             )
         }
 
-        // Get first available workspace/project (auth disabled)
+        // Resolve identity via middleware (validates ownership)
+        const activeIdentity = await getActiveIdentity(supabase, user.id, identity_id)
+        if (activeIdentity) {
+            identity_id = activeIdentity.id
+        }
+
+        // Get first available workspace/project
         const { data: workspace } = await supabase
             .from('workspaces')
             .select('id')

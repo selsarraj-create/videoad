@@ -1,19 +1,26 @@
 """
 Gemini integration for selfie validation and master identity generation.
-Uses the REST API directly via httpx — no SDK dependency.
 
-Models:
-  - Validation: gemini-2.0-flash (vision) for real-time selfie analysis
-  - Master Identity: gemini-2.0-flash-preview-image-generation for studio portrait generation
+- Validation: Google Gemini 2.0 Flash (vision) via REST — text/JSON analysis only
+- Image Generation: Gemini 3 Pro Image via Kie.ai (Nano Banana Pro) — all image gen
 """
 
 import os
 import json
+import time
 import base64
 import httpx
+import logging
+import requests as req_lib
+
+logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+# ── Kie.ai config for image generation ────────────────────────────────────
+KIE_API_KEY = os.environ.get("KIE_API_KEY", "")
+KIE_API_BASE = "https://api.kie.ai/api/v1"
 
 
 def _api_url(model: str) -> str:
@@ -195,54 +202,105 @@ CRITICAL Requirements:
 This is a "Master Identity" reference portrait for virtual garment try-on. Anatomical accuracy is critical — do NOT alter the person's appearance, only improve the background, lighting, and composition."""
 
 
-def generate_master_identity(image_url: str) -> dict:
+def _kie_generate_image(prompt: str, image_urls: list[str]) -> dict:
     """
-    Use Gemini Flash image generation to create a 4K studio portrait
-    from a selfie. Returns { image_bytes: bytes, mime_type: str }.
+    Submit an image generation/editing job to Kie.ai Nano Banana Pro (Gemini 3 Pro Image),
+    poll for completion, and return { image_bytes, mime_type }.
     """
-    if not GEMINI_API_KEY:
-        raise Exception("GEMINI_API_KEY not set")
+    if not KIE_API_KEY:
+        raise Exception("KIE_API_KEY not set — cannot generate images via Kie.ai")
 
-    image_bytes = _download_image_bytes(image_url)
-    mime = _guess_mime(image_url)
-
-    body = {
-        "contents": [{
-            "parts": [
-                {"inlineData": {"mimeType": mime, "data": base64.b64encode(image_bytes).decode()}},
-                {"text": IDENTITY_PROMPT},
-            ]
-        }],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"],
-        },
+    url = f"{KIE_API_BASE}/nano-banana/generate"
+    payload = {
+        "prompt": prompt,
+        "model": "nano_banana_pro",
+        "imageUrls": image_urls,
+        "mode": "IMAGE_EDIT",
+    }
+    headers = {
+        "Authorization": f"Bearer {KIE_API_KEY}",
+        "Content-Type": "application/json",
     }
 
-    resp = httpx.post(
-        _api_url("gemini-3-pro-image-preview"),
-        json=body,
-        timeout=180,
-    )
+    logger.info(f"Kie.ai image gen request: {len(image_urls)} image(s), prompt={prompt[:60]}...")
+    resp = req_lib.post(url, json=payload, headers=headers, timeout=60)
+    resp.raise_for_status()
+    result = resp.json()
 
-    if resp.status_code != 200:
-        raise Exception(f"Gemini image gen error {resp.status_code}: {resp.text[:500]}")
+    # Extract task ID
+    data = result.get("data") or {}
+    task_id = None
+    if isinstance(data, dict):
+        task_id = data.get("taskId") or data.get("task_id") or data.get("id")
+    if not task_id:
+        task_id = result.get("taskId") or result.get("task_id") or result.get("id")
+    if not task_id:
+        raise Exception(f"No task_id from Kie.ai image gen response: {result}")
 
-    data = resp.json()
+    logger.info(f"Kie.ai image task started: {task_id}")
 
-    # Extract the generated image from the response
-    for part in data["candidates"][0]["content"]["parts"]:
-        if "inlineData" in part:
-            img_data = part["inlineData"]
+    # Poll for completion (max 5 minutes)
+    status_url = f"{KIE_API_BASE}/nano-banana/record-info"
+    for _ in range(60):
+        time.sleep(5)
+        status_resp = req_lib.get(
+            status_url,
+            params={"taskId": task_id},
+            headers={"Authorization": f"Bearer {KIE_API_KEY}"},
+            timeout=30,
+        )
+        status_resp.raise_for_status()
+        status_data = status_resp.json()
+
+        poll_data = status_data.get("data") or {}
+        raw_status = poll_data.get("status", "")
+        success_flag = poll_data.get("successFlag")
+
+        if raw_status in ("SUCCESS", "success") or success_flag == 1:
+            # Extract output URL
+            output_url = None
+            results = poll_data.get("results") or poll_data.get("images") or []
+            if results and isinstance(results, list):
+                first = results[0]
+                if isinstance(first, dict):
+                    output_url = first.get("url") or first.get("imageUrl")
+                elif isinstance(first, str):
+                    output_url = first
+            if not output_url:
+                output_url = poll_data.get("imageUrl") or poll_data.get("url")
+
+            if not output_url:
+                raise Exception(f"Kie.ai image gen completed but no output URL: {status_data}")
+
+            logger.info(f"Kie.ai image gen complete: {output_url[:80]}")
+
+            # Download the generated image
+            img_resp = req_lib.get(output_url, timeout=30)
+            img_resp.raise_for_status()
+            content_type = img_resp.headers.get("Content-Type", "image/png")
+
             return {
-                "image_bytes": base64.b64decode(img_data["data"]),
-                "mime_type": img_data.get("mimeType", "image/png"),
+                "image_bytes": img_resp.content,
+                "mime_type": content_type.split(";")[0],  # strip charset if present
             }
 
-    raise Exception("Gemini did not return an image in the response")
+        elif raw_status in ("GENERATE_FAILED", "CREATE_TASK_FAILED", "fail") or success_flag in (2, 3):
+            error_msg = poll_data.get("error") or poll_data.get("msg") or "Unknown"
+            raise Exception(f"Kie.ai image gen failed: {error_msg}")
+
+    raise Exception("Kie.ai image gen timed out after 5 minutes")
+
+
+def generate_master_identity(image_url: str) -> dict:
+    """
+    Use Gemini 3 Pro Image (via Kie.ai Nano Banana Pro) to create a 4K studio portrait
+    from a selfie. Returns { image_bytes: bytes, mime_type: str }.
+    """
+    return _kie_generate_image(IDENTITY_PROMPT, [image_url])
 
 
 # =========================================================================
-# 2b. Generate Body Collage — Nano Banana Pro (Gemini 3 Pro Image)
+# 2b. Generate Body Collage — Nano Banana Pro (Gemini 3 Pro Image) via Kie.ai
 # =========================================================================
 
 COLLAGE_PROMPT = """Combine these 3 images into a single horizontal character sheet collage on a plain white background. Ensure consistent lighting and spacing between the three views."""
@@ -250,57 +308,14 @@ COLLAGE_PROMPT = """Combine these 3 images into a single horizontal character sh
 
 def generate_body_collage(image_urls: list[str]) -> dict:
     """
-    Use Gemini 3 Pro Image (Nano Banana Pro) to combine 3 master identity
+    Use Gemini 3 Pro Image (via Kie.ai Nano Banana Pro) to combine master identity
     angle images into a single horizontal character sheet collage.
     Returns { image_bytes: bytes, mime_type: str }.
     """
-    if not GEMINI_API_KEY:
-        raise Exception("GEMINI_API_KEY not set")
-
-    if not image_urls or len(image_urls) == 0:
+    if not image_urls:
         raise Exception("No image URLs provided for collage generation")
 
-    # Build parts: all images as inlineData, then the prompt
-    parts = []
-    for url in image_urls:
-        img_bytes = _download_image_bytes(url)
-        mime = _guess_mime(url)
-        parts.append({
-            "inlineData": {
-                "mimeType": mime,
-                "data": base64.b64encode(img_bytes).decode(),
-            }
-        })
-
-    parts.append({"text": COLLAGE_PROMPT})
-
-    body = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"],
-        },
-    }
-
-    resp = httpx.post(
-        _api_url("gemini-3-pro-image-preview"),
-        json=body,
-        timeout=180,
-    )
-
-    if resp.status_code != 200:
-        raise Exception(f"Gemini collage error {resp.status_code}: {resp.text[:500]}")
-
-    data = resp.json()
-
-    for part in data["candidates"][0]["content"]["parts"]:
-        if "inlineData" in part:
-            img_data = part["inlineData"]
-            return {
-                "image_bytes": base64.b64decode(img_data["data"]),
-                "mime_type": img_data.get("mimeType", "image/png"),
-            }
-
-    raise Exception("Gemini did not return a collage image in the response")
+    return _kie_generate_image(COLLAGE_PROMPT, image_urls)
 
 
 # =========================================================================

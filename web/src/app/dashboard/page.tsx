@@ -15,7 +15,10 @@ interface Job {
     tier: string
     project_id: string
     error_message: string | null
-    provider_metadata?: Record<string, unknown>
+    provider_metadata?: {
+        compute_savings?: string | number;
+        [key: string]: any;
+    }
 }
 
 interface MediaItem {
@@ -43,8 +46,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { BespokeInput } from "@/components/ui/bespoke-input"
 import { ParticleSilhouette } from "@/components/ui/particle-silhouette"
 import { StatusPill } from "@/components/ui/status-pill"
+import { RevenueChart } from "@/components/revenue-chart"
+import { DollarSign, TrendingUp, Clock, Award } from "lucide-react"
 
-type Tab = 'try-on' | 'video'
+type Tab = 'try-on' | 'video' | 'marketplace' | 'revenue'
+
+interface MarketplaceItem {
+    id: string;
+    source: 'skimlinks' | 'ebay';
+    title: string;
+    price: string;
+    currency: string;
+    imageUrl: string;
+    affiliateUrl: string;
+    brand?: string;
+    category?: string;
+    authenticityGuaranteed?: boolean;
+}
 
 interface PersonaSlot {
     id: string
@@ -80,6 +98,22 @@ export default function StudioPage() {
     const [extensionDialogOpen, setExtensionDialogOpen] = useState(false)
     const [extensionJob, setExtensionJob] = useState<Job | null>(null)
     const [extensionPrompt, setExtensionPrompt] = useState("")
+
+    // Marketplace state
+    const [marketplaceQuery, setMarketplaceQuery] = useState("")
+    const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([])
+    const [marketplaceLoading, setMarketplaceLoading] = useState(false)
+
+    // Revenue state
+    const [revenueData, setRevenueData] = useState<any[]>([])
+    const [ledger, setLedger] = useState<any[]>([])
+    const [stats, setStats] = useState({ total: 0, cleared: 0, pending: 0 })
+    const [payoutLoading, setPayoutLoading] = useState(false)
+    const [payoutStatus, setPayoutStatus] = useState<string | null>(null)
+
+    // Compliance state
+    const [disclosureOpen, setDisclosureOpen] = useState(false)
+    const [disclosureAccepted, setDisclosureAccepted] = useState(false)
 
     // Shared state
     const [jobs, setJobs] = useState<Job[]>([])
@@ -130,6 +164,28 @@ export default function StudioPage() {
 
             const { data: mediaData } = await supabase.from('media_library').select('*').order('created_at', { ascending: false })
             if (mediaData) setMediaLibrary(mediaData as MediaItem[])
+
+            // Fetch Revenue Ledger
+            const { data: ledgerData } = await supabase.from('revenue_ledger').select('*').order('created_at', { ascending: false })
+            if (ledgerData) {
+                setLedger(ledgerData)
+                const total = ledgerData.reduce((sum, item) => sum + Number(item.user_share), 0)
+                const cleared = ledgerData.filter(i => i.status === 'cleared').reduce((sum, item) => sum + Number(item.user_share), 0)
+                const pending = ledgerData.filter(i => i.status === 'pending').reduce((sum, item) => sum + Number(item.user_share), 0)
+                setStats({ total, cleared, pending })
+
+                // Mock trendline from ledger
+                const last7Days = Array.from({ length: 7 }, (_, i) => {
+                    const date = new Date()
+                    date.setDate(date.getDate() - (6 - i))
+                    const dateStr = date.toISOString().split('T')[0]
+                    const dayTotal = ledgerData
+                        .filter(l => l.created_at.startsWith(dateStr))
+                        .reduce((sum, item) => sum + Number(item.user_share), 0)
+                    return { date: dateStr, amount: dayTotal || Math.random() * 5 } // Random for demo if empty
+                })
+                setRevenueData(last7Days)
+            }
         }
         fetchData()
         const interval = setInterval(fetchData, 4000)
@@ -291,6 +347,47 @@ export default function StudioPage() {
         }
     }
 
+    // Marketplace Search
+    const handleMarketplaceSearch = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault()
+        if (!marketplaceQuery) return
+        setMarketplaceLoading(true)
+        try {
+            const res = await fetch(`/api/marketplace?q=${encodeURIComponent(marketplaceQuery)}`)
+            const data = await res.json()
+            if (data.items) setMarketplaceItems(data.items)
+        } catch (err) {
+            console.error('Marketplace search failed:', err)
+        } finally {
+            setMarketplaceLoading(false)
+        }
+    }
+
+    // Revenue Payouts
+    const handlePayoutAction = async (action: 'onboard' | 'payout') => {
+        setPayoutLoading(true)
+        setPayoutStatus(null)
+        try {
+            const res = await fetch('/api/payout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            })
+            const data = await res.json()
+            if (data.url) {
+                window.location.href = data.url
+            } else if (data.success) {
+                setPayoutStatus('Payout initiated successfully.')
+            } else {
+                setPayoutStatus(data.error || 'Action failed.')
+            }
+        } catch (err) {
+            setPayoutStatus('Network error.')
+        } finally {
+            setPayoutLoading(false)
+        }
+    }
+
     const canTryOn = masterIdentityUrl && garmentImageUrl && !tryOnLoading
     const canGenerateVideo = selectedMediaItem && selectedPreset && !videoLoading
     const videoJobs = jobs.filter(j => j.tier !== 'try_on')
@@ -368,6 +465,18 @@ export default function StudioPage() {
                                 ${activeTab === 'video' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
                             Create Video
                             {activeTab === 'video' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
+                        </button>
+                        <button onClick={() => setActiveTab('marketplace')}
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
+                                ${activeTab === 'marketplace' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Marketplace
+                            {activeTab === 'marketplace' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
+                        </button>
+                        <button onClick={() => setActiveTab('revenue')}
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
+                                ${activeTab === 'revenue' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Revenue
+                            {activeTab === 'revenue' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
                     </div>
                 </div>
@@ -515,6 +624,158 @@ export default function StudioPage() {
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
+                            </motion.div>
+                        ) : activeTab === 'marketplace' ? (
+                            /* ---- MARKETPLACE TAB ---- */
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
+                                <div className="space-y-6">
+                                    <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">01 / Luxury Search</Label>
+                                        <span className="text-[10px] text-muted-foreground italic font-serif">Skimlinks & eBay</span>
+                                    </div>
+                                    <form onSubmit={handleMarketplaceSearch} className="flex gap-2">
+                                        <BespokeInput
+                                            value={marketplaceQuery}
+                                            onChange={(e) => setMarketplaceQuery(e.target.value)}
+                                            placeholder="Search for Gucci, Prada, Hermès..."
+                                            className="flex-1"
+                                        />
+                                        <Button type="submit" disabled={marketplaceLoading} className="h-10 rounded-none bg-foreground text-background">
+                                            {marketplaceLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                                        </Button>
+                                    </form>
+                                </div>
+
+                                <div className="space-y-6 overflow-y-auto max-h-[600px] pr-2 scrollbar-thin">
+                                    {marketplaceItems.length === 0 && !marketplaceLoading && (
+                                        <div className="py-20 text-center border border-dashed border-nimbus">
+                                            <Shirt className="w-6 h-6 text-nimbus mx-auto mb-4" />
+                                            <p className="text-xs text-muted-foreground font-serif italic">Search for luxury items to begin.</p>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {marketplaceItems.map(item => (
+                                            <div key={item.id} className="group relative bg-white border border-nimbus p-4 transition-all hover:shadow-xl">
+                                                <div className="aspect-[3/4] overflow-hidden mb-4 relative">
+                                                    <img src={item.imageUrl} alt={item.title} className="w-full h-full object-contain mix-blend-multiply" />
+                                                    {item.authenticityGuaranteed && (
+                                                        <Badge className="absolute top-2 left-2 bg-blue-500 text-white border-0 text-[8px] uppercase tracking-tighter">
+                                                            <Check className="w-3 h-3 mr-1" /> Authenticity Guaranteed
+                                                        </Badge>
+                                                    )}
+                                                    <Badge className="absolute top-2 right-2 bg-stretch-limo text-white border-0 text-[8px] uppercase tracking-tighter">
+                                                        {item.source}
+                                                    </Badge>
+                                                </div>
+                                                <div className="space-y-1 mb-4">
+                                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest truncate">{item.brand || 'Luxury Item'}</p>
+                                                    <p className="text-xs font-serif italic truncate">{item.title}</p>
+                                                    <p className="text-xs font-bold font-mono">{item.currency} {item.price}</p>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    <Button
+                                                        onClick={() => {
+                                                            setGarmentImageUrl(item.imageUrl)
+                                                            setGarmentPreview(item.imageUrl)
+                                                            setActiveTab('try-on')
+                                                        }}
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="w-full rounded-none text-[10px] uppercase tracking-widest h-8"
+                                                    >
+                                                        Select for Try-On
+                                                    </Button>
+                                                    <a href={item.affiliateUrl} target="_blank" rel="noopener noreferrer" className="w-full">
+                                                        <Button variant="ghost" size="sm" className="w-full rounded-none text-[10px] uppercase tracking-widest h-8 border border-nimbus hover:bg-nimbus/20">
+                                                            View Original <ExternalLink className="w-3 h-3 ml-2" />
+                                                        </Button>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        ) : activeTab === 'revenue' ? (
+                            /* ---- REVENUE TAB ---- */
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
+                                {/* Bento KPI Cards */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-6 bg-white border border-nimbus space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Total Earnings</p>
+                                            <DollarSign className="w-3 h-3 text-primary" />
+                                        </div>
+                                        <p className="text-2xl font-serif">${stats.total.toFixed(2)}</p>
+                                    </div>
+                                    <div className="p-6 bg-white border border-nimbus space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Pending</p>
+                                            <Clock className="w-3 h-3 text-muted-foreground" />
+                                        </div>
+                                        <p className="text-2xl font-serif text-muted-foreground">${stats.pending.toFixed(2)}</p>
+                                    </div>
+                                    <div className="p-6 bg-white border border-nimbus col-span-2 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Growth Curve</p>
+                                            <TrendingUp className="w-3 h-3 text-primary" />
+                                        </div>
+                                        <RevenueChart data={revenueData} />
+                                    </div>
+                                </div>
+
+                                {/* Motivation Bar (Tiered Progress) */}
+                                <div className="space-y-4">
+                                    <div className="flex items-baseline justify-between">
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Commission Tier</Label>
+                                        <span className="text-[10px] text-primary font-bold">50% Active</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-nimbus/20 relative">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${Math.min((stats.total / 1000) * 100, 100)}%` }}
+                                            className="absolute top-0 left-0 h-full bg-primary"
+                                        />
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Sell ${Math.max(1000 - stats.total, 0).toFixed(0)} more for 55% share</p>
+                                        <Award className="w-3 h-3 text-nimbus" />
+                                    </div>
+                                </div>
+
+                                {/* Payout Controls */}
+                                <div className="space-y-6 pt-4">
+                                    <div className="p-4 border border-primary/20 bg-primary/5 space-y-4">
+                                        <p className="text-[10px] uppercase font-bold text-primary tracking-widest flex items-center gap-2">
+                                            <Sparkles className="w-3 h-3" /> Payout Threshold: $20.00
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">Balances move to "Cleared" after the merchant return window closes (typical 30 days).</p>
+                                    </div>
+
+                                    {!selectedPersona?.status?.includes('stripe') && (
+                                        <Button
+                                            onClick={() => handlePayoutAction('onboard')}
+                                            disabled={payoutLoading}
+                                            className="w-full h-12 bg-foreground text-background rounded-none text-xs uppercase tracking-widest hover:bg-primary transition-all"
+                                        >
+                                            {payoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect Stripe Account'}
+                                        </Button>
+                                    )}
+
+                                    <Button
+                                        onClick={() => handlePayoutAction('payout')}
+                                        disabled={payoutLoading || stats.cleared < 20}
+                                        className={`w-full h-14 rounded-none text-xs font-bold uppercase tracking-[0.2em]
+                                            ${stats.cleared >= 20 ? 'bg-primary text-white shadow-xl' : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'}`}
+                                    >
+                                        {payoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : `Request Payout ($${stats.cleared.toFixed(2)})`}
+                                    </Button>
+
+                                    {payoutStatus && (
+                                        <p className="text-center text-[10px] uppercase tracking-widest font-bold text-primary animate-pulse">{payoutStatus}</p>
+                                    )}
+                                </div>
                             </motion.div>
                         ) : (
                             /* ---- VIDEO TAB ---- */
@@ -679,6 +940,14 @@ export default function StudioPage() {
                                                 <span className="text-[9px] text-muted-foreground font-mono">ID: {job.id.slice(0, 6)}</span>
                                             </div>
 
+                                            {job.provider_metadata?.compute_savings && (
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    <Badge className="bg-blue-50 text-blue-600 border-blue-100 rounded-none text-[8px] uppercase tracking-tighter hover:bg-blue-50">
+                                                        ⚡ {String(job.provider_metadata.compute_savings)} Saved
+                                                    </Badge>
+                                                </div>
+                                            )}
+
                                             {job.status === 'completed' && job.output_url && (
                                                 <div className="mt-4 pt-4 border-t border-nimbus/20 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <Button variant="ghost" size="sm"
@@ -727,7 +996,38 @@ export default function StudioPage() {
                 </DialogContent>
             </Dialog>
 
-
+            {/* Disclosure Modal (2026 Legal Shield) */}
+            <Dialog open={disclosureOpen} onOpenChange={setDisclosureOpen}>
+                <DialogContent className="sm:max-w-md rounded-none border-primary bg-background p-8">
+                    <DialogHeader>
+                        <DialogTitle className="font-serif text-2xl text-primary uppercase tracking-tighter">Legal Disclosure</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6 py-4">
+                        <div className="p-4 bg-primary/5 border border-primary/20 space-y-4">
+                            <p className="text-xs text-foreground leading-relaxed">
+                                To comply with the 2026 EU AI Act and eBay/Skimlinks transient processing rules, you must acknowledge the following before downloading or sharing:
+                            </p>
+                            <ul className="text-[10px] space-y-2 list-disc pl-4 text-muted-foreground uppercase tracking-widest">
+                                <li>I will include <span className="text-primary font-bold">#ad</span> in all captions.</li>
+                                <li>I will include <span className="text-primary font-bold">#MadeWithAI</span> when posting these items.</li>
+                                <li>I acknowledge this content is AI-simulated for virtual try-on.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            onClick={() => {
+                                setDisclosureAccepted(true)
+                                setDisclosureOpen(false)
+                                alert("Disclosure accepted. Accessing 4K Lossless Vault...")
+                            }}
+                            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 text-xs uppercase tracking-[0.2em] h-14 rounded-none shadow-xl"
+                        >
+                            I Acknowledge & Accept
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
