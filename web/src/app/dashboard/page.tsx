@@ -201,10 +201,16 @@ export default function StudioPage() {
                 })
                 setRevenueData(last7Days)
 
-                // Fetch Adoption Metrics
-                const { count: remixes } = await supabase.from('public_showcase').select('*', { count: 'exact', head: true }).eq('original_creator_id', user?.id)
-                const bonusTotal = ledgerData.filter(l => l.metadata?.role === 'original_creator').reduce((sum, item) => sum + Number(item.user_share), 0)
-                setAdoptionMetrics({ remixCount: remixes || 0, bonusEarned: bonusTotal })
+                // Fetch Adoption Metrics (wrapped in try/catch in case migration not yet applied)
+                try {
+                    if (user?.id) {
+                        const { count: remixes } = await supabase.from('public_showcase').select('*', { count: 'exact', head: true }).eq('original_creator_id', user.id)
+                        const bonusTotal = ledgerData.filter(l => l.metadata?.role === 'original_creator').reduce((sum, item) => sum + Number(item.user_share), 0)
+                        setAdoptionMetrics({ remixCount: remixes || 0, bonusEarned: bonusTotal })
+                    }
+                } catch (adoptionErr) {
+                    console.log('[Dashboard] Adoption metrics not available yet:', adoptionErr)
+                }
             }
 
             // Fetch Today's Trend
@@ -1074,7 +1080,8 @@ export default function StudioPage() {
                                                             className="w-full h-8 text-[10px] uppercase tracking-widest hover:bg-nimbus/20 rounded-none border border-nimbus"
                                                             onClick={async () => {
                                                                 if (confirm("Publish to Community Showcase? This will share your look and video publicly.")) {
-                                                                    const { error } = await supabase.from('public_showcase').insert({
+                                                                    // Core fields that always exist
+                                                                    const insertData: any = {
                                                                         user_id: user?.id,
                                                                         video_url: job.output_url,
                                                                         persona_id: selectedPersonaId,
@@ -1083,11 +1090,30 @@ export default function StudioPage() {
                                                                             imageUrl: selectedMediaItem?.garment_image_url || selectedMediaItem?.image_url
                                                                         }],
                                                                         ai_labeled: true,
-                                                                        allow_remix: remixEnabled,
-                                                                        original_creator_id: originalCreatorId,
-                                                                        original_showcase_id: originalShowcaseId
-                                                                    });
+                                                                    };
+                                                                    // Viral columns (may not exist if migration not applied)
+                                                                    if (remixEnabled !== undefined) insertData.allow_remix = remixEnabled;
+                                                                    if (originalCreatorId) insertData.original_creator_id = originalCreatorId;
+                                                                    if (originalShowcaseId) insertData.original_showcase_id = originalShowcaseId;
+
+                                                                    let { error } = await supabase.from('public_showcase').insert(insertData);
+                                                                    // If viral columns don't exist yet, retry without them
+                                                                    if (error?.code === '42703') {
+                                                                        console.log('[Dashboard] Viral columns not yet migrated, publishing without remix fields.');
+                                                                        const { error: fallbackErr } = await supabase.from('public_showcase').insert({
+                                                                            user_id: user?.id,
+                                                                            video_url: job.output_url,
+                                                                            persona_id: selectedPersonaId,
+                                                                            garment_metadata: [{
+                                                                                title: selectedMediaItem?.label || 'Designer Piece',
+                                                                                imageUrl: selectedMediaItem?.garment_image_url || selectedMediaItem?.image_url
+                                                                            }],
+                                                                            ai_labeled: true,
+                                                                        });
+                                                                        error = fallbackErr;
+                                                                    }
                                                                     if (!error) alert("Published to Showcase!");
+                                                                    else console.error('[Dashboard] Publish Error:', error);
                                                                 }
                                                             }}>
                                                             <Globe className="w-3 h-3 mr-2" /> Publish to Showcase
