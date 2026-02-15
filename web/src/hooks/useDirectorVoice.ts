@@ -104,7 +104,7 @@ export function useDirectorVoice({
         }
     }, [currentAngleIdx, step])
 
-    // Capture validated → speak confirmation
+    // Capture validated → speak confirmation + shutter click
     useEffect(() => {
         const q = queueRef.current
         if (!q || step !== 'ai_director') return
@@ -112,7 +112,7 @@ export function useDirectorVoice({
         for (const angle of ANGLE_KEYS) {
             if (captures[angle]?.validated && !prevCapturedRef.current.has(angle)) {
                 prevCapturedRef.current.add(angle)
-                q.speak(`captured_${angle}`)
+                q.speakThenShutter(`captured_${angle}`)
             }
         }
     }, [captures, step])

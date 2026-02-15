@@ -1,6 +1,6 @@
 // ── Speech Utilities ─────────────────────────────────────────────────────────
 // Reusable TTS module using the native Web Speech API.
-// Provides a queued utterance system with voice preference and mute support.
+// Professional protocol voice — no filler, no fluff.
 
 // ── Voice Selection ──────────────────────────────────────────────────────────
 
@@ -8,8 +8,8 @@ const PREFERRED_VOICES = [
     'Google US English',
     'Samantha',           // macOS high-quality
     'Alex',               // macOS
+    'Microsoft David',    // Windows (deeper)
     'Microsoft Zira',     // Windows
-    'Microsoft David',    // Windows
 ]
 
 /**
@@ -22,55 +22,142 @@ export function getPreferredVoice(): SpeechSynthesisVoice | null {
     const voices = window.speechSynthesis.getVoices()
     if (!voices.length) return null
 
-    // Try preferred voices first
     for (const name of PREFERRED_VOICES) {
         const match = voices.find(v => v.name === name)
         if (match) return match
     }
 
-    // Fallback: any English voice
     const english = voices.find(v => v.lang.startsWith('en'))
     if (english) return english
 
-    // Last resort: first available
     return voices[0] ?? null
 }
 
-// ── Director Lines ───────────────────────────────────────────────────────────
+// ── Director Lines (Professional Protocol) ───────────────────────────────────
 
 export const DIRECTOR_LINES: Record<string, string> = {
-    // Session start
-    session_start: 'AI Director is active. Let\'s begin with your frontal view.',
+    // Initialization
+    session_start:
+        'Director active. Prepare for Nano Master capture. Establish your mark and look into the lens.',
 
-    // Per-angle ready cues
-    ready_front: 'Ready for your frontal view. Face the camera directly with your arms slightly away from your body.',
-    ready_profile: 'Now turn 90 degrees to your left for the profile shot.',
-    ready_three_quarter: 'Great. Now turn 45 degrees back toward the camera for the three-quarter view.',
-    ready_face_front: 'Time for a close-up. Move closer so your head and shoulders fill the frame, looking straight at the camera.',
-    ready_face_side: 'Last one. Turn your head 90 degrees to the side for the face profile close-up.',
+    // Frontal
+    ready_front:
+        'Frontal view. Shoulders square. Chin level. Arms clear of the body.',
+    countdown_front:
+        'Three. Two. One.',
+    captured_front:
+        'Captured.',
 
-    // Capture confirmations
-    captured_front: 'Excellent. Front view captured.',
-    captured_profile: 'Profile captured perfectly.',
-    captured_three_quarter: 'Three-quarter view locked in.',
-    captured_face_front: 'Face front captured beautifully.',
-    captured_face_side: 'Face side captured. All angles complete.',
+    // Profile
+    ready_profile:
+        'Turn ninety degrees to your right. Profile view. Ensure a clean silhouette.',
+    countdown_profile:
+        'Three. Two. One.',
+    captured_profile:
+        'Captured.',
+
+    // Three-quarter
+    ready_three_quarter:
+        'Forty-five degrees back toward the lens. Three-quarter view. Both eyes visible.',
+    countdown_three_quarter:
+        'Three. Two. One.',
+    captured_three_quarter:
+        'Captured.',
+
+    // Face front close-up
+    ready_face_front:
+        'Close-up. Step forward. Head and shoulders only. Eyes to lens.',
+    countdown_face_front:
+        'Three. Two. One.',
+    captured_face_front:
+        'Captured.',
+
+    // Face side close-up
+    ready_face_side:
+        'Final angle. Turn your head ninety degrees. Face profile. Hold the line.',
+    countdown_face_side:
+        'Three. Two. One.',
+    captured_face_side:
+        'Captured.',
 
     // Coaching
-    hold_steady: 'Hold steady. Scanning your pose now.',
+    hold_steady:
+        'Hold position. Scanning.',
 
     // Completion
-    all_complete: 'All angles captured. You\'re ready to synthesize your master identity.',
+    all_complete:
+        'Sequence complete. Data sent to processing. Stand by.',
 
     // Synthesis
-    synthesis_start: 'Synthesis has begun. Your master identity is being generated.',
-    synthesis_done: 'Your digital identity is ready. Welcome to the studio.',
+    synthesis_start:
+        'Synthesis initiated. Processing multi-angle data.',
+    synthesis_done:
+        'Identity established. Proceed to studio.',
+}
+
+// ── Shutter Click Audio Cue ──────────────────────────────────────────────────
+
+/**
+ * Plays a synthetic shutter-click sound using the Web Audio API.
+ * Short, sharp transient — mimics a mechanical shutter release.
+ */
+export function playShutterClick(): void {
+    if (typeof window === 'undefined') return
+
+    try {
+        const ctx = new AudioContext()
+        const duration = 0.08
+
+        // White noise burst for the "click"
+        const bufferSize = Math.floor(ctx.sampleRate * duration)
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+        const data = buffer.getChannelData(0)
+
+        for (let i = 0; i < bufferSize; i++) {
+            // Shaped noise: sharp attack, fast decay
+            const envelope = Math.exp(-i / (bufferSize * 0.15))
+            data[i] = (Math.random() * 2 - 1) * envelope * 0.6
+        }
+
+        // Bandpass filter for a mechanical click character
+        const filter = ctx.createBiquadFilter()
+        filter.type = 'bandpass'
+        filter.frequency.value = 3000
+        filter.Q.value = 1.5
+
+        const source = ctx.createBufferSource()
+        source.buffer = buffer
+
+        // Second click layer — tonal ping
+        const osc = ctx.createOscillator()
+        osc.frequency.value = 4200
+        const oscGain = ctx.createGain()
+        oscGain.gain.setValueAtTime(0.3, ctx.currentTime)
+        oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04)
+
+        source.connect(filter)
+        filter.connect(ctx.destination)
+        osc.connect(oscGain)
+        oscGain.connect(ctx.destination)
+
+        source.start(ctx.currentTime)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.04)
+        source.stop(ctx.currentTime + duration)
+
+        // Clean up
+        setTimeout(() => ctx.close(), 200)
+    } catch {
+        // Audio not available — silent fallback
+    }
 }
 
 // ── Speech Queue ─────────────────────────────────────────────────────────────
 
+type QueueItem = { text: string; onEnd?: () => void }
+
 export class SpeechQueue {
-    private queue: string[] = []
+    private queue: QueueItem[] = []
     private speaking = false
     private _muted = false
     private voice: SpeechSynthesisVoice | null = null
@@ -88,7 +175,6 @@ export class SpeechQueue {
 
         this.voice = getPreferredVoice()
 
-        // Voices often load async — listen for the event
         if (!this.voice) {
             window.speechSynthesis.addEventListener('voiceschanged', () => {
                 this.voice = getPreferredVoice()
@@ -103,18 +189,23 @@ export class SpeechQueue {
     }
 
     /** Add a line to the queue. No-op if muted or speech API unavailable. */
-    enqueue(text: string) {
+    enqueue(text: string, onEnd?: () => void) {
         if (this._muted) return
         if (typeof window === 'undefined' || !window.speechSynthesis) return
 
-        this.queue.push(text)
+        this.queue.push({ text, onEnd })
         if (!this.speaking) this.processNext()
     }
 
-    /** Speak a director line by key. Looks up from DIRECTOR_LINES. */
-    speak(key: string) {
+    /** Speak a director line by key. Optionally fire a callback when it ends. */
+    speak(key: string, onEnd?: () => void) {
         const line = DIRECTOR_LINES[key]
-        if (line) this.enqueue(line)
+        if (line) this.enqueue(line, onEnd)
+    }
+
+    /** Speak a line and play a shutter click immediately after. */
+    speakThenShutter(key: string) {
+        this.speak(key, () => playShutterClick())
     }
 
     /** Clear the queue without interrupting the current utterance. */
@@ -139,19 +230,22 @@ export class SpeechQueue {
             return
         }
 
-        const text = this.queue.shift()!
-        const utterance = new SpeechSynthesisUtterance(text)
+        const item = this.queue.shift()!
+        const utterance = new SpeechSynthesisUtterance(item.text)
 
-        // Apply calm, authoritative tone
-        utterance.rate = 0.9
-        utterance.pitch = 1.0
+        // Deep, deliberate, authoritative tone
+        utterance.rate = 0.85
+        utterance.pitch = 0.9
         utterance.volume = 1.0
 
         if (this.voice) {
             utterance.voice = this.voice
         }
 
-        utterance.onend = () => this.processNext()
+        utterance.onend = () => {
+            item.onEnd?.()
+            this.processNext()
+        }
         utterance.onerror = () => this.processNext()
 
         this.speaking = true
