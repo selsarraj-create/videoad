@@ -49,6 +49,39 @@ interface AngleCapture {
     validation?: UploadValidation | null
     uploading?: boolean
 }
+// ── Progress Helpers ─────────────────────────────────────────────────────────
+
+function RotatingTip({ tips }: { tips: string[] }) {
+    const [idx, setIdx] = useState(0)
+    useEffect(() => {
+        const t = setInterval(() => setIdx(i => (i + 1) % tips.length), 6000)
+        return () => clearInterval(t)
+    }, [tips.length])
+    return (
+        <AnimatePresence mode="wait">
+            <motion.span
+                key={idx}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.4 }}
+            >
+                {tips[idx]}
+            </motion.span>
+        </AnimatePresence>
+    )
+}
+
+function ElapsedTimer() {
+    const [seconds, setSeconds] = useState(0)
+    useEffect(() => {
+        const t = setInterval(() => setSeconds(s => s + 1), 1000)
+        return () => clearInterval(t)
+    }, [])
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return <span>{m}:{s.toString().padStart(2, '0')}</span>
+}
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -940,20 +973,75 @@ export default function OnboardPage() {
                     )}
 
                     {/* ===== STEP: GENERATING ===== */}
-                    {step === 'generating' && (
-                        <motion.div key="generating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12 text-center py-24">
-                            <div className="relative w-32 h-32 mx-auto">
-                                <div className="absolute inset-0 border-2 border-nimbus rounded-full animate-ping" />
-                                <div className="absolute inset-8 bg-foreground rounded-full animate-pulse" />
-                            </div>
-                            <div className="space-y-4">
-                                <h2 className="font-serif text-4xl text-primary">Synthesizing Identity</h2>
-                                <p className="text-muted-foreground text-sm uppercase tracking-widest max-w-md mx-auto">
-                                    Generating high-fidelity studio portrait from your multi-angle data...
+                    {step === 'generating' && (() => {
+                        const stages = [
+                            { key: 'front', label: 'Front Profile', icon: '👤' },
+                            { key: 'profile', label: 'Side Profile', icon: '👥' },
+                            { key: 'three_quarter', label: '¾ View', icon: '🎭' },
+                        ]
+                        const tips = [
+                            'Sculpting front profile from your selfie data…',
+                            'Mapping side-profile bone structure…',
+                            'Rendering three-quarter perspective…',
+                            'Enhancing 4K skin-texture fidelity…',
+                            'Calibrating studio lighting & white cyclorama…',
+                            'Refining anatomical proportions…',
+                            'Almost there — final quality pass…',
+                        ]
+                        return (
+                            <motion.div key="generating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-10 text-center py-16 max-w-lg mx-auto">
+                                {/* Pulsing orb */}
+                                <div className="relative w-24 h-24 mx-auto">
+                                    <div className="absolute inset-0 border border-nimbus/30 rounded-full animate-ping" />
+                                    <div className="absolute inset-4 border border-nimbus/60 rounded-full animate-ping" style={{ animationDelay: '0.4s' }} />
+                                    <div className="absolute inset-8 bg-foreground rounded-full animate-pulse" />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h2 className="font-serif text-3xl text-primary">Synthesizing Identity</h2>
+                                    <p className="text-muted-foreground text-xs uppercase tracking-[0.2em]">
+                                        Generating 3 master portraits from your multi-angle data
+                                    </p>
+                                </div>
+
+                                {/* Progress bar */}
+                                <div className="space-y-3">
+                                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                        <motion.div
+                                            className="h-full bg-gradient-to-r from-nimbus via-primary to-nimbus rounded-full"
+                                            initial={{ width: '2%' }}
+                                            animate={{ width: '95%' }}
+                                            transition={{ duration: 360, ease: 'linear' }}
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground uppercase tracking-widest">
+                                        <RotatingTip tips={tips} />
+                                        <ElapsedTimer />
+                                    </div>
+                                </div>
+
+                                {/* Angle stage indicators */}
+                                <div className="flex justify-center gap-6 pt-2">
+                                    {stages.map((s, i) => (
+                                        <div key={s.key} className="flex flex-col items-center gap-2">
+                                            <motion.div
+                                                className="w-14 h-14 rounded-full border border-border/50 flex items-center justify-center text-2xl bg-card/50"
+                                                animate={{ opacity: [0.5, 1, 0.5] }}
+                                                transition={{ duration: 2, repeat: Infinity, delay: i * 0.6 }}
+                                            >
+                                                {s.icon}
+                                            </motion.div>
+                                            <span className="text-[9px] text-muted-foreground uppercase tracking-widest">{s.label}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <p className="text-muted-foreground/60 text-[10px]">
+                                    This takes 3 – 6 minutes · Do not close this tab
                                 </p>
-                            </div>
-                        </motion.div>
-                    )}
+                            </motion.div>
+                        )
+                    })()}
 
                     {/* ===== STEP: DONE ===== */}
                     {step === 'done' && identity?.master_identity_url && (
