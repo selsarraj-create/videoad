@@ -43,7 +43,7 @@ export class MarketplaceBridge {
                 title: 'Nordstrom Cashmere Overcoat',
                 price: '1250.00',
                 currency: 'USD',
-                imageUrl: 'https://images.nordstrom.com/placeholder-overcoat.jpg',
+                imageUrl: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=1000&auto=format&fit=crop',
                 // Critical: Append xcust for user tracking
                 affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/coat&xcust=${userId}`,
                 brand: 'Theory',
@@ -70,7 +70,7 @@ export class MarketplaceBridge {
                 title: 'Vintage Hermès Silk Scarf',
                 price: '850.00',
                 currency: 'USD',
-                imageUrl: 'https://i.ebayimg.com/placeholder-hermes.jpg',
+                imageUrl: 'https://images.unsplash.com/photo-1608234807905-4466023792f5?q=80&w=1000&auto=format&fit=crop',
                 // Critical: Append customid for user tracking in EPN
                 affiliateUrl: `https://www.ebay.com/itm/VINTAGE-HERMES?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
                 brand: 'Hermès',

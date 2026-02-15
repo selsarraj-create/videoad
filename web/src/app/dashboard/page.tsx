@@ -47,7 +47,8 @@ import { BespokeInput } from "@/components/ui/bespoke-input"
 import { ParticleSilhouette } from "@/components/ui/particle-silhouette"
 import { StatusPill } from "@/components/ui/status-pill"
 import { RevenueChart } from "@/components/revenue-chart"
-import { DollarSign, TrendingUp, Clock, Award } from "lucide-react"
+import { LookOfTheDay } from "@/components/look-of-the-day"
+import { DollarSign, TrendingUp, Clock, Award, Bell } from "lucide-react"
 
 type Tab = 'try-on' | 'video' | 'marketplace' | 'revenue'
 
@@ -110,6 +111,9 @@ export default function StudioPage() {
     const [stats, setStats] = useState({ total: 0, cleared: 0, pending: 0 })
     const [payoutLoading, setPayoutLoading] = useState(false)
     const [payoutStatus, setPayoutStatus] = useState<string | null>(null)
+
+    // Trend state
+    const [currentTrend, setCurrentTrend] = useState<any>(null)
 
     // Compliance state
     const [disclosureOpen, setDisclosureOpen] = useState(false)
@@ -186,6 +190,11 @@ export default function StudioPage() {
                 })
                 setRevenueData(last7Days)
             }
+
+            // Fetch Today's Trend
+            const today = new Date().toISOString().split('T')[0]
+            const { data: trendData } = await supabase.from('trends').select('*').eq('look_of_the_day_date', today).maybeSingle()
+            if (trendData) setCurrentTrend(trendData)
         }
         fetchData()
         const interval = setInterval(fetchData, 4000)
@@ -388,6 +397,12 @@ export default function StudioPage() {
         }
     }
 
+    const handleApplyTrend = (imageUrl: string) => {
+        setGarmentImageUrl(imageUrl)
+        setGarmentPreview(imageUrl)
+        // Scroll to garment section if needed, though it's visible
+    }
+
     const canTryOn = masterIdentityUrl && garmentImageUrl && !tryOnLoading
     const canGenerateVideo = selectedMediaItem && selectedPreset && !videoLoading
     const videoJobs = jobs.filter(j => j.tier !== 'try_on')
@@ -453,7 +468,7 @@ export default function StudioPage() {
                     </div>
 
                     {/* Tab Switcher - Minimal Text Only */}
-                    <div className="flex items-center gap-8 ml-12">
+                    <div className="flex items-center gap-8 ml-12 overflow-x-auto scrollbar-none pb-1">
                         <button onClick={() => setActiveTab('try-on')}
                             className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2 
                                 ${activeTab === 'try-on' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
@@ -566,6 +581,13 @@ export default function StudioPage() {
                                     </div>
                                 </div>
 
+                                {/* Trend Alert Notification */}
+                                {currentTrend && (
+                                    <div className="mb-12">
+                                        <LookOfTheDay trend={currentTrend} onApplyTrend={handleApplyTrend} />
+                                    </div>
+                                )}
+
                                 {/* Step 2: Upload Clothing */}
                                 <div className="space-y-6">
                                     <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
@@ -657,8 +679,8 @@ export default function StudioPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         {marketplaceItems.map(item => (
                                             <div key={item.id} className="group relative bg-white border border-nimbus p-4 transition-all hover:shadow-xl">
-                                                <div className="aspect-[3/4] overflow-hidden mb-4 relative">
-                                                    <img src={item.imageUrl} alt={item.title} className="w-full h-full object-contain mix-blend-multiply" />
+                                                <div className="aspect-[3/4] overflow-hidden mb-4 relative bg-nimbus/5">
+                                                    <img src={item.imageUrl} alt={item.title} className="w-full h-full object-contain" />
                                                     {item.authenticityGuaranteed && (
                                                         <Badge className="absolute top-2 left-2 bg-blue-500 text-white border-0 text-[8px] uppercase tracking-tighter">
                                                             <Check className="w-3 h-3 mr-1" /> Authenticity Guaranteed
