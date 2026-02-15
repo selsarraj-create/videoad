@@ -400,7 +400,7 @@ export default function OnboardPage() {
                 raw_selfie_url: frontUrl,
             }).eq('id', identity.id)
 
-            // Trigger generation
+            // Trigger generation (returns immediately — worker processes async)
             const res = await fetch('/api/generate-identity', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -412,8 +412,18 @@ export default function OnboardPage() {
                 throw new Error(data.error || 'Generation failed')
             }
 
-            // Poll for completion
+            // Poll for completion (up to 3 minutes)
+            let pollCount = 0
+            const maxPolls = 60 // 60 × 3s = 3 min
             const pollInterval = setInterval(async () => {
+                pollCount++
+                if (pollCount > maxPolls) {
+                    setError('Generation is taking longer than expected. Check back in a moment.')
+                    setStep('synthesis')
+                    clearInterval(pollInterval)
+                    return
+                }
+
                 const { data: row } = await supabase
                     .from('identities')
                     .select('*')
@@ -485,8 +495,8 @@ export default function OnboardPage() {
                     {STEP_LABELS.map((s, i) => (
                         <div key={s} className="flex items-center gap-1">
                             <div className={`h-0.5 transition-all duration-500 ${getStepIndex() === i ? 'bg-primary w-12'
-                                    : getStepIndex() > i ? 'bg-primary/40 w-8'
-                                        : 'bg-nimbus w-8'
+                                : getStepIndex() > i ? 'bg-primary/40 w-8'
+                                    : 'bg-nimbus w-8'
                                 }`} />
                         </div>
                     ))}
@@ -622,10 +632,10 @@ export default function OnboardPage() {
                                 {REQUIRED_ANGLES.map((a, i) => (
                                     <div key={a.key} className="flex flex-col items-center gap-2">
                                         <div className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${captures[a.key].validated
-                                                ? 'bg-primary border-primary text-white'
-                                                : i === currentAngleIdx
-                                                    ? 'border-primary text-primary animate-pulse'
-                                                    : 'border-nimbus text-muted-foreground'
+                                            ? 'bg-primary border-primary text-white'
+                                            : i === currentAngleIdx
+                                                ? 'border-primary text-primary animate-pulse'
+                                                : 'border-nimbus text-muted-foreground'
                                             }`}>
                                             {captures[a.key].validated
                                                 ? <CheckCircle2 className="w-5 h-5" />
@@ -678,8 +688,8 @@ export default function OnboardPage() {
                                                 </span>
                                                 {poseDetection && (
                                                     <Badge className={`border-0 rounded-none text-[9px] font-bold ${poseDetection.angle === currentAngle.key && poseDetection.confidence > 0.8
-                                                            ? 'bg-green-500 text-white'
-                                                            : 'bg-white/20 text-white/80'
+                                                        ? 'bg-green-500 text-white'
+                                                        : 'bg-white/20 text-white/80'
                                                         }`}>
                                                         {poseDetection.angle === currentAngle.key
                                                             ? `${Math.round(poseDetection.confidence * 100)}%`
@@ -759,10 +769,10 @@ export default function OnboardPage() {
                                             {/* Upload Zone */}
                                             <div
                                                 className={`relative aspect-[3/4] border-2 border-dashed transition-all duration-500 overflow-hidden cursor-pointer group ${cap.validated
-                                                        ? 'border-primary bg-primary/5'
-                                                        : validation && !validation.suitable
-                                                            ? 'border-red-300 bg-red-50'
-                                                            : 'border-nimbus hover:border-primary/50 bg-white'
+                                                    ? 'border-primary bg-primary/5'
+                                                    : validation && !validation.suitable
+                                                        ? 'border-red-300 bg-red-50'
+                                                        : 'border-nimbus hover:border-primary/50 bg-white'
                                                     }`}
                                                 onClick={() => fileRefs.current[angle.key]?.click()}
                                             >
@@ -876,8 +886,8 @@ export default function OnboardPage() {
                                     onClick={() => setStep('synthesis')}
                                     disabled={!allCaptured}
                                     className={`h-14 px-10 text-sm uppercase tracking-[0.2em] font-bold rounded-none transition-all ${allCaptured
-                                            ? 'bg-foreground text-background hover:bg-primary hover:text-white shadow-xl'
-                                            : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
+                                        ? 'bg-foreground text-background hover:bg-primary hover:text-white shadow-xl'
+                                        : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
                                         }`}
                                 >
                                     Complete Profile <ArrowRight className="w-4 h-4 ml-3" />

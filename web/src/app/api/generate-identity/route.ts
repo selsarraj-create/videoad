@@ -45,56 +45,25 @@ export async function POST(request: Request) {
         // Update status to generating
         await supabase.from('identities').update({ status: 'generating' }).eq('id', identity_id)
 
-        // Call worker — now synchronous, waits for generation to complete
+        // Fire worker call — DO NOT await the response.
+        // The worker runs synchronously (keeps Railway container alive),
+        // but Vercel would timeout if we waited. Frontend polls the DB instead.
         const workerUrl = process.env.RAILWAY_WORKER_URL
         if (!workerUrl) {
             return NextResponse.json({ error: 'Worker not configured' }, { status: 503 })
         }
 
-        const workerResp = await fetch(`${workerUrl}/webhook/generate-identity`, {
+        fetch(`${workerUrl}/webhook/generate-identity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 identity_id,
                 selfie_url: identity.raw_selfie_url
             }),
-            signal: AbortSignal.timeout(200_000), // 200s timeout for Gemini image gen
-        })
+        }).catch(err => console.error('Worker fire-and-forget error:', err))
 
-        if (!workerResp.ok) {
-            const errData = await workerResp.json().catch(() => ({}))
-            console.error('Worker generation failed:', errData)
-            return NextResponse.json({ error: errData.message || 'Generation failed' }, { status: 502 })
-        }
-
-        // Check final status in DB
-        const { data: finalRow } = await supabase
-            .from('identities')
-            .select('status, master_identity_url')
-            .eq('id', identity_id)
-            .single()
-
-        if (finalRow?.status === 'ready' && finalRow.master_identity_url) {
-            return NextResponse.json({ success: true, identity_id, master_identity_url: finalRow.master_identity_url })
-        }
-
-        // If worker returned OK but status isn't ready, poll briefly
-        for (let i = 0; i < 5; i++) {
-            await new Promise(resolve => setTimeout(resolve, 2000))
-            const { data: row } = await supabase
-                .from('identities')
-                .select('status, master_identity_url')
-                .eq('id', identity_id)
-                .single()
-            if (row?.status === 'ready') {
-                return NextResponse.json({ success: true, identity_id, master_identity_url: row.master_identity_url })
-            }
-            if (row?.status === 'failed') {
-                return NextResponse.json({ error: 'Identity generation failed' }, { status: 500 })
-            }
-        }
-
-        return NextResponse.json({ error: 'Generation timed out' }, { status: 408 })
+        // Return immediately — frontend will poll DB for ready/failed
+        return NextResponse.json({ success: true, identity_id })
     } catch (err) {
         console.error('Generate Identity API Error:', err)
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
