@@ -93,8 +93,10 @@ def generate_on_model(garment_image_url: str, person_image_url: str = None, opti
         return {"image_url": output_url, "raw_response": result}
 
     except requests.exceptions.HTTPError as e:
-        logger.error(f"Claid.ai API error: {e.response.status_code} — {e.response.text}")
-        raise
+        error_body = e.response.text[:500] if e.response else 'no response'
+        logger.error(f"Claid.ai API error: {e.response.status_code} — {error_body}")
+        logger.error(f"Claid.ai request payload was: garment={garment_image_url[:80]}, person={person_image_url[:80] if person_image_url else 'none'}")
+        raise Exception(f"{e.response.status_code} {error_body}")
     except Exception as e:
         logger.error(f"Claid.ai request failed: {e}")
         raise

@@ -340,14 +340,14 @@ def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: st
         }).eq("id", job_id).execute()
 
 @app.post("/webhook/try-on")
-async def handle_try_on_webhook(request: TryOnRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(
-        process_try_on_job,
-        request.job_id,
-        request.person_image_url,
-        request.garment_image_url
-    )
-    return {"message": "Try-on job received", "job_id": request.job_id}
+async def handle_try_on_webhook(request: TryOnRequest):
+    """Run synchronously so Railway keeps the container alive."""
+    try:
+        process_try_on_job(request.job_id, request.person_image_url, request.garment_image_url)
+        return {"message": "Try-on job completed", "job_id": request.job_id}
+    except Exception as e:
+        print(f"Try-on endpoint error: {str(e)}")
+        return {"message": f"Try-on failed: {str(e)[:200]}", "job_id": request.job_id}
 
 # =========================================================================
 # Identity Pipeline: Validate Selfie + Generate Master Identity
