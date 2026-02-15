@@ -97,14 +97,18 @@ export class MarketplaceBridge {
             });
 
             console.log(`[Marketplace] Skimlinks V4 Response: ${resp.data.offers?.length || 0} items found`);
+            if (resp.data.offers?.length > 0) {
+                console.log('[Marketplace] Sample Skimlinks Offer Schema:', JSON.stringify(resp.data.offers[0]).substring(0, 500));
+            }
 
             return (resp.data.offers || []).map((o: any) => ({
                 id: `skim-${o.id}`,
                 source: 'skimlinks',
-                title: o.offer_name || 'Designer Piece',
+                title: o.offer_name || o.title || 'Designer Piece',
                 price: o.price || '0.00',
                 currency: o.currency || 'USD',
-                imageUrl: o.image_url || o.merchant_details?.logo || '',
+                // Check multiple possible image fields
+                imageUrl: o.image_url || o.image || o.merchant_details?.logo || '',
                 affiliateUrl: `${o.offer_url}${o.offer_url?.includes('?') ? '&' : '?'}xcust=${userId}`,
                 brand: o.merchant_details?.name || 'Retailer',
                 category: category // Pass through filter category
@@ -179,7 +183,7 @@ export class MarketplaceBridge {
                 title: 'Loro Piana - Open Walk Suede Boots',
                 price: '950.00',
                 currency: 'USD',
-                imageUrl: 'https://images.clothes.com/mock/loropiana-boots.jpg',
+                imageUrl: '/placeholders/loropiana-boots.png',
                 affiliateUrl: '#',
                 brand: 'Loro Piana',
                 category: 'Shoes'
@@ -190,7 +194,7 @@ export class MarketplaceBridge {
                 title: 'Vintage Hermès Birkin 35 - Gold Hardware',
                 price: '12500.00',
                 currency: 'USD',
-                imageUrl: 'https://images.clothes.com/mock/hermes-birkin.jpg',
+                imageUrl: '/placeholders/hermes-birkin.png',
                 affiliateUrl: '#',
                 brand: 'Hermès',
                 category: 'Bags',
@@ -202,7 +206,7 @@ export class MarketplaceBridge {
                 title: 'Brunello Cucinelli - Double-Breasted Cashmere Coat',
                 price: '4800.00',
                 currency: 'USD',
-                imageUrl: 'https://images.clothes.com/mock/cucinelli-coat.jpg',
+                imageUrl: '/placeholders/cucinelli-coat.png',
                 affiliateUrl: '#',
                 brand: 'Brunello Cucinelli',
                 category: 'Outerwear'
