@@ -137,21 +137,26 @@ export default function StudioPage() {
     }, [])
 
     // Check for completed try-on jobs and auto-save to media library
+    const savingJobIds = useRef(new Set<string>())
     useEffect(() => {
         const tryOnJobs = jobs.filter(j => j.tier === 'try_on' && j.status === 'completed' && j.output_url)
         for (const job of tryOnJobs) {
             const alreadySaved = mediaLibrary.some(m => m.job_id === job.id)
-            if (!alreadySaved) {
-                supabase.from('media_library').insert({
+            if (!alreadySaved && !savingJobIds.current.has(job.id)) {
+                savingJobIds.current.add(job.id)
+                supabase.from('media_library').upsert({
                     job_id: job.id,
                     image_url: job.output_url,
                     person_image_url: (job.input_params as Record<string, string>)?.person_image_url || null,
                     garment_image_url: (job.input_params as Record<string, string>)?.garment_image_url || null,
                     label: ''
-                }).then(() => {
+                }, { onConflict: 'job_id' }).then(() => {
                     // Refresh media library
                     supabase.from('media_library').select('*').order('created_at', { ascending: false })
-                        .then(({ data }) => { if (data) setMediaLibrary(data as MediaItem[]) })
+                        .then(({ data }) => {
+                            if (data) setMediaLibrary(data as MediaItem[])
+                            savingJobIds.current.delete(job.id)
+                        })
                 })
             }
         }
