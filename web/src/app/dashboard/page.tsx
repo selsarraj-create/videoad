@@ -507,8 +507,10 @@ export default function StudioPage() {
             <main className="flex-1 grid grid-cols-12 overflow-hidden">
 
                 {/* ===== LEFT PANEL ===== */}
-                <section className="col-span-12 lg:col-span-5 flex flex-col overflow-y-auto glass-panel z-20 relative">
-                    <div className="flex-1 p-8 lg:p-12 max-w-xl mx-auto w-full space-y-12">
+                <section className={`flex flex-col overflow-y-auto glass-panel z-20 relative transition-all duration-500
+                    ${(activeTab === 'marketplace' || activeTab === 'revenue') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
+                    <div className={`flex-1 p-8 lg:p-12 w-full space-y-12 transition-all
+                        ${(activeTab === 'marketplace' || activeTab === 'revenue') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
 
                         {activeTab === 'try-on' ? (
                             /* ---- TRY ON TAB ---- */
@@ -874,121 +876,123 @@ export default function StudioPage() {
                 </section>
 
                 {/* ===== RIGHT: Archive (Gallery Masonry) ===== */}
-                <aside className="col-span-12 lg:col-span-7 bg-[#FBFBFB] flex flex-col overflow-hidden relative">
-                    {/* Background Detail */}
-                    <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                        <h2 className="text-[120px] font-serif text-primary leading-none">
-                            {activeTab === 'try-on' ? 'ARCHIVE' : 'CINEMA'}
-                        </h2>
-                    </div>
+                {activeTab !== 'marketplace' && activeTab !== 'revenue' && (
+                    <aside className="col-span-12 lg:col-span-7 bg-[#FBFBFB] flex flex-col overflow-hidden relative">
+                        {/* Background Detail */}
+                        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                            <h2 className="text-[120px] font-serif text-primary leading-none">
+                                {activeTab === 'try-on' ? 'ARCHIVE' : 'CINEMA'}
+                            </h2>
+                        </div>
 
-                    <div className="flex-1 overflow-y-auto p-12 lg:p-16 relative z-10">
+                        <div className="flex-1 overflow-y-auto p-12 lg:p-16 relative z-10">
 
-                        {/* Asymmetrical Masonry Grid */}
-                        <div className="columns-1 md:columns-2 gap-8 space-y-8 [&>div]:break-inside-avoid">
+                            {/* Asymmetrical Masonry Grid */}
+                            <div className="columns-1 md:columns-2 gap-8 space-y-8 [&>div]:break-inside-avoid">
 
-                            {/* Empty State */}
-                            {((activeTab === 'try-on' && mediaLibrary.length === 0) || (activeTab === 'video' && videoJobs.length === 0)) && (
-                                <div className="h-full flex flex-col items-center justify-center py-32 text-center opacity-40">
-                                    <div className="text-6xl mb-4 font-serif italic text-nimbus">Empty</div>
-                                    <p className="text-xs uppercase tracking-widest text-muted-foreground">Begin creation to populate archive</p>
-                                </div>
-                            )}
+                                {/* Empty State */}
+                                {((activeTab === 'try-on' && mediaLibrary.length === 0) || (activeTab === 'video' && videoJobs.length === 0)) && (
+                                    <div className="h-full flex flex-col items-center justify-center py-32 text-center opacity-40">
+                                        <div className="text-6xl mb-4 font-serif italic text-nimbus">Empty</div>
+                                        <p className="text-xs uppercase tracking-widest text-muted-foreground">Begin creation to populate archive</p>
+                                    </div>
+                                )}
 
-                            {activeTab === 'try-on' ? (
-                                /* Try-on Masonry */
-                                mediaLibrary.map((item, i) => (
-                                    <motion.div
-                                        key={item.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: i * 0.1 }}
-                                        className={`relative group bg-white p-3 shadow-sm hover:shadow-xl transition-all duration-500
-                                            ${i % 3 === 0 ? 'mt-12' : ''} /* Asymmetrical Stagger */
-                                            ${i % 2 === 0 ? 'rotate-1' : '-rotate-1 hover:rotate-0'}
-                                        `}
-                                    >
-                                        <div className="relative overflow-hidden aspect-[3/4] bg-[#f9f9f9]">
-                                            <img src={item.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" />
+                                {activeTab === 'try-on' ? (
+                                    /* Try-on Masonry */
+                                    mediaLibrary.map((item, i) => (
+                                        <motion.div
+                                            key={item.id}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: i * 0.1 }}
+                                            className={`relative group bg-white p-3 shadow-sm hover:shadow-xl transition-all duration-500
+                                                ${i % 3 === 0 ? 'mt-12' : ''} /* Asymmetrical Stagger */
+                                                ${i % 2 === 0 ? 'rotate-1' : '-rotate-1 hover:rotate-0'}
+                                            `}
+                                        >
+                                            <div className="relative overflow-hidden aspect-[3/4] bg-[#f9f9f9]">
+                                                <img src={item.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" />
 
-                                            {/* Hover HUD */}
-                                            <div className="absolute inset-0 bg-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                                                <Button variant="outline" size="sm"
-                                                    onClick={() => { setActiveTab('video'); setSelectedMediaItem(item) }}
-                                                    className="h-10 text-[10px] uppercase tracking-widest border-primary text-primary hover:bg-primary hover:text-white rounded-none">
-                                                    Create Video
-                                                </Button>
-                                            </div>
-                                        </div>
-                                        <div className="pt-3 flex justify-between items-center opacity-60">
-                                            <span className="text-[9px] font-mono uppercase tracking-widest">NO. {item.id.slice(0, 4)}</span>
-                                            <span className="text-[9px] font-serif italic">{new Date(item.created_at).toLocaleDateString()}</span>
-                                        </div>
-                                    </motion.div>
-                                ))
-                            ) : (
-                                /* Video Masonry */
-                                videoJobs.map((job, i) => (
-                                    <motion.div
-                                        key={job.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: i * 0.1 }}
-                                        className={`relative group bg-white shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden
-                                            ${i % 3 === 0 ? 'mb-12' : 'mb-0'} /* Asymmetrical Spacing */
-                                        `}
-                                    >
-                                        <div className="relative aspect-video bg-[#000]">
-                                            {job.output_url ? (
-                                                <video src={job.output_url} controls className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                    <div className="text-center space-y-4">
-                                                        <div className="w-8 h-8 rounded-none border-2 border-white/20 border-t-white animate-spin mx-auto" />
-                                                        <p className="text-[10px] text-white/60 uppercase tracking-widest font-bold animate-pulse">
-                                                            {job.status === 'failed' ? 'Rendering Failed' : 'Rendering Cinema...'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="p-4 bg-white border-t border-nimbus/20">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <Badge variant="outline" className={`text-[9px] h-5 border-0 rounded-none uppercase tracking-widest ${job.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                    job.status === 'failed' ? 'bg-red-100 text-red-700' :
-                                                        'bg-yellow-100 text-yellow-700'}`}>
-                                                    {job.status}
-                                                </Badge>
-                                                <span className="text-[9px] text-muted-foreground font-mono">ID: {job.id.slice(0, 6)}</span>
-                                            </div>
-
-                                            {job.provider_metadata?.compute_savings && (
-                                                <div className="flex items-center gap-2 mb-4">
-                                                    <Badge className="bg-blue-50 text-blue-600 border-blue-100 rounded-none text-[8px] uppercase tracking-tighter hover:bg-blue-50">
-                                                        ⚡ {String(job.provider_metadata.compute_savings)} Saved
-                                                    </Badge>
-                                                </div>
-                                            )}
-
-                                            {job.status === 'completed' && job.output_url && (
-                                                <div className="mt-4 pt-4 border-t border-nimbus/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Button variant="ghost" size="sm"
-                                                        className="w-full h-8 text-[10px] uppercase tracking-widest hover:bg-nimbus/20 rounded-none border border-nimbus"
-                                                        onClick={() => {
-                                                            setExtensionJob(job)
-                                                            setExtensionDialogOpen(true)
-                                                        }}>
-                                                        Extend Scene +7s
+                                                {/* Hover HUD */}
+                                                <div className="absolute inset-0 bg-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                                                    <Button variant="outline" size="sm"
+                                                        onClick={() => { setActiveTab('video'); setSelectedMediaItem(item) }}
+                                                        className="h-10 text-[10px] uppercase tracking-widest border-primary text-primary hover:bg-primary hover:text-white rounded-none">
+                                                        Create Video
                                                     </Button>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                ))
-                            )}
+                                            </div>
+                                            <div className="pt-3 flex justify-between items-center opacity-60">
+                                                <span className="text-[9px] font-mono uppercase tracking-widest">NO. {item.id.slice(0, 4)}</span>
+                                                <span className="text-[9px] font-serif italic">{new Date(item.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                        </motion.div>
+                                    ))
+                                ) : (
+                                    /* Video Masonry */
+                                    videoJobs.map((job, i) => (
+                                        <motion.div
+                                            key={job.id}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: i * 0.1 }}
+                                            className={`relative group bg-white shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden
+                                                ${i % 3 === 0 ? 'mb-12' : 'mb-0'} /* Asymmetrical Spacing */
+                                            `}
+                                        >
+                                            <div className="relative aspect-video bg-[#000]">
+                                                {job.output_url ? (
+                                                    <video src={job.output_url} controls className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <div className="text-center space-y-4">
+                                                            <div className="w-8 h-8 rounded-none border-2 border-white/20 border-t-white animate-spin mx-auto" />
+                                                            <p className="text-[10px] text-white/60 uppercase tracking-widest font-bold animate-pulse">
+                                                                {job.status === 'failed' ? 'Rendering Failed' : 'Rendering Cinema...'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="p-4 bg-white border-t border-nimbus/20">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <Badge variant="outline" className={`text-[9px] h-5 border-0 rounded-none uppercase tracking-widest ${job.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                        job.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                                            'bg-yellow-100 text-yellow-700'}`}>
+                                                        {job.status}
+                                                    </Badge>
+                                                    <span className="text-[9px] text-muted-foreground font-mono">ID: {job.id.slice(0, 6)}</span>
+                                                </div>
+
+                                                {job.provider_metadata?.compute_savings && (
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <Badge className="bg-blue-50 text-blue-600 border-blue-100 rounded-none text-[8px] uppercase tracking-tighter hover:bg-blue-50">
+                                                            ⚡ {String(job.provider_metadata.compute_savings)} Saved
+                                                        </Badge>
+                                                    </div>
+                                                )}
+
+                                                {job.status === 'completed' && job.output_url && (
+                                                    <div className="mt-4 pt-4 border-t border-nimbus/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button variant="ghost" size="sm"
+                                                            className="w-full h-8 text-[10px] uppercase tracking-widest hover:bg-nimbus/20 rounded-none border border-nimbus"
+                                                            onClick={() => {
+                                                                setExtensionJob(job)
+                                                                setExtensionDialogOpen(true)
+                                                            }}>
+                                                            Extend Scene +7s
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    ))
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </aside>
+                    </aside>
+                )}
             </main>
 
             {/* Extension Dialog */}
