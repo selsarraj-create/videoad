@@ -19,6 +19,8 @@ export class MarketplaceBridge {
     private skimlinksPublisherId: string;
     private ebayClientId: string;
     private ebayClientSecret: string;
+    private skimlinksToken: string | null = null;
+    private ebayToken: string | null = null;
 
     constructor() {
         this.skimlinksClientId = process.env.SKIMLINKS_CLIENT_ID || '';
@@ -28,150 +30,123 @@ export class MarketplaceBridge {
         this.ebayClientSecret = process.env.EBAY_CLIENT_SECRET || '';
     }
 
-    /**
-     * Fetch high-end retail from Skimlinks Search API
-     */
-    async fetchSkimlinksItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
+    private async getSkimlinksToken(): Promise<string | null> {
+        if (this.skimlinksToken) return this.skimlinksToken;
         try {
-            console.log(`Fetching Skimlinks items for: ${query} (Category: ${category})`);
-
-            const mockItems: UnifiedGarment[] = [
-                {
-                    id: `skim-1`,
-                    source: 'skimlinks',
-                    title: 'Nordstrom Cashmere Overcoat',
-                    price: '1250.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/coat&xcust=${userId}`,
-                    brand: 'Theory',
-                    category: 'Outerwear'
-                },
-                {
-                    id: `skim-1b`,
-                    source: 'skimlinks',
-                    title: 'Loro Piana Storm System Parka',
-                    price: '2850.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1544022613-e87fd75a784a?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/parka&xcust=${userId}`,
-                    brand: 'Loro Piana',
-                    category: 'Outerwear'
-                },
-                {
-                    id: `skim-2`,
-                    source: 'skimlinks',
-                    title: 'Silk Evening Blouse',
-                    price: '450.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1581044777550-4cfa60707c03?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/shirt&xcust=${userId}`,
-                    brand: 'Vince',
-                    category: 'Shirts'
-                },
-                {
-                    id: `skim-2b`,
-                    source: 'skimlinks',
-                    title: 'Poplin Oversized Shirt',
-                    price: '325.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1598033129183-c4f50c7176c8?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/poplin&xcust=${userId}`,
-                    brand: 'Theory',
-                    category: 'Shirts'
-                },
-                {
-                    id: `skim-3`,
-                    source: 'skimlinks',
-                    title: 'Leather Chelsea Boots',
-                    price: '595.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1638247025967-b4e38f787b76?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://go.skimresources.com?id=${this.skimlinksPublisherId}&xs=1&url=https://www.nordstrom.com/p/boots&xcust=${userId}`,
-                    brand: 'Common Projects',
-                    category: 'Shoes'
-                }
-            ];
-
-            return mockItems.filter(item => {
-                const matchesQuery = item.title.toLowerCase().includes(query.toLowerCase()) ||
-                    item.brand?.toLowerCase().includes(query.toLowerCase());
-                const matchesCategory = !category || category === 'All' || item.category === category;
-                return matchesQuery && matchesCategory;
+            const resp = await axios.post('https://authentication.skimlinks.com/oauth2/token', {
+                client_id: this.skimlinksClientId,
+                client_secret: this.skimlinksClientSecret,
+                grant_type: 'client_credentials'
             });
+            this.skimlinksToken = resp.data.access_token;
+            return this.skimlinksToken;
         } catch (error) {
-            console.error('Skimlinks API Error:', error);
-            return [];
+            console.error('[Marketplace] Skimlinks Auth Error:', error);
+            return null;
+        }
+    }
+
+    private async getEbayToken(): Promise<string | null> {
+        if (this.ebayToken) return this.ebayToken;
+        try {
+            const auth = Buffer.from(`${this.ebayClientId}:${this.ebayClientSecret}`).toString('base64');
+            const resp = await axios.post('https://api.ebay.com/identity/v1/oauth2/token',
+                'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope',
+                {
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                }
+            );
+            this.ebayToken = resp.data.access_token;
+            return this.ebayToken;
+        } catch (error) {
+            console.error('[Marketplace] eBay Auth Error:', error);
+            return null;
         }
     }
 
     /**
+     * Fetch high-end retail from Skimlinks Product Search API
+     */
+    async fetchSkimlinksItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
+        const token = await this.getSkimlinksToken();
+        if (!token) return [];
+
+        try {
+            console.log(`[Marketplace] Fetching Skimlinks: ${query}`);
+            const resp = await axios.get('https://api.skimlinks.com/v1/products/search', {
+                params: {
+                    q: query,
+                    category: category !== 'All' ? category : undefined,
+                    limit: 10,
+                    publisher_id: this.skimlinksPublisherId
+                },
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            return (resp.data.products || []).map((p: any) => ({
+                id: `skim-${p.id}`,
+                source: 'skimlinks',
+                title: p.title,
+                price: p.price,
+                currency: p.currency || 'USD',
+                imageUrl: p.image_url,
+                affiliateUrl: `${p.url}${p.url.includes('?') ? '&' : '?'}xcust=${userId}`,
+                brand: p.brand,
+                category: p.category
+            }));
+        } catch (error) {
+            console.error('[Marketplace] Skimlinks Search Error:', error);
+            return [];
+        }
+    }
+
+    private getEbayCategoryId(category?: string): string | null {
+        const mapping: Record<string, string> = {
+            'Outerwear': '15724', // Women's Clothing
+            'Shirts': '15724',
+            'Bags': '169291',
+            'Accessories': '4251',
+            'Shoes': '3034'
+        };
+        return category ? mapping[category] || null : null;
+    }
+
+    /**
      * Fetch vintage luxury from eBay Browse API
-     * Filters: Authenticity Guarantee + Min Resolution 1500px
      */
     async fetchEbayItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
+        const token = await this.getEbayToken();
+        if (!token) return [];
+
         try {
-            console.log(`Fetching eBay items for: ${query} (Category: ${category})`);
+            console.log(`[Marketplace] Fetching eBay: ${query}`);
+            const ebayCatId = this.getEbayCategoryId(category);
 
-            const mockItems: UnifiedGarment[] = [
-                {
-                    id: `ebay-1`,
-                    source: 'ebay',
-                    title: 'Vintage Hermès Silk Scarf',
-                    price: '850.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1608234807905-4466023792f5?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://www.ebay.com/itm/VINTAGE-HERMES?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
-                    brand: 'Hermès',
-                    category: 'Accessories',
-                    authenticityGuaranteed: true
+            const resp = await axios.get('https://api.ebay.com/buy/browse/v1/item_summary/search', {
+                params: {
+                    q: query,
+                    limit: 10,
+                    filter: ebayCatId ? `categoryIds:{${ebayCatId}}` : undefined,
                 },
-                {
-                    id: `ebay-1b`,
-                    source: 'ebay',
-                    title: 'Classic Chanel Brooch',
-                    price: '650.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1611085583191-a3b1ae8407ac?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://www.ebay.com/itm/CHANEL-BROOCH?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
-                    brand: 'Chanel',
-                    category: 'Accessories',
-                    authenticityGuaranteed: true
-                },
-                {
-                    id: `ebay-2`,
-                    source: 'ebay',
-                    title: 'Archival Kelly Bag 35',
-                    price: '12500.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://www.ebay.com/itm/KELLY-35?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
-                    brand: 'Hermès',
-                    category: 'Bags',
-                    authenticityGuaranteed: true
-                },
-                {
-                    id: `ebay-2b`,
-                    source: 'ebay',
-                    title: 'Louis Vuitton Speedy 30',
-                    price: '1800.00',
-                    currency: 'USD',
-                    imageUrl: 'https://images.unsplash.com/photo-1547949003-9792a18a2601?q=80&w=1000&auto=format&fit=crop',
-                    affiliateUrl: `https://www.ebay.com/itm/LV-SPEEDY?customid=${userId}&campid=${process.env.EBAY_CAMP_ID || ''}`,
-                    brand: 'Louis Vuitton',
-                    category: 'Bags',
-                    authenticityGuaranteed: true
-                }
-            ];
-
-            return mockItems.filter(item => {
-                const matchesQuery = item.title.toLowerCase().includes(query.toLowerCase()) ||
-                    item.brand?.toLowerCase().includes(query.toLowerCase());
-                const matchesCategory = !category || category === 'All' || item.category === category;
-                return matchesQuery && matchesCategory;
+                headers: { 'Authorization': `Bearer ${token}` }
             });
+
+            return (resp.data.itemSummaries || []).map((item: any) => ({
+                id: `ebay-${item.itemId}`,
+                source: 'ebay',
+                title: item.title,
+                price: item.price.value,
+                currency: item.price.currency,
+                imageUrl: item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl,
+                affiliateUrl: `${item.itemAffiliateWebUrl || item.itemWebUrl}${item.itemWebUrl.includes('?') ? '&' : '?'}customid=${userId}`,
+                brand: item.brand,
+                authenticityGuaranteed: item.topRatedListing || false
+            }));
         } catch (error) {
-            console.error('eBay API Error:', error);
+            console.error('[Marketplace] eBay Search Error:', error);
             return [];
         }
     }
