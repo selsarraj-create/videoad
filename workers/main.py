@@ -442,9 +442,14 @@ def process_generate_identity(identity_id: str, selfie_url: str):
         }).eq("id", identity_id).execute()
 
 @app.post("/webhook/generate-identity")
-async def handle_generate_identity(request: GenerateIdentityRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(process_generate_identity, request.identity_id, request.selfie_url)
-    return {"message": "Identity generation started", "identity_id": request.identity_id}
+async def handle_generate_identity(request: GenerateIdentityRequest):
+    """Run generation synchronously so Railway keeps the container alive."""
+    try:
+        process_generate_identity(request.identity_id, request.selfie_url)
+        return {"message": "Identity generation completed", "identity_id": request.identity_id}
+    except Exception as e:
+        print(f"Generate identity endpoint error: {str(e)}")
+        return {"message": f"Generation failed: {str(e)[:100]}", "identity_id": request.identity_id}
 
 
 # =========================================================================
