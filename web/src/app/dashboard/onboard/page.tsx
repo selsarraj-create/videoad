@@ -3,111 +3,140 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import {
-    Sparkles, Camera, User, Sun, Shirt, ArrowRight,
-    CheckCircle2, XCircle, Loader2, RefreshCcw, ChevronRight,
-    Video as VideoIcon, Zap
+    Sparkles, Camera, Upload, User, Sun, ArrowRight, ArrowLeft,
+    CheckCircle2, XCircle, Loader2, RefreshCcw,
+    Video as VideoIcon, Zap, Eye, RotateCcw, ImagePlus, Shield
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 
-type Step = 'guide' | 'camera' | 'validating' | 'checklist' | 'generating' | 'done'
+// ── Types ────────────────────────────────────────────────────────────────────
 
-interface ValidationCheck {
-    name: string
-    passed: boolean
-    message: string
-}
+type Step = 'guide' | 'mode_select' | 'ai_director' | 'manual_import' | 'synthesis' | 'generating' | 'done'
+type Angle = 'front' | 'profile' | 'three_quarter'
 
 interface Identity {
     id: string
     raw_selfie_url: string
     master_identity_url: string | null
-    validation_result: {
-        passed?: boolean
-        checks?: ValidationCheck[]
-        error?: string
-    }
     status: string
 }
+
+interface PoseDetection {
+    angle: string
+    confidence: number
+    full_body_visible: boolean
+    arms_clear: boolean
+    no_phone: boolean
+    silhouette_clear: boolean
+    coaching_tip: string
+}
+
+interface UploadValidation {
+    suitable: boolean
+    angle: string
+    checks: Record<string, { passed: boolean; message: string }>
+    issues: string[]
+    overall_message: string
+}
+
+interface AngleCapture {
+    preview: string | null
+    url: string | null
+    validated: boolean
+    validation?: UploadValidation | null
+    uploading?: boolean
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const REQUIRED_ANGLES: { key: Angle; label: string; icon: string; desc: string }[] = [
+    { key: 'front', label: 'Frontal', icon: '🧍', desc: 'Face the camera directly — symmetrical shoulders, arms slightly away from body.' },
+    { key: 'profile', label: 'Profile 90°', icon: '🧍‍♂️', desc: 'Turn 90° to your left — one shoulder facing camera, side of face visible.' },
+    { key: 'three_quarter', label: '3/4 View', icon: '🧍‍♀️', desc: 'Turn 45° — both eyes visible, body slightly angled to camera.' },
+]
 
 const GUIDE_CARDS = [
     {
         icon: User,
-        title: "A-Pose",
-        desc: "Stand with arms slightly away from your body, palms facing forward.",
-        tip: "Think airport security scanner"
+        title: "Multi-Angle Capture",
+        desc: "We need 3 views: Frontal, Profile, and 3/4 view for complete draping coverage.",
+        tip: "Each angle unlocks a new dimension of try-on precision"
     },
     {
         icon: Camera,
-        title: "Neutral Expression",
-        desc: "Relax your face. No smile, no frown — just natural.",
-        tip: "Look straight at the camera"
-    },
-    {
-        icon: Shirt,
-        title: "Form-Fitting Clothes",
-        desc: "Wear tight or fitted clothes so the AI can see your body shape.",
-        tip: "Avoid baggy or layered outfits"
+        title: "Full Body Required",
+        desc: "Stand far enough that your entire body is visible — head to feet, nothing cropped.",
+        tip: "Hold phone at chest height or use a tripod"
     },
     {
         icon: Sun,
-        title: "Natural Window Light",
-        desc: "Face a window for soft, even lighting. No harsh shadows.",
-        tip: "Best during daytime"
+        title: "Crisp Lighting",
+        desc: "Face a window for soft, even lighting. Fabrics and skin must be texture-clear.",
+        tip: "Avoid harsh shadows or backlighting"
+    },
+    {
+        icon: Shield,
+        title: "Clean Silhouette",
+        desc: "Arms slightly away from body. No objects in hands. Form-fitting clothes.",
+        tip: "The AI needs a clean body outline to drape onto"
     },
 ]
 
-const CHECK_META: Record<string, { icon: string; label: string }> = {
-    pose: { icon: "🧍", label: "A-Pose" },
-    lighting: { icon: "💡", label: "Lighting" },
-    attire: { icon: "👕", label: "Attire" },
-    resolution: { icon: "📐", label: "Resolution" },
-}
+const STEP_LABELS = ['guide', 'mode_select', 'capture', 'synthesis', 'done']
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function OnboardPage() {
     const [step, setStep] = useState<Step>('guide')
-    const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
-    const [selfieUrl, setSelfieUrl] = useState("")
+    const [mode, setMode] = useState<'ai_director' | 'manual' | null>(null)
     const [identity, setIdentity] = useState<Identity | null>(null)
-    const [checks, setChecks] = useState<ValidationCheck[]>([
-        { name: "pose", passed: false, message: "Waiting..." },
-        { name: "lighting", passed: false, message: "Waiting..." },
-        { name: "attire", passed: false, message: "Waiting..." },
-        { name: "resolution", passed: false, message: "Waiting..." },
-    ])
-    const [allPassed, setAllPassed] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [analyzing, setAnalyzing] = useState(false)
-    const [scanCount, setScanCount] = useState(0)
 
+    // AI-Director state
+    const [currentAngleIdx, setCurrentAngleIdx] = useState(0)
+    const [poseDetection, setPoseDetection] = useState<PoseDetection | null>(null)
+    const [detecting, setDetecting] = useState(false)
+    const [autoCapturing, setAutoCapturing] = useState(false)
+
+    // Captures (shared between both modes)
+    const [captures, setCaptures] = useState<Record<Angle, AngleCapture>>({
+        front: { preview: null, url: null, validated: false },
+        profile: { preview: null, url: null, validated: false },
+        three_quarter: { preview: null, url: null, validated: false },
+    })
+
+    // Camera refs
     const videoRef = useRef<HTMLVideoElement>(null)
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const streamRef = useRef<MediaStream | null>(null)
-    const analyzeTimerRef = useRef<NodeJS.Timeout | null>(null)
-    const fileRef = useRef<HTMLInputElement>(null)
+    const detectTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const fileRefs = useRef<Record<Angle, HTMLInputElement | null>>({
+        front: null, profile: null, three_quarter: null
+    })
 
     const supabase = createClient()
 
-    // ---- Camera management ----
+    const capturedCount = Object.values(captures).filter(c => c.validated).length
+    const allCaptured = capturedCount === 3
+    const currentAngle = REQUIRED_ANGLES[currentAngleIdx]
+
+    // ── Camera Management ─────────────────────────────────────────────────
+
     const startCamera = useCallback(async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'user',
-                    width: { ideal: 2560 },
-                    height: { ideal: 1440 },
-                }
+                video: { facingMode: 'user', width: { ideal: 2560 }, height: { ideal: 1440 } }
             })
             streamRef.current = stream
             if (videoRef.current) {
                 videoRef.current.srcObject = stream
                 videoRef.current.play()
             }
-        } catch (err) {
-            console.error('Camera access denied:', err)
-            setError('Camera access is required. Please allow camera permissions.')
+        } catch {
+            setError('Camera access required. Please allow camera permissions.')
         }
     }, [])
 
@@ -116,204 +145,279 @@ export default function OnboardPage() {
             streamRef.current.getTracks().forEach(t => t.stop())
             streamRef.current = null
         }
-        if (analyzeTimerRef.current) {
-            clearInterval(analyzeTimerRef.current)
-            analyzeTimerRef.current = null
+        if (detectTimerRef.current) {
+            clearInterval(detectTimerRef.current)
+            detectTimerRef.current = null
         }
     }, [])
 
-    // Start camera when entering camera step
     useEffect(() => {
-        if (step === 'camera') {
+        if (step === 'ai_director') {
             startCamera()
             return () => stopCamera()
         }
     }, [step, startCamera, stopCamera])
 
-    // ---- Capture frame for analysis (downscaled for speed) ----
-    const captureAnalysisFrame = useCallback((): string | null => {
+    // ── Frame Capture Helpers ─────────────────────────────────────────────
+
+    const captureFrame = useCallback((quality: number = 0.8, maxWidth: number = 1280): string | null => {
         const video = videoRef.current
         const canvas = canvasRef.current
         if (!video || !canvas || video.readyState < 2) return null
 
-        // Downscale to max 1280px width for faster transmission
-        const scale = Math.min(1, 1280 / video.videoWidth)
+        const scale = Math.min(1, maxWidth / video.videoWidth)
         canvas.width = video.videoWidth * scale
         canvas.height = video.videoHeight * scale
-
         const ctx = canvas.getContext('2d')
         if (!ctx) return null
 
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        return canvas.toDataURL('image/jpeg', 0.8) // slightly lower quality for speed
+        return canvas.toDataURL('image/jpeg', quality)
     }, [])
 
-    // ---- Capture high-res frame for final identity ----
-    const captureHighResFrame = useCallback((): string | null => {
-        const video = videoRef.current
-        const canvas = canvasRef.current
-        if (!video || !canvas || video.readyState < 2) return null
+    // ── AI-Director: Pose Detection Loop ──────────────────────────────────
 
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return null
-
-        ctx.drawImage(video, 0, 0)
-        return canvas.toDataURL('image/jpeg', 0.95) // high quality
-    }, [])
-
-    // ---- Real-time analysis ----
-    const analyzeFrame = useCallback(async () => {
-        if (analyzing) return
-        const frame = captureAnalysisFrame()
+    const detectPose = useCallback(async () => {
+        if (detecting || autoCapturing) return
+        const frame = captureFrame(0.7, 1024)
         if (!frame) return
 
-        setAnalyzing(true)
+        setDetecting(true)
         try {
             const res = await fetch('/api/validate-selfie-realtime', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image_data: frame })
             })
+            if (!res.ok) throw new Error('Detection failed')
 
-            let result
-            if (res.ok) {
-                result = await res.json()
-            } else {
-                try {
-                    result = await res.json()
-                } catch {
-                    console.error('Failed to parse error response')
-                }
-            }
-
-            if (result?.checks) {
-                setChecks(result.checks)
-                setAllPassed(result.passed === true)
-                setScanCount(c => c + 1)
-            }
-        } catch (e) {
-            console.error('Analysis error:', e)
-        }
-        setAnalyzing(false)
-    }, [analyzing, captureAnalysisFrame])
-
-    // Auto-analyze every 4 seconds when camera is active
-    useEffect(() => {
-        if (step !== 'camera') return
-        const initialDelay = setTimeout(() => {
-            analyzeFrame()
-            analyzeTimerRef.current = setInterval(analyzeFrame, 4000)
-        }, 2000)
-
-        return () => {
-            clearTimeout(initialDelay)
-            if (analyzeTimerRef.current) {
-                clearInterval(analyzeTimerRef.current)
-                analyzeTimerRef.current = null
-            }
-        }
-    }, [step, analyzeFrame])
-
-    // ---- Capture selfie (freeze frame) ----
-    const handleCapture = async () => {
-        const frame = captureHighResFrame()
-        if (!frame) return
-
-        stopCamera()
-        setSelfiePreview(frame)
-        setSelfieUrl(frame)
-
-        try {
-            const blob = await fetch(frame).then(r => r.blob())
-            const fileName = `selfies/${Date.now()}.jpg`
-            const { error: uploadErr } = await supabase.storage.from('raw_assets').upload(fileName, blob)
-            if (!uploadErr) {
-                const { data: urlData } = supabase.storage.from('raw_assets').getPublicUrl(fileName)
-                setSelfieUrl(urlData.publicUrl)
-            }
-        } catch {
-            console.warn('Storage upload failed, using base64')
-        }
-
-        setStep('checklist')
-    }
-
-    // ---- Also support file upload as fallback ----
-    const handleFileSelect = async (file: File) => {
-        setError(null)
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            const dataUrl = e.target?.result as string
-            setSelfiePreview(dataUrl)
-            setSelfieUrl(dataUrl)
-        }
-        reader.readAsDataURL(file)
-
-        try {
-            const fileName = `selfies/${Date.now()}_${file.name}`
-            const { error: uploadErr } = await supabase.storage.from('raw_assets').upload(fileName, file)
-            if (!uploadErr) {
-                const { data: urlData } = supabase.storage.from('raw_assets').getPublicUrl(fileName)
-                setSelfieUrl(urlData.publicUrl)
-            }
-        } catch {
-            console.warn('Storage upload failed, using data URL')
-        }
-
-        setStep('validating')
-        try {
-            const res = await fetch('/api/validate-selfie-realtime', {
+            // Also get angle-specific detection
+            const angleRes = await fetch('/api/validate-upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_data: await fileToBase64(file) })
+                body: JSON.stringify({ image_data: frame })
             })
-            if (res.ok) {
-                const result = await res.json()
-                if (result.checks) {
-                    setChecks(result.checks)
-                    setAllPassed(result.passed === true)
+            if (angleRes.ok) {
+                const angleResult: UploadValidation = await angleRes.json()
+                setPoseDetection({
+                    angle: angleResult.angle || 'unknown',
+                    confidence: angleResult.suitable ? 0.97 : 0.3,
+                    full_body_visible: angleResult.checks?.whole_product?.passed ?? false,
+                    arms_clear: angleResult.checks?.pose?.passed ?? false,
+                    no_phone: angleResult.checks?.pose?.passed ?? true,
+                    silhouette_clear: angleResult.suitable || false,
+                    coaching_tip: angleResult.overall_message || 'Adjusting...',
+                })
+
+                // Auto-shutter: capture when correct angle detected with high confidence
+                const targetAngle = currentAngle.key
+                if (
+                    angleResult.suitable &&
+                    angleResult.angle === targetAngle &&
+                    !captures[targetAngle].validated
+                ) {
+                    setAutoCapturing(true)
+                    // Brief flash, then capture
+                    setTimeout(async () => {
+                        const hiRes = captureFrame(0.95, 2560)
+                        if (hiRes) {
+                            await saveAngleCapture(targetAngle, hiRes, 'camera', angleResult)
+                        }
+                        setAutoCapturing(false)
+                    }, 500)
                 }
             }
         } catch (e) {
-            console.error(e)
+            console.error('Detection error:', e)
         }
-        setStep('checklist')
+        setDetecting(false)
+    }, [detecting, autoCapturing, captureFrame, currentAngle, captures])
+
+    // Start detection loop
+    useEffect(() => {
+        if (step !== 'ai_director') return
+        const delay = setTimeout(() => {
+            detectPose()
+            detectTimerRef.current = setInterval(detectPose, 3500)
+        }, 2000)
+        return () => {
+            clearTimeout(delay)
+            if (detectTimerRef.current) {
+                clearInterval(detectTimerRef.current)
+                detectTimerRef.current = null
+            }
+        }
+    }, [step, detectPose])
+
+    // Auto-advance to next angle after capture
+    useEffect(() => {
+        if (step !== 'ai_director') return
+        if (captures[currentAngle.key].validated && currentAngleIdx < 2) {
+            setTimeout(() => setCurrentAngleIdx(i => i + 1), 1500)
+        } else if (allCaptured) {
+            setTimeout(() => setStep('synthesis'), 1500)
+        }
+    }, [captures, currentAngleIdx, currentAngle, allCaptured, step])
+
+    // ── Shared: Save an angle capture ─────────────────────────────────────
+
+    const saveAngleCapture = async (angle: Angle, imageData: string, source: 'camera' | 'upload', validation?: UploadValidation | null) => {
+        setCaptures(prev => ({
+            ...prev,
+            [angle]: { ...prev[angle], preview: imageData, uploading: true }
+        }))
+
+        try {
+            // Create identity if first capture
+            let identityId = identity?.id
+            if (!identityId) {
+                const blob = await fetch(imageData).then(r => r.blob())
+                const fileName = `selfies/${Date.now()}.jpg`
+                await supabase.storage.from('raw_assets').upload(fileName, blob)
+                const { data: urlData } = supabase.storage.from('raw_assets').getPublicUrl(fileName)
+
+                const { data: newIdentity, error: dbErr } = await supabase
+                    .from('identities')
+                    .insert({
+                        raw_selfie_url: urlData.publicUrl,
+                        status: 'pending',
+                        onboarding_mode: mode || 'ai_director',
+                    })
+                    .select()
+                    .single()
+
+                if (dbErr || !newIdentity) throw new Error('Failed to create identity')
+                setIdentity(newIdentity)
+                identityId = newIdentity.id
+            }
+
+            // Save this angle view
+            const res = await fetch('/api/save-identity-view', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    identity_id: identityId,
+                    angle,
+                    image_data: imageData,
+                    validation_result: validation || {},
+                    source,
+                })
+            })
+
+            const result = await res.json()
+            setCaptures(prev => ({
+                ...prev,
+                [angle]: {
+                    preview: imageData,
+                    url: result.image_url || imageData,
+                    validated: true,
+                    validation,
+                    uploading: false,
+                }
+            }))
+        } catch (e) {
+            console.error('Save capture error:', e)
+            setCaptures(prev => ({
+                ...prev,
+                [angle]: { preview: null, url: null, validated: false, uploading: false }
+            }))
+            setError(`Failed to save ${angle} capture. Please try again.`)
+        }
     }
 
-    // ---- Submit for master identity generation ----
-    const handleGenerateIdentity = async () => {
-        if (!selfieUrl) return
+    // ── Manual Import: File Upload Handler ────────────────────────────────
+
+    const handleManualUpload = async (angle: Angle, file: File) => {
+        setError(null)
+        const base64 = await fileToBase64(file)
+
+        // First validate suitability
+        setCaptures(prev => ({
+            ...prev,
+            [angle]: { preview: base64, url: null, validated: false, uploading: true }
+        }))
+
+        try {
+            const res = await fetch('/api/validate-upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_data: base64 })
+            })
+
+            const validation: UploadValidation = await res.json()
+
+            if (!validation.suitable) {
+                setCaptures(prev => ({
+                    ...prev,
+                    [angle]: { preview: base64, url: null, validated: false, validation, uploading: false }
+                }))
+                return
+            }
+
+            // Check if detected angle matches expected
+            if (validation.angle !== angle && validation.angle !== 'other') {
+                setCaptures(prev => ({
+                    ...prev,
+                    [angle]: {
+                        preview: base64, url: null, validated: false,
+                        validation: {
+                            ...validation,
+                            suitable: false,
+                            issues: [...validation.issues, `Detected as ${validation.angle} — expected ${angle}`],
+                            overall_message: `Wrong angle: this looks like a ${validation.angle} view`
+                        },
+                        uploading: false
+                    }
+                }))
+                return
+            }
+
+            // Valid — save it
+            await saveAngleCapture(angle, base64, 'upload', validation)
+        } catch {
+            setCaptures(prev => ({
+                ...prev,
+                [angle]: { preview: null, url: null, validated: false, uploading: false }
+            }))
+            setError('Validation failed. Please try again.')
+        }
+    }
+
+    // ── Synthesis: Generate Master Identity ────────────────────────────────
+
+    const handleSynthesize = async () => {
+        if (!identity?.id) return
         setStep('generating')
         setError(null)
 
         try {
-            const res = await fetch('/api/validate-selfie', {
+            // Use the front view as the primary selfie for master identity
+            const frontUrl = captures.front.url || identity.raw_selfie_url
+
+            // Update identity status
+            await supabase.from('identities').update({
+                status: 'validated',
+                raw_selfie_url: frontUrl,
+            }).eq('id', identity.id)
+
+            // Trigger generation
+            const res = await fetch('/api/generate-identity', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ selfie_url: selfieUrl })
+                body: JSON.stringify({ identity_id: identity.id })
             })
-            const data = await res.json()
-            if (!data.identity?.id) {
-                setError('Failed to create identity')
-                setStep('checklist')
-                return
+
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error || 'Generation failed')
             }
 
-            setIdentity(data.identity)
-
-            await fetch('/api/generate-identity', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ identity_id: data.identity.id })
-            })
-
+            // Poll for completion
             const pollInterval = setInterval(async () => {
                 const { data: row } = await supabase
                     .from('identities')
                     .select('*')
-                    .eq('id', data.identity.id)
+                    .eq('id', identity.id)
                     .single()
 
                 if (!row) return
@@ -325,35 +429,45 @@ export default function OnboardPage() {
                 }
                 if (row.status === 'failed') {
                     setError('Identity generation failed. Please try again.')
-                    setStep('checklist')
+                    setStep('synthesis')
                     clearInterval(pollInterval)
                 }
             }, 3000)
-
         } catch (e) {
             console.error(e)
-            setError('Something went wrong')
-            setStep('checklist')
+            setError('Something went wrong during synthesis.')
+            setStep('synthesis')
         }
     }
 
-    const handleRetake = () => {
-        setSelfiePreview(null)
-        setSelfieUrl('')
-        setIdentity(null)
-        setChecks([
-            { name: "pose", passed: false, message: "Waiting..." },
-            { name: "lighting", passed: false, message: "Waiting..." },
-            { name: "attire", passed: false, message: "Waiting..." },
-            { name: "resolution", passed: false, message: "Waiting..." },
-        ])
-        setAllPassed(false)
-        setError(null)
-        setScanCount(0)
+    // ── Reset ──────────────────────────────────────────────────────────────
+
+    const handleStartOver = () => {
+        stopCamera()
         setStep('guide')
+        setMode(null)
+        setIdentity(null)
+        setError(null)
+        setCurrentAngleIdx(0)
+        setPoseDetection(null)
+        setCaptures({
+            front: { preview: null, url: null, validated: false },
+            profile: { preview: null, url: null, validated: false },
+            three_quarter: { preview: null, url: null, validated: false },
+        })
     }
 
-    const passedCount = checks.filter(c => c.passed).length
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    const getStepIndex = () => {
+        if (step === 'guide') return 0
+        if (step === 'mode_select') return 1
+        if (step === 'ai_director' || step === 'manual_import') return 2
+        if (step === 'synthesis' || step === 'generating') return 3
+        return 4
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────────
 
     return (
         <div className="min-h-screen bg-paper text-foreground font-sans">
@@ -368,13 +482,10 @@ export default function OnboardPage() {
                     </span>
                 </div>
                 <div className="flex items-center gap-1">
-                    {['guide', 'camera', 'checklist', 'done'].map((s, i) => (
+                    {STEP_LABELS.map((s, i) => (
                         <div key={s} className="flex items-center gap-1">
-                            <div className={`h-0.5 w-8transition-all duration-500
-                                ${step === s || (step === 'validating' && s === 'checklist') || (step === 'generating' && s === 'done')
-                                    ? 'bg-primary w-12'
-                                    : ['guide', 'camera', 'checklist', 'done'].indexOf(step) > i || (step === 'validating' && i < 2) || (step === 'generating' && i < 3)
-                                        ? 'bg-primary/40 w-8'
+                            <div className={`h-0.5 transition-all duration-500 ${getStepIndex() === i ? 'bg-primary w-12'
+                                    : getStepIndex() > i ? 'bg-primary/40 w-8'
                                         : 'bg-nimbus w-8'
                                 }`} />
                         </div>
@@ -384,17 +495,15 @@ export default function OnboardPage() {
 
             <div className="max-w-5xl mx-auto px-6 py-16">
                 <canvas ref={canvasRef} className="hidden" />
-                <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f) }} />
 
                 <AnimatePresence mode="wait">
                     {/* ===== STEP: GUIDE ===== */}
                     {step === 'guide' && (
-                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-12">
+                        <motion.div key="guide" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-12">
                             <div className="text-center space-y-4">
                                 <h1 className="font-serif text-5xl text-primary">Identity Calibration</h1>
                                 <p className="text-muted-foreground max-w-lg mx-auto leading-relaxed">
-                                    Our neural engine requires a precise baseline. Align your physical presence to these standards for optimal digital draping.
+                                    Our neural engine requires multi-angle baseline data. We&apos;ll capture your likeness from 3 perspectives for precision draping.
                                 </p>
                             </div>
 
@@ -421,199 +530,408 @@ export default function OnboardPage() {
                                 })}
                             </div>
 
-                            <div className="text-center space-y-6">
+                            <div className="text-center">
                                 <Button
-                                    onClick={() => setStep('camera')}
+                                    onClick={() => setStep('mode_select')}
                                     className="h-16 px-12 text-sm uppercase tracking-[0.2em] font-bold rounded-none bg-foreground text-background hover:bg-primary hover:text-white transition-all shadow-xl hover:shadow-2xl"
                                 >
-                                    <VideoIcon className="w-4 h-4 mr-3" /> Initialize Sensor
+                                    Begin Calibration <ArrowRight className="w-4 h-4 ml-3" />
                                 </Button>
-                                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                                    or{' '}
-                                    <button onClick={() => fileRef.current?.click()} className="text-primary hover:text-foreground underline transition-colors">
-                                        upload existing raw data
-                                    </button>
-                                </p>
                             </div>
                         </motion.div>
                     )}
 
-                    {/* ===== STEP: CAMERA ===== */}
-                    {step === 'camera' && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
-                            <div className="text-center space-y-2">
-                                <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest mb-4">Live Sensor Active</Badge>
-                                <h2 className="font-serif text-4xl text-primary">Align & Capture</h2>
+                    {/* ===== STEP: MODE SELECT ===== */}
+                    {step === 'mode_select' && (
+                        <motion.div key="mode_select" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-12">
+                            <div className="text-center space-y-4">
+                                <h1 className="font-serif text-5xl text-primary">Choose Your Path</h1>
+                                <p className="text-muted-foreground max-w-lg mx-auto leading-relaxed">
+                                    Two ways to build your digital identity. Both produce the same multi-angle profile.
+                                </p>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+                                {/* AI Director Card */}
+                                <button
+                                    onClick={() => { setMode('ai_director'); setStep('ai_director') }}
+                                    className="group text-left p-10 bg-white border-2 border-nimbus hover:border-primary transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 space-y-6"
+                                >
+                                    <div className="w-16 h-16 bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary group-hover:border-primary transition-all">
+                                        <Camera className="w-7 h-7 text-primary group-hover:text-white transition-colors" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h3 className="font-bold text-xl uppercase tracking-widest text-foreground">AI-Director</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">
+                                            Hands-free guided capture. The AI directs you through each pose and auto-captures when your angle is perfect.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-4 pt-4 border-t border-nimbus/50">
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Live Camera</Badge>
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">~2 min</Badge>
+                                    </div>
+                                </button>
+
+                                {/* Manual Import Card */}
+                                <button
+                                    onClick={() => { setMode('manual'); setStep('manual_import') }}
+                                    className="group text-left p-10 bg-white border-2 border-nimbus hover:border-primary transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 space-y-6"
+                                >
+                                    <div className="w-16 h-16 bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary group-hover:border-primary transition-all">
+                                        <Upload className="w-7 h-7 text-primary group-hover:text-white transition-colors" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h3 className="font-bold text-xl uppercase tracking-widest text-foreground">Manual Import</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">
+                                            Upload up to 5 existing photos. Each is AI-analyzed for suitability, angle, and quality.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-4 pt-4 border-t border-nimbus/50">
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">File Upload</Badge>
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Instant</Badge>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <div className="text-center">
+                                <button onClick={() => setStep('guide')} className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors">
+                                    <ArrowLeft className="w-3 h-3 inline mr-1" /> back to guide
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* ===== STEP: AI-DIRECTOR ===== */}
+                    {step === 'ai_director' && (
+                        <motion.div key="ai_director" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
+                            <div className="text-center space-y-2">
+                                <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest mb-4">
+                                    AI-Director Active
+                                </Badge>
+                                <h2 className="font-serif text-4xl text-primary">
+                                    {captures[currentAngle.key].validated
+                                        ? '✓ Captured!'
+                                        : `Pose: ${currentAngle.label}`
+                                    }
+                                </h2>
+                                <p className="text-muted-foreground text-sm max-w-md mx-auto">{currentAngle.desc}</p>
+                            </div>
+
+                            {/* Angle Progress Indicators */}
+                            <div className="flex justify-center gap-6">
+                                {REQUIRED_ANGLES.map((a, i) => (
+                                    <div key={a.key} className="flex flex-col items-center gap-2">
+                                        <div className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${captures[a.key].validated
+                                                ? 'bg-primary border-primary text-white'
+                                                : i === currentAngleIdx
+                                                    ? 'border-primary text-primary animate-pulse'
+                                                    : 'border-nimbus text-muted-foreground'
+                                            }`}>
+                                            {captures[a.key].validated
+                                                ? <CheckCircle2 className="w-5 h-5" />
+                                                : <span className="text-lg">{a.icon}</span>
+                                            }
+                                        </div>
+                                        <span className={`text-[9px] uppercase tracking-widest font-bold ${i === currentAngleIdx ? 'text-primary' : 'text-muted-foreground'
+                                            }`}>{a.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Camera Feed */}
                                 <div className="md:col-span-2 relative shadow-2xl">
                                     <div className="relative aspect-[3/4] bg-black overflow-hidden border border-nimbus">
-                                        <video
-                                            ref={videoRef}
-                                            autoPlay
-                                            playsInline
-                                            muted
-                                            className="w-full h-full object-cover transform scale-x-[-1]"
-                                        />
+                                        <video ref={videoRef} autoPlay playsInline muted
+                                            className="w-full h-full object-cover transform scale-x-[-1]" />
 
-                                        {/* Overlay UI */}
-                                        {analyzing && (
+                                        {/* Auto-capture flash */}
+                                        {autoCapturing && (
+                                            <motion.div
+                                                initial={{ opacity: 1 }}
+                                                animate={{ opacity: 0 }}
+                                                transition={{ duration: 0.5 }}
+                                                className="absolute inset-0 bg-white z-20"
+                                            />
+                                        )}
+
+                                        {/* Detection overlay */}
+                                        {detecting && (
                                             <div className="absolute top-4 left-4">
                                                 <Badge className="bg-white/90 text-foreground border-0 text-[9px] font-bold tracking-widest backdrop-blur rounded-none">
-                                                    <Zap className="w-3 h-3 mr-1 animate-pulse" /> PROCESSING
+                                                    <Zap className="w-3 h-3 mr-1 animate-pulse" /> SCANNING
                                                 </Badge>
                                             </div>
                                         )}
 
-                                        {/* Grid Overlay */}
+                                        {/* Grid overlay */}
                                         <div className="absolute inset-0 pointer-events-none opacity-20">
                                             <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white" />
                                             <div className="absolute top-1/2 left-0 right-0 h-px bg-white" />
                                         </div>
 
-                                        {/* Status Badge */}
-                                        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center">
-                                            <Badge className={`border-0 text-[9px] font-bold tracking-widest backdrop-blur rounded-none px-3 py-1 ${allPassed
-                                                ? 'bg-green-500 text-white'
-                                                : 'bg-white/80 text-foreground'
-                                                }`}>
-                                                {allPassed ? 'OPTIMAL CONDITIONS' : `CALIBRATING ${passedCount}/4`}
-                                            </Badge>
+                                        {/* Coaching bar */}
+                                        <div className="absolute bottom-4 left-4 right-4">
+                                            <div className="bg-black/60 backdrop-blur-md px-4 py-3 flex items-center justify-between">
+                                                <span className="text-[10px] text-white/80 uppercase tracking-widest font-bold">
+                                                    {poseDetection?.coaching_tip || 'Position yourself in the frame...'}
+                                                </span>
+                                                {poseDetection && (
+                                                    <Badge className={`border-0 rounded-none text-[9px] font-bold ${poseDetection.angle === currentAngle.key && poseDetection.confidence > 0.8
+                                                            ? 'bg-green-500 text-white'
+                                                            : 'bg-white/20 text-white/80'
+                                                        }`}>
+                                                        {poseDetection.angle === currentAngle.key
+                                                            ? `${Math.round(poseDetection.confidence * 100)}%`
+                                                            : poseDetection.angle.toUpperCase()
+                                                        }
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </div>
 
-                                        {allPassed && <div className="absolute inset-0 border-4 border-green-500 pointer-events-none" />}
-                                    </div>
-
-                                    <div className="mt-8 flex justify-center">
-                                        <Button
-                                            onClick={handleCapture}
-                                            disabled={!allPassed}
-                                            className={`h-16 px-12 text-sm uppercase tracking-[0.2em] font-bold rounded-none transition-all ${allPassed
-                                                ? 'bg-foreground text-background hover:bg-primary hover:text-white shadow-xl'
-                                                : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
-                                                }`}
-                                        >
-                                            {allPassed ? 'Capture Frame' : 'Awaiting Calibration'}
-                                        </Button>
+                                        {/* Green border on match */}
+                                        {poseDetection?.angle === currentAngle.key && poseDetection.confidence > 0.8 && (
+                                            <div className="absolute inset-0 border-4 border-green-500 pointer-events-none" />
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Live Checklist */}
+                                {/* Captured Thumbnails */}
                                 <div className="space-y-4">
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold border-b border-nimbus pb-2">Telemetry</p>
-                                    {checks.map((check) => {
-                                        const meta = CHECK_META[check.name] || { icon: '✨', label: check.name }
-                                        return (
-                                            <div key={check.name}
-                                                className={`p-4 border transition-all duration-500 bg-white ${check.passed
-                                                    ? 'border-primary/50'
-                                                    : 'border-nimbus'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    {check.passed ? (
-                                                        <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
-                                                            <CheckCircle2 className="w-3 h-3 text-white" />
-                                                        </div>
-                                                    ) : (
-                                                        <div className="w-4 h-4 rounded-full border border-nimbus" />
-                                                    )}
-                                                    <div>
-                                                        <p className="text-xs font-bold uppercase tracking-wider text-foreground">
-                                                            {meta.label}
-                                                        </p>
-                                                        <p className="text-[10px] text-muted-foreground mt-1 font-mono uppercase">{check.message}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold border-b border-nimbus pb-2">
+                                        Captured Angles ({capturedCount}/3)
+                                    </p>
+                                    {REQUIRED_ANGLES.map((a) => (
+                                        <div key={a.key} className={`p-3 border transition-all ${captures[a.key].validated ? 'border-primary/50 bg-primary/5' : 'border-nimbus bg-white'
+                                            }`}>
+                                            <div className="flex items-center gap-3">
+                                                {captures[a.key].preview ? (
+                                                    <div className="w-12 h-16 bg-black overflow-hidden border border-nimbus">
+                                                        <img src={captures[a.key].preview!} alt="" className="w-full h-full object-cover" />
                                                     </div>
+                                                ) : (
+                                                    <div className="w-12 h-16 bg-nimbus/20 border border-nimbus flex items-center justify-center">
+                                                        <span className="text-lg">{a.icon}</span>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-xs font-bold uppercase tracking-wider">{a.label}</p>
+                                                    <p className="text-[9px] text-muted-foreground uppercase">
+                                                        {captures[a.key].validated ? '✓ Captured' : captures[a.key].uploading ? 'Saving...' : 'Waiting...'}
+                                                    </p>
                                                 </div>
                                             </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {/* ===== STEP: VALIDATING ===== */}
-                    {step === 'validating' && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8 text-center py-20">
-                            <Loader2 className="w-16 h-16 text-primary animate-spin mx-auto" />
-                            <div className="space-y-4">
-                                <h2 className="font-serif text-4xl text-primary">Analysing Geometry</h2>
-                                <p className="text-muted-foreground text-sm uppercase tracking-widest">
-                                    Mapping facial landmarks and lighting conditions...
-                                </p>
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {/* ===== STEP: CHECKLIST ===== */}
-                    {step === 'checklist' && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12">
-                            <div className="text-center space-y-4">
-                                <h2 className="font-serif text-4xl text-primary">
-                                    {allPassed ? 'Calibration Complete' : 'Adjustment Required'}
-                                </h2>
-                                <p className="text-muted-foreground max-w-lg mx-auto">
-                                    {allPassed
-                                        ? 'Telemetry confirms optimal conditions. Ready to generate Master Identity.'
-                                        : 'Sensors detected anomalies. Please refine and recapture.'}
-                                </p>
-                            </div>
-
-                            <div className="flex gap-12 max-w-4xl mx-auto items-start">
-                                {selfiePreview && (
-                                    <div className="w-1/3 shadow-2xl rotate-1 bg-white p-2">
-                                        <div className="aspect-[3/4] overflow-hidden bg-black">
-                                            <img src={selfiePreview} alt="" className="w-full h-full object-contain" />
                                         </div>
-                                    </div>
-                                )}
-
-                                <div className="flex-1 space-y-4">
-                                    {checks.map((check) => {
-                                        const meta = CHECK_META[check.name] || { icon: '✨', label: check.name }
-                                        return (
-                                            <div key={check.name} className="flex items-center gap-4 p-4 border-b border-nimbus">
-                                                {check.passed
-                                                    ? <CheckCircle2 className="w-5 h-5 text-green-600" />
-                                                    : <XCircle className="w-5 h-5 text-red-400" />
-                                                }
-                                                <div className="flex-1">
-                                                    <p className="text-xs font-bold uppercase tracking-widest text-foreground">{meta.label}</p>
-                                                </div>
-                                                <p className="text-[10px] text-muted-foreground uppercase font-mono">{check.message}</p>
-                                            </div>
-                                        )
-                                    })}
-
-                                    <div className="pt-8 flex gap-4">
-                                        <Button variant="outline" onClick={handleRetake}
-                                            className="h-12 border-nimbus hover:bg-nimbus/20 rounded-none text-xs uppercase tracking-widest">
-                                            Discard & Retake
-                                        </Button>
-                                        <Button
-                                            onClick={handleGenerateIdentity}
-                                            disabled={!allPassed}
-                                            className={`h-12 px-8 flex-1 text-xs uppercase tracking-widest font-bold rounded-none transition-all ${allPassed
-                                                ? 'bg-foreground text-background hover:bg-primary hover:text-white'
-                                                : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
-                                                }`}
-                                        >
-                                            {allPassed ? 'Generate Master Identity' : 'Fix Issues'} <ArrowRight className="w-4 h-4 ml-2" />
-                                        </Button>
-                                    </div>
-                                    {error && (
-                                        <p className="text-xs text-red-500 text-center uppercase tracking-widest">{error}</p>
-                                    )}
+                                    ))}
                                 </div>
+                            </div>
+
+                            <div className="text-center pt-4">
+                                <button onClick={handleStartOver} className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors">
+                                    <ArrowLeft className="w-3 h-3 inline mr-1" /> Start over
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* ===== STEP: MANUAL IMPORT ===== */}
+                    {step === 'manual_import' && (
+                        <motion.div key="manual_import" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-12">
+                            <div className="text-center space-y-4">
+                                <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">
+                                    Manual Import — {capturedCount}/3 Validated
+                                </Badge>
+                                <h1 className="font-serif text-4xl text-primary">Upload Your Angles</h1>
+                                <p className="text-muted-foreground max-w-lg mx-auto text-sm">
+                                    Upload a photo for each required angle. Our AI will validate quality and suitability in real-time.
+                                </p>
+                            </div>
+
+                            {/* 3-Zone Upload Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {REQUIRED_ANGLES.map((angle) => {
+                                    const cap = captures[angle.key]
+                                    const validation = cap.validation
+
+                                    return (
+                                        <div key={angle.key} className="space-y-4">
+                                            {/* Upload Zone */}
+                                            <div
+                                                className={`relative aspect-[3/4] border-2 border-dashed transition-all duration-500 overflow-hidden cursor-pointer group ${cap.validated
+                                                        ? 'border-primary bg-primary/5'
+                                                        : validation && !validation.suitable
+                                                            ? 'border-red-300 bg-red-50'
+                                                            : 'border-nimbus hover:border-primary/50 bg-white'
+                                                    }`}
+                                                onClick={() => fileRefs.current[angle.key]?.click()}
+                                            >
+                                                <input
+                                                    ref={el => { fileRefs.current[angle.key] = el }}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const f = e.target.files?.[0]
+                                                        if (f) handleManualUpload(angle.key, f)
+                                                        e.target.value = ''
+                                                    }}
+                                                />
+
+                                                {cap.preview ? (
+                                                    <>
+                                                        <img src={cap.preview} alt={angle.label} className="w-full h-full object-cover" />
+                                                        {/* Status overlay */}
+                                                        <div className="absolute top-3 right-3">
+                                                            {cap.uploading ? (
+                                                                <Badge className="bg-white/90 border-0 rounded-none text-[9px]">
+                                                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Analyzing
+                                                                </Badge>
+                                                            ) : cap.validated ? (
+                                                                <Badge className="bg-green-500 text-white border-0 rounded-none text-[9px]">
+                                                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Validated
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge className="bg-red-500 text-white border-0 rounded-none text-[9px]">
+                                                                    <XCircle className="w-3 h-3 mr-1" /> Rejected
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        {/* Replace overlay on hover */}
+                                                        {!cap.uploading && (
+                                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                <div className="text-center text-white space-y-2">
+                                                                    <RefreshCcw className="w-6 h-6 mx-auto" />
+                                                                    <p className="text-[10px] uppercase tracking-widest font-bold">Replace</p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
+                                                        <div className="w-16 h-16 rounded-full border-2 border-nimbus flex items-center justify-center group-hover:border-primary transition-colors">
+                                                            <ImagePlus className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="text-xs font-bold uppercase tracking-widest text-foreground">{angle.label}</p>
+                                                            <p className="text-[10px] text-muted-foreground mt-1">{angle.desc}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Validation Feedback */}
+                                            {validation && !cap.validated && (
+                                                <div className="space-y-2 p-4 bg-red-50 border border-red-200">
+                                                    <p className="text-[10px] text-red-600 font-bold uppercase tracking-widest">
+                                                        {validation.overall_message}
+                                                    </p>
+                                                    {validation.issues.map((issue, i) => (
+                                                        <p key={i} className="text-[9px] text-red-500 flex items-start gap-1">
+                                                            <XCircle className="w-3 h-3 mt-0.5 shrink-0" /> {issue}
+                                                        </p>
+                                                    ))}
+                                                    <button
+                                                        onClick={() => fileRefs.current[angle.key]?.click()}
+                                                        className="text-[9px] text-primary font-bold uppercase tracking-widest mt-2 hover:text-foreground transition-colors"
+                                                    >
+                                                        <RotateCcw className="w-3 h-3 inline mr-1" /> Upload Different Photo
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {cap.validated && validation && (
+                                                <div className="space-y-1 p-3 bg-primary/5 border border-primary/20">
+                                                    {Object.entries(validation.checks).map(([key, check]) => (
+                                                        <div key={key} className="flex items-center gap-2">
+                                                            <CheckCircle2 className="w-3 h-3 text-primary" />
+                                                            <span className="text-[9px] uppercase tracking-widest text-muted-foreground">{key.replace('_', ' ')}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            {/* Missing angle prompt */}
+                            {capturedCount > 0 && !allCaptured && (
+                                <div className="text-center p-6 bg-primary/5 border border-primary/20">
+                                    <p className="text-xs text-primary font-bold uppercase tracking-widest">
+                                        <Eye className="w-4 h-4 inline mr-2" />
+                                        Missing: {REQUIRED_ANGLES.filter(a => !captures[a.key].validated).map(a => a.label).join(', ')}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                        Upload the remaining angle{3 - capturedCount > 1 ? 's' : ''} to complete your Digital Essence profile.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="flex justify-between items-center">
+                                <button onClick={handleStartOver} className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors">
+                                    <ArrowLeft className="w-3 h-3 inline mr-1" /> Start over
+                                </button>
+                                <Button
+                                    onClick={() => setStep('synthesis')}
+                                    disabled={!allCaptured}
+                                    className={`h-14 px-10 text-sm uppercase tracking-[0.2em] font-bold rounded-none transition-all ${allCaptured
+                                            ? 'bg-foreground text-background hover:bg-primary hover:text-white shadow-xl'
+                                            : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'
+                                        }`}
+                                >
+                                    Complete Profile <ArrowRight className="w-4 h-4 ml-3" />
+                                </Button>
+                            </div>
+
+                            {error && (
+                                <p className="text-xs text-red-500 text-center uppercase tracking-widest">{error}</p>
+                            )}
+                        </motion.div>
+                    )}
+
+                    {/* ===== STEP: SYNTHESIS ===== */}
+                    {step === 'synthesis' && (
+                        <motion.div key="synthesis" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-12">
+                            <div className="text-center space-y-4">
+                                <h2 className="font-serif text-4xl text-primary">Profile Complete</h2>
+                                <p className="text-muted-foreground max-w-lg mx-auto">
+                                    All 3 angles captured and validated. Ready to synthesize your Master Identity portrait.
+                                </p>
+                            </div>
+
+                            {/* Preview Grid */}
+                            <div className="flex justify-center gap-6">
+                                {REQUIRED_ANGLES.map((a, i) => (
+                                    <div key={a.key} className={`bg-white p-2 shadow-lg ${i === 0 ? 'rotate-[-3deg]' : i === 2 ? 'rotate-[3deg]' : ''
+                                        }`}>
+                                        <div className="w-40 aspect-[3/4] bg-black overflow-hidden">
+                                            {captures[a.key].preview && (
+                                                <img src={captures[a.key].preview!} alt={a.label} className="w-full h-full object-cover" />
+                                            )}
+                                        </div>
+                                        <p className="text-[9px] text-center pt-2 uppercase tracking-widest text-muted-foreground font-bold">{a.label}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="text-center space-y-4">
+                                <Button
+                                    onClick={handleSynthesize}
+                                    className="h-16 px-12 text-sm uppercase tracking-[0.2em] font-bold rounded-none bg-foreground text-background hover:bg-primary hover:text-white transition-all shadow-xl hover:shadow-2xl"
+                                >
+                                    <Sparkles className="w-4 h-4 mr-3" /> Synthesize Master Identity
+                                </Button>
+                                {error && (
+                                    <p className="text-xs text-red-500 uppercase tracking-widest">{error}</p>
+                                )}
                             </div>
                         </motion.div>
                     )}
 
                     {/* ===== STEP: GENERATING ===== */}
                     {step === 'generating' && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12 text-center py-24">
+                        <motion.div key="generating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12 text-center py-24">
                             <div className="relative w-32 h-32 mx-auto">
                                 <div className="absolute inset-0 border-2 border-nimbus rounded-full animate-ping" />
                                 <div className="absolute inset-8 bg-foreground rounded-full animate-pulse" />
@@ -621,7 +939,7 @@ export default function OnboardPage() {
                             <div className="space-y-4">
                                 <h2 className="font-serif text-4xl text-primary">Synthesizing Identity</h2>
                                 <p className="text-muted-foreground text-sm uppercase tracking-widest max-w-md mx-auto">
-                                    Generating high-fidelity studio portrait on cyclorama background...
+                                    Generating high-fidelity studio portrait from your multi-angle data...
                                 </p>
                             </div>
                         </motion.div>
@@ -629,23 +947,32 @@ export default function OnboardPage() {
 
                     {/* ===== STEP: DONE ===== */}
                     {step === 'done' && identity?.master_identity_url && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12 text-center">
+                        <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12 text-center">
                             <div className="space-y-4">
-                                <h2 className="font-serif text-5xl text-primary">Identity Establishd</h2>
+                                <h2 className="font-serif text-5xl text-primary">Identity Established</h2>
                                 <p className="text-muted-foreground text-sm uppercase tracking-widest">
-                                    Your digital twin is ready for editorial production.
+                                    Your multi-angle digital twin is ready for editorial production.
                                 </p>
                             </div>
 
-                            <div className="flex gap-8 max-w-3xl mx-auto items-center justify-center">
-                                <div className="w-64 rotate-3 bg-white p-2 shadow-lg opacity-60 hover:opacity-100 transition-opacity">
-                                    <img src={selfiePreview!} alt="Original" className="w-full grayscale" />
-                                    <p className="text-[9px] text-center pt-2 uppercase tracking-widest text-muted-foreground">Source</p>
+                            <div className="flex gap-4 max-w-4xl mx-auto items-center justify-center flex-wrap">
+                                {/* Source thumbnails */}
+                                <div className="flex gap-3">
+                                    {REQUIRED_ANGLES.map((a, i) => (
+                                        captures[a.key].preview && (
+                                            <div key={a.key} className={`w-24 bg-white p-1 shadow-md opacity-60 hover:opacity-100 transition-opacity ${i === 0 ? 'rotate-2' : i === 2 ? '-rotate-2' : 'rotate-1'
+                                                }`}>
+                                                <img src={captures[a.key].preview!} alt={a.label} className="w-full grayscale" />
+                                                <p className="text-[7px] text-center pt-1 uppercase tracking-widest text-muted-foreground">{a.label}</p>
+                                            </div>
+                                        )
+                                    ))}
                                 </div>
 
                                 <ArrowRight className="w-8 h-8 text-nimbus" />
 
-                                <div className="w-80 -rotate-2 bg-white p-3 shadow-2xl relative z-10 scale-110">
+                                {/* Master Identity */}
+                                <div className="w-72 -rotate-1 bg-white p-3 shadow-2xl relative z-10 scale-110">
                                     <img src={identity.master_identity_url} alt="Master Identity" className="w-full" />
                                     <p className="text-[9px] text-center pt-3 uppercase tracking-widest font-bold text-primary">Master Identity</p>
                                 </div>
@@ -665,6 +992,8 @@ export default function OnboardPage() {
         </div>
     )
 }
+
+// ── Utility ──────────────────────────────────────────────────────────────────
 
 function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {

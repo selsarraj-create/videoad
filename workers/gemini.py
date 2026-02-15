@@ -239,3 +239,135 @@ def generate_master_identity(image_url: str) -> dict:
             }
 
     raise Exception("Gemini did not return an image in the response")
+
+
+# =========================================================================
+# 3. Pose Angle Detection — for AI-Director auto-shutter
+# =========================================================================
+
+POSE_ANGLE_PROMPT = """You are a computer vision pose angle detector for a fashion AI platform.
+
+Analyze this camera frame and determine the person's body angle relative to the camera.
+
+Classify as ONE of:
+- "front" — Person facing camera directly (chest and face visible, symmetrical shoulders)
+- "profile" — Person turned ~90° to camera (one shoulder visible, side of face)
+- "three_quarter" — Person at ~45° angle (both eyes visible but body slightly turned)
+- "unknown" — No person detected, or angle is ambiguous
+
+Also evaluate capture quality:
+- Is the FULL BODY visible (head to feet, no cropping)?
+- Are arms away from body (A-pose or arms slightly spread)?
+- Is the person NOT holding a phone or object?
+- Is the silhouette clearly visible against the background?
+
+Return ONLY this JSON (no markdown):
+{
+  "angle": "front|profile|three_quarter|unknown",
+  "confidence": 0.0 to 1.0,
+  "full_body_visible": true/false,
+  "arms_clear": true/false,
+  "no_phone": true/false,
+  "silhouette_clear": true/false,
+  "coaching_tip": "max 10 words of advice"
+}"""
+
+
+def validate_pose_angle(image_base64: str) -> dict:
+    """
+    Detect person's pose angle for AI-Director auto-shutter.
+    Returns angle classification with confidence score.
+    """
+    if image_base64.startswith("data:"):
+        header, b64data = image_base64.split(",", 1)
+        mime = header.split(":")[1].split(";")[0]
+    else:
+        b64data = image_base64
+        mime = "image/jpeg"
+
+    parts = [
+        {"inlineData": {"mimeType": mime, "data": b64data}},
+        {"text": POSE_ANGLE_PROMPT},
+    ]
+
+    result = _generate_content(
+        model="gemini-2.0-flash",
+        parts=parts,
+        config={"temperature": 0.05, "responseMimeType": "application/json"},
+    )
+
+    text = result["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_json_response(text)
+
+
+# =========================================================================
+# 4. Upload Suitability — 2026-standard validation for manual imports
+# =========================================================================
+
+UPLOAD_SUITABILITY_PROMPT = """You are an expert image quality inspector for a premium fashion AI platform (2026 standard).
+
+This image will be used to drape virtual garments onto the person using AI. Fabric rendering requires pixel-perfect body masks. Analyze this uploaded photo against these STRICT criteria:
+
+1. **WHOLE PRODUCT** — Is the person's ENTIRE body visible? Head to feet, no body parts or clothing edges cut off at the frame boundary. Arms must not be cropped.
+
+2. **TEXTURE CLARITY** — Are fabrics and skin textures crisp and detailed? The AI needs high-resolution detail to render drape correctly. Reject if image is compressed, noisy, or low-res.
+
+3. **BLUR DETECTION** — Is the image sharp? Check for motion blur, focus blur, or camera shake. Any significant blur means the AI cannot create accurate masks.
+
+4. **LIGHTING QUALITY** — Is lighting sufficient to see fabric textures and skin detail? No harsh shadows obscuring body contours. No extreme backlighting. Even, soft lighting preferred.
+
+5. **POSE VERIFICATION** — Is the person:
+   - NOT holding a phone, bag, or any object?
+   - NOT hiding their silhouette (arms crossed, hands in pockets)?
+   - Standing in a clear, unobstructed pose?
+
+6. **ANGLE CLASSIFICATION** — What angle is this photo taken from?
+   - "front" — facing camera, symmetrical shoulders
+   - "profile" — turned ~90°, one shoulder visible
+   - "three_quarter" — ~45° angle, both eyes but body turned
+   - "other" — back shot, overhead, etc. (REJECT)
+
+Return ONLY this JSON:
+{
+  "suitable": true/false,
+  "angle": "front|profile|three_quarter|other",
+  "checks": {
+    "whole_product": {"passed": true/false, "message": "max 12 words"},
+    "texture_clarity": {"passed": true/false, "message": "max 12 words"},
+    "blur": {"passed": true/false, "message": "max 12 words"},
+    "lighting": {"passed": true/false, "message": "max 12 words"},
+    "pose": {"passed": true/false, "message": "max 12 words"}
+  },
+  "issues": ["list of specific issues if any, empty if suitable"],
+  "overall_message": "one-line summary, max 15 words"
+}
+
+"suitable" is true ONLY if ALL checks pass AND angle is not "other"."""
+
+
+def validate_upload_suitability(image_base64: str) -> dict:
+    """
+    Full 2026-standard suitability check for manually uploaded photos.
+    Returns detailed pass/fail with specific issues.
+    """
+    if image_base64.startswith("data:"):
+        header, b64data = image_base64.split(",", 1)
+        mime = header.split(":")[1].split(";")[0]
+    else:
+        b64data = image_base64
+        mime = "image/jpeg"
+
+    parts = [
+        {"inlineData": {"mimeType": mime, "data": b64data}},
+        {"text": UPLOAD_SUITABILITY_PROMPT},
+    ]
+
+    result = _generate_content(
+        model="gemini-2.0-flash",
+        parts=parts,
+        config={"temperature": 0.1, "responseMimeType": "application/json"},
+    )
+
+    text = result["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_json_response(text)
+

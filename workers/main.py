@@ -446,6 +446,99 @@ async def handle_generate_identity(request: GenerateIdentityRequest, background_
     background_tasks.add_task(process_generate_identity, request.identity_id, request.selfie_url)
     return {"message": "Identity generation started", "identity_id": request.identity_id}
 
+
+# =========================================================================
+# Multi-Angle Identity Vault — Pose Detection, Upload Validation, View Storage
+# =========================================================================
+
+class PoseAngleRequest(BaseModel):
+    image_data: str  # base64 data URL from camera
+
+@app.post("/webhook/validate-pose-angle")
+async def handle_validate_pose_angle(request: PoseAngleRequest):
+    """Detect pose angle for AI-Director auto-shutter."""
+    try:
+        result = gemini.validate_pose_angle(request.image_data)
+        return result
+    except Exception as e:
+        print(f"Pose angle detection error: {str(e)}")
+        return {
+            "angle": "unknown",
+            "confidence": 0.0,
+            "full_body_visible": False,
+            "arms_clear": False,
+            "no_phone": True,
+            "silhouette_clear": False,
+            "coaching_tip": f"Detection error: {str(e)[:40]}"
+        }
+
+
+class UploadValidateRequest(BaseModel):
+    image_data: str  # base64 data URL from uploaded file
+
+@app.post("/webhook/validate-upload")
+async def handle_validate_upload(request: UploadValidateRequest):
+    """Full 2026-standard suitability validation for uploaded photos."""
+    try:
+        result = gemini.validate_upload_suitability(request.image_data)
+        return result
+    except Exception as e:
+        print(f"Upload validation error: {str(e)}")
+        return {
+            "suitable": False,
+            "angle": "other",
+            "checks": {
+                "whole_product": {"passed": False, "message": "Analysis failed"},
+                "texture_clarity": {"passed": False, "message": "Analysis failed"},
+                "blur": {"passed": False, "message": "Analysis failed"},
+                "lighting": {"passed": False, "message": "Analysis failed"},
+                "pose": {"passed": False, "message": "Analysis failed"},
+            },
+            "issues": [f"Validation error: {str(e)[:60]}"],
+            "overall_message": "Could not analyze image. Please try again."
+        }
+
+
+class SaveIdentityViewRequest(BaseModel):
+    identity_id: str
+    angle: str  # front, profile, three_quarter
+    image_url: str
+    validation_result: dict = {}
+    source: str = "camera"  # camera or upload
+
+@app.post("/webhook/save-identity-view")
+async def handle_save_identity_view(request: SaveIdentityViewRequest):
+    """Store a validated angle photo in the identity_views table."""
+    try:
+        # Upsert — replace if same angle already exists
+        supabase.table("identity_views").upsert({
+            "identity_id": request.identity_id,
+            "angle": request.angle,
+            "image_url": request.image_url,
+            "validation_result": request.validation_result,
+            "status": "validated",
+            "source": request.source,
+        }, on_conflict="identity_id,angle").execute()
+
+        # Check which angles are now complete
+        views = supabase.table("identity_views").select("angle").eq(
+            "identity_id", request.identity_id
+        ).eq("status", "validated").execute()
+
+        collected = [v["angle"] for v in views.data] if views.data else []
+        required = {"front", "profile", "three_quarter"}
+        missing = list(required - set(collected))
+
+        return {
+            "success": True,
+            "collected_angles": collected,
+            "missing_angles": missing,
+            "profile_complete": len(missing) == 0,
+        }
+    except Exception as e:
+        print(f"Save identity view error: {str(e)}")
+        return {"success": False, "error": str(e)[:100]}
+
 # =========================================================================
 # Outfit Try-On: Multi-layer Claid draping
 # =========================================================================
