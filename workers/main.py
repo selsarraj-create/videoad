@@ -734,42 +734,53 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
             }
         }).eq("id", job_id).execute()
 
-        # Stage 2: Kie.ai — generate video from ALL on-model images + preset prompt
-        # Prepend identity reference images: collage + face close-ups
+        # Stage 2: Build Veo 3.1 ingredients
+        # 1. Create collage from on-model Claid images
+        # 2. Face front close-up
+        # 3. Face side close-up
+        veo_ingredients = []
+
+        # 1. Generate collage from on-model Claid images using Gemini
+        try:
+            print(f"Creating on-model collage from {len(on_model_urls)} Claid image(s)...")
+            collage_result = gemini.generate_body_collage(on_model_urls)
+            collage_bytes = collage_result["image_bytes"]
+            collage_mime = collage_result["mime_type"]
+            collage_ext = "png" if "png" in collage_mime else "jpeg"
+
+            # Upload collage to storage
+            collage_path = f"jobs/{job_id}/on_model_collage.{collage_ext}"
+            supabase.storage.from_("raw_assets").upload(
+                collage_path, collage_bytes,
+                file_options={"content-type": collage_mime, "upsert": "true"}
+            )
+            collage_url = supabase.storage.from_("raw_assets").get_public_url(collage_path)
+            veo_ingredients.append(collage_url)
+            print(f"  Ingredient 1 (on-model collage): {collage_url[:60]}")
+        except Exception as collage_err:
+            print(f"  On-model collage failed, using individual images: {str(collage_err)[:100]}")
+            # Fallback: use individual on-model images if collage fails
+            veo_ingredients.extend(on_model_urls)
+
+        # 2 & 3. Face close-up angles (face_front, face_side)
         if identity_id:
-            reference_imgs = []  # will be prepended in order
-
-            # 1. Master body collage
-            try:
-                collage_resp = supabase.table("identities").select("master_body_collage").eq("id", identity_id).single().execute()
-                collage_url = collage_resp.data.get("master_body_collage") if collage_resp.data else None
-                if collage_url:
-                    reference_imgs.append(collage_url)
-                    print(f"  Ingredient: body collage: {collage_url[:60]}")
-            except Exception as collage_err:
-                print(f"  Could not fetch body collage (continuing): {str(collage_err)}")
-
-            # 2. Face close-up angles (face_front, face_side)
             try:
                 face_views = supabase.table("identity_views").select("angle,image_url").eq(
                     "identity_id", identity_id
                 ).in_("angle", ["face_front", "face_side"]).eq("status", "validated").execute()
 
                 if face_views.data:
-                    for fv in face_views.data:
-                        reference_imgs.append(fv["image_url"])
-                        print(f"  Ingredient: {fv['angle']}: {fv['image_url'][:60]}")
+                    # Ensure face_front comes before face_side
+                    sorted_faces = sorted(face_views.data, key=lambda x: x["angle"])
+                    for fv in sorted_faces:
+                        veo_ingredients.append(fv["image_url"])
+                        print(f"  Ingredient ({fv['angle']}): {fv['image_url'][:60]}")
             except Exception as face_err:
                 print(f"  Could not fetch face angles (continuing): {str(face_err)}")
 
-            # Prepend all reference images before on-model images
-            if reference_imgs:
-                on_model_urls = reference_imgs + on_model_urls
-                print(f"  Total ingredients: {len(reference_imgs)} reference + {len(on_model_urls) - len(reference_imgs)} on-model")
-
         preset = get_preset(preset_id)
         hidden_prompt = preset["prompt"]
-        print(f"Stage 2: Calling Kie.ai Veo with {len(on_model_urls)} reference image(s)")
+        print(f"Stage 2: Calling Kie.ai Veo with {len(veo_ingredients)} ingredient(s)")
         print(f"  Preset '{preset_id}': {hidden_prompt[:60]}...")
 
         from .kie import generate_video as kie_generate
@@ -778,7 +789,7 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
             model="veo-3.1-fast",
             aspectRatio=aspect_ratio,
             duration=preset.get("duration", 8),
-            imageUrls=on_model_urls  # ALL on-model images as REFERENCE_2_VIDEO ingredients
+            imageUrls=veo_ingredients
         )
 
         print(f"Kie response: {task_info}")
