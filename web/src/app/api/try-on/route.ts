@@ -6,7 +6,19 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        const { person_image_url, garment_image_url } = body
+        let { person_image_url, garment_image_url, identity_master_id } = body
+
+        // If identity_master_id is provided, resolve person_image_url from identity_masters
+        if (identity_master_id && !person_image_url) {
+            const { data: persona } = await supabase
+                .from('identity_masters')
+                .select('identity_image_url')
+                .eq('id', identity_master_id)
+                .single()
+            if (persona?.identity_image_url) {
+                person_image_url = persona.identity_image_url
+            }
+        }
 
         if (!person_image_url || !garment_image_url) {
             return NextResponse.json(
