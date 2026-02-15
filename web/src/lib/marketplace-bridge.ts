@@ -83,33 +83,32 @@ export class MarketplaceBridge {
         const searchTerm = query || (category && category !== 'All' ? category : 'luxury');
 
         try {
-            console.log(`[Marketplace] Fetching Skimlinks V4: "${searchTerm}" (Original Q: "${query}", Cat: ${category})`);
-            // Migrated to V4 Publisher Search endpoint
-            const resp = await axios.get('https://api.skimlinks.com/v4/publisher/products/search', {
+            console.log(`[Marketplace] Fetching Skimlinks Offers V4: "${searchTerm}" (Original Q: "${query}", Cat: ${category})`);
+
+            // Migrated to Offers V4 endpoint: https://developers.skimlinks.com/merchant.html#offers
+            const resp = await axios.get(`https://merchants.skimapis.com/v4/publisher/${this.skimlinksPublisherId}/offers`, {
                 params: {
                     q: searchTerm,
-                    category: category !== 'All' ? category : undefined,
-                    limit: 20,
-                    publisher_id: this.skimlinksPublisherId
+                    limit: 20
                 },
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            console.log(`[Marketplace] Skimlinks Response: ${resp.data.products?.length || 0} items found`);
+            console.log(`[Marketplace] Skimlinks V4 Response: ${resp.data.offers?.length || 0} items found`);
 
-            return (resp.data.products || []).map((p: any) => ({
-                id: `skim-${p.id}`,
+            return (resp.data.offers || []).map((o: any) => ({
+                id: `skim-${o.id}`,
                 source: 'skimlinks',
-                title: p.title,
-                price: p.price,
-                currency: p.currency || 'USD',
-                imageUrl: p.image_url,
-                affiliateUrl: `${p.url}${p.url.includes('?') ? '&' : '?'}xcust=${userId}`,
-                brand: p.brand,
-                category: p.category
+                title: o.offer_name || 'Designer Piece',
+                price: o.price || '0.00',
+                currency: o.currency || 'USD',
+                imageUrl: o.image_url || o.merchant_details?.logo || '',
+                affiliateUrl: `${o.offer_url}${o.offer_url?.includes('?') ? '&' : '?'}xcust=${userId}`,
+                brand: o.merchant_details?.name || 'Retailer',
+                category: category // Pass through filter category
             }));
         } catch (error: any) {
-            console.error('[Marketplace] Skimlinks Search Error:', error.response?.status, error.response?.data || error.message);
+            console.error('[Marketplace] Skimlinks V4 Search Error:', error.response?.status, error.response?.data || error.message);
             return [];
         }
     }
