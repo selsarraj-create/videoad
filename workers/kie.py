@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import requests
 import logging
 
@@ -7,8 +8,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-KIE_API_KEY = os.getenv("KIE_API_KEY", "19297022e69b70a833da6ac91c822f8b")
+KIE_API_KEY = os.environ.get("KIE_API_KEY", "")
 KIE_API_BASE = "https://api.kie.ai/api/v1"
+
+# ── Retry configuration ──────────────────────────────────────────────────────
+MAX_RETRIES = 5
+BASE_DELAY = 2.0       # seconds — doubles each retry: 2, 4, 8, 16, 32
+JITTER_MAX = 1.0        # random jitter 0–1s added to each delay
+RETRYABLE_STATUS_CODES = {429, 502, 503, 504}
 
 # Map model names to their API path segments for GENERATION
 MODEL_ENDPOINTS = {
@@ -50,6 +57,64 @@ MODEL_API_NAMES = {
     "product-showcase-1": "veo3_fast",
 }
 
+
+def _request_with_backoff(method: str, url: str, **kwargs) -> requests.Response:
+    """
+    Make an HTTP request with exponential backoff on retryable errors (429, 5xx).
+    
+    Uses: base_delay * 2^attempt + random jitter
+    Max retries: 5 → delays of ~2s, 4s, 8s, 16s, 32s
+    """
+    headers = kwargs.pop("headers", {})
+    headers.setdefault("Authorization", f"Bearer {KIE_API_KEY}")
+
+    last_exception = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = requests.request(method, url, headers=headers, **kwargs)
+
+            # Success — return immediately
+            if response.status_code not in RETRYABLE_STATUS_CODES:
+                response.raise_for_status()
+                return response
+
+            # Retryable error
+            retry_after = response.headers.get("Retry-After")
+            if retry_after and retry_after.isdigit():
+                delay = int(retry_after)
+            else:
+                delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, JITTER_MAX)
+
+            logger.warning(
+                f"Kie.ai {response.status_code} on attempt {attempt + 1}/{MAX_RETRIES + 1} "
+                f"— retrying in {delay:.1f}s (url={url})"
+            )
+
+            if attempt < MAX_RETRIES:
+                time.sleep(delay)
+            else:
+                # Last attempt — raise
+                response.raise_for_status()
+
+        except requests.exceptions.RequestException as e:
+            last_exception = e
+            if attempt < MAX_RETRIES:
+                delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, JITTER_MAX)
+                logger.warning(
+                    f"Kie.ai request error on attempt {attempt + 1}/{MAX_RETRIES + 1}: {e} "
+                    f"— retrying in {delay:.1f}s"
+                )
+                time.sleep(delay)
+            else:
+                raise
+
+    # Should not reach here, but just in case
+    if last_exception:
+        raise last_exception
+    raise Exception(f"Request to {url} failed after {MAX_RETRIES + 1} attempts")
+
+
 def generate_video(prompt: str, model: str, **kwargs) -> dict:
     """
     Starts a video generation task on Kie.ai.
@@ -57,12 +122,9 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
     
     When image URLs are provided, uses REFERENCE_2_VIDEO mode with veo3_fast
     so Veo uses the reference image instead of ignoring it.
-    """
-    headers = {
-        "Authorization": f"Bearer {KIE_API_KEY}",
-        "Content-Type": "application/json"
-    }
     
+    Automatically retries on 429 / 5xx with exponential backoff.
+    """
     # Determine the correct endpoint for this model
     endpoint_segment = MODEL_ENDPOINTS.get(model, "veo")
     url = f"{KIE_API_BASE}/{endpoint_segment}/generate"
@@ -106,47 +168,32 @@ def generate_video(prompt: str, model: str, **kwargs) -> dict:
     
     logger.info(f"Kie.ai request to {url}: model={payload.get('model')}, mode={payload.get('mode', 'TEXT_2_VIDEO')}")
     
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to start Kie.ai generation: {e}")
-        raise
+    response = _request_with_backoff("POST", url, json=payload)
+    return response.json()
+
 
 def get_task_status(task_id: str, model: str = "") -> dict:
     """
     Checks the status of a task using the model-specific record-info/record-detail endpoint.
+    Automatically retries on 429 / 5xx with exponential backoff.
     """
-    headers = {
-        "Authorization": f"Bearer {KIE_API_KEY}"
-    }
-    
     # Use the model-specific status endpoint
     status_path = MODEL_STATUS_PATHS.get(model, "veo/record-info")
     url = f"{KIE_API_BASE}/{status_path}"
     
     logger.info(f"Polling status at {url}?taskId={task_id}")
     
-    try:
-        response = requests.get(url, headers=headers, params={"taskId": task_id})
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to get task status for {task_id}: {e}")
-        raise
+    response = _request_with_backoff("GET", url, params={"taskId": task_id})
+    return response.json()
+
 
 def extend_video(task_id: str, prompt: str, video_url: str, aspect_ratio: str = "16:9") -> dict:
     """
     Extends a Veo 3.1 video by ~7 seconds using the extend endpoint.
     Requires the original taskId, a continuation prompt, and the video URL.
     Can be chained up to 20 times (max ~148s total). 720p only.
+    Automatically retries on 429 / 5xx with exponential backoff.
     """
-    headers = {
-        "Authorization": f"Bearer {KIE_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
     url = f"{KIE_API_BASE}/veo/extend"
     
     payload = {
@@ -158,10 +205,5 @@ def extend_video(task_id: str, prompt: str, video_url: str, aspect_ratio: str = 
     
     logger.info(f"Kie.ai extend request to {url}: taskId={task_id}, prompt={prompt[:80]}...")
     
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to extend Kie.ai video: {e}")
-        raise
+    response = _request_with_backoff("POST", url, json=payload)
+    return response.json()

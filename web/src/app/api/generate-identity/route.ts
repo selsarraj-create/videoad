@@ -55,7 +55,10 @@ export async function POST(request: Request) {
 
         fetch(`${workerUrl}/webhook/generate-identity`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+            },
             body: JSON.stringify({
                 identity_id,
                 selfie_url: identity.raw_selfie_url

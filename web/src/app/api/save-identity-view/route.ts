@@ -36,7 +36,10 @@ export async function POST(request: Request) {
             try {
                 const resp = await fetch(`${workerUrl}/webhook/save-identity-view`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+                    },
                     body: JSON.stringify({
                         identity_id,
                         angle,

@@ -7,3 +7,4 @@ pydantic
 requests
 moviepy
 imageio[ffmpeg]
+redis>=5.0

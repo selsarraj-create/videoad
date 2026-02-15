@@ -89,7 +89,10 @@ export async function POST(request: Request) {
         try {
             const workerRes = await fetch(`${workerUrl}/webhook/try-on`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+                },
                 body: JSON.stringify({
                     job_id: job.id,
                     person_image_url,

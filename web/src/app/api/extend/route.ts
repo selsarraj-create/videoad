@@ -65,7 +65,10 @@ export async function POST(request: Request) {
             try {
                 await fetch(`${workerUrl}/webhook/extend`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+                    },
                     body: JSON.stringify({
                         job_id: newJob.id,
                         original_task_id: originalTaskId,

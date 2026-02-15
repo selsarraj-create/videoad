@@ -1,7 +1,9 @@
 import os
 import time
+import json
+import threading
 import uvicorn
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -10,10 +12,13 @@ from .kie import generate_video, get_task_status
 from . import claid
 from . import gemini
 from .presets import get_prompt, get_preset
+from .auth_middleware import WorkerAuthMiddleware
+from . import queue as task_queue
+from . import rate_limiter
 
 load_dotenv()
 
-# Lazy Supabase client — avoids crashing at import time
+# ── Lazy Supabase client ──────────────────────────────────────────────────────
 _supabase_client: Client | None = None
 
 def get_supabase() -> Client:
@@ -26,7 +31,6 @@ def get_supabase() -> Client:
         _supabase_client = create_client(url, key)
     return _supabase_client
 
-# Backwards-compatible alias — all existing code uses `supabase.table(...)`
 class _LazySupabase:
     """Proxy that defers create_client until first attribute access."""
     def __getattr__(self, name):
@@ -34,15 +38,96 @@ class _LazySupabase:
 
 supabase = _LazySupabase()
 
+# ── Lazy Redis client ─────────────────────────────────────────────────────────
+_redis_client = None
+
+def get_redis():
+    """Get or create a Redis client. Returns None if Redis is not configured."""
+    global _redis_client
+    if _redis_client is None:
+        redis_url = os.environ.get("REDIS_URL")
+        if redis_url:
+            import redis
+            _redis_client = redis.from_url(redis_url, decode_responses=False)
+            try:
+                _redis_client.ping()
+                print(f"Redis connected: {redis_url[:30]}...")
+            except Exception as e:
+                print(f"Redis connection failed: {e} — falling back to direct processing")
+                _redis_client = None
+    return _redis_client
+
+# ── Queue consumer thread ─────────────────────────────────────────────────────
+def _queue_consumer_loop():
+    """Background thread that continuously dequeues and processes tasks."""
+    print("Queue consumer thread started")
+    while True:
+        try:
+            r = get_redis()
+            if r is None:
+                time.sleep(5)
+                continue
+
+            job_id = task_queue.dequeue_task(r, timeout=5)
+            if job_id is None:
+                continue  # timeout — loop again
+
+            meta = task_queue.get_task_meta(r, job_id)
+            if not meta:
+                print(f"Queue consumer: no metadata for job {job_id}, skipping")
+                continue
+
+            task_type = meta.get("task_type", "")
+            payload = json.loads(meta.get("payload", "{}"))
+            task_queue.update_task_status(r, job_id, "processing")
+
+            print(f"Queue consumer: processing {task_type} job {job_id}")
+
+            if task_type == "video_generate":
+                process_video_job(
+                    job_id=payload["job_id"],
+                    prompt=payload["prompt"],
+                    model=payload.get("model", "veo-3.1-fast"),
+                    tier=payload.get("tier", "draft"),
+                    image_refs=payload.get("image_refs", []),
+                    duration=payload.get("duration", 5),
+                    provider_metadata=payload.get("provider_metadata", {}),
+                )
+            elif task_type == "fashion_generate":
+                process_fashion_job(
+                    job_id=payload["job_id"],
+                    garment_image_url=payload["garment_image_url"],
+                    preset_id=payload["preset_id"],
+                    aspect_ratio=payload.get("aspect_ratio", "9:16"),
+                    model_options=payload.get("model_options", {}),
+                    identity_id=payload.get("identity_id", ""),
+                )
+            else:
+                print(f"Queue consumer: unknown task type '{task_type}'")
+
+            task_queue.update_task_status(r, job_id, "completed")
+
+        except Exception as e:
+            print(f"Queue consumer error: {e}")
+            time.sleep(2)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic
+    # Startup
     print("Worker starting up...")
+    r = get_redis()
+    if r:
+        consumer = threading.Thread(target=_queue_consumer_loop, daemon=True)
+        consumer.start()
+        print("Queue consumer thread launched")
+    else:
+        print("No Redis — using direct task processing (no queue)")
     yield
-    # Shutdown logic
     print("Worker shutting down...")
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(WorkerAuthMiddleware)
 
 from .provider_factory import ProviderFactory
 
@@ -57,6 +142,27 @@ def health_check():
         "gemini_api_key_set": bool(gemini_key),
         "gemini_key_prefix": gemini_key[:8] + "..." if gemini_key else "MISSING",
         "supabase_url_set": bool(sb_url),
+    }
+
+
+@app.get("/queue/status")
+def queue_status(job_id: str = Query(...)):
+    """Return queue position + ETA for a given job."""
+    r = get_redis()
+    if not r:
+        return {"position": 0, "estimated_wait_seconds": 0, "queue_length": 0, "status": "processing"}
+
+    position = task_queue.get_queue_position(r, job_id)
+    meta = task_queue.get_task_meta(r, job_id)
+    est_wait = task_queue.estimate_wait_seconds(r, job_id) if position else 0
+    queue_length = task_queue.get_queue_length(r)
+    task_status = meta.get("status", "unknown") if meta else "not_found"
+
+    return {
+        "position": position or 0,
+        "estimated_wait_seconds": est_wait,
+        "queue_length": queue_length,
+        "status": task_status,
     }
 
 class VideoJobRequest(BaseModel):
@@ -188,17 +294,43 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
     if request.provider_metadata and "duration" in request.provider_metadata:
         duration = request.provider_metadata["duration"]
 
-    background_tasks.add_task(
-        process_video_job, 
-        request.job_id, 
-        request.prompt, 
-        request.model, 
-        request.tier,
-        request.image_refs, 
-        duration,
-        request.provider_metadata
-    )
-    return {"message": "Job received", "job_id": request.job_id}
+    r = get_redis()
+    user_id = request.provider_metadata.get("user_id", "anonymous") if request.provider_metadata else "anonymous"
+
+    # Rate limiting (if Redis available)
+    if r:
+        allowed, remaining, retry_after = rate_limiter.check_rate_limit(r, user_id)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Try again in {retry_after}s.",
+                headers={"Retry-After": str(retry_after)}
+            )
+
+    # Enqueue to Redis if available, else fall back to direct processing
+    if r:
+        payload = {
+            "job_id": request.job_id,
+            "prompt": request.prompt,
+            "model": request.model,
+            "tier": request.tier,
+            "image_refs": request.image_refs,
+            "duration": duration,
+            "provider_metadata": request.provider_metadata,
+        }
+        position = task_queue.enqueue_task(r, user_id, request.job_id, "video_generate", payload)
+        supabase.table("jobs").update({
+            "status": "queued",
+            "provider_metadata": {**(request.provider_metadata or {}), "queue_position": position}
+        }).eq("id", request.job_id).execute()
+        return {"message": "Job queued", "job_id": request.job_id, "queue_position": position}
+    else:
+        background_tasks.add_task(
+            process_video_job,
+            request.job_id, request.prompt, request.model, request.tier,
+            request.image_refs, duration, request.provider_metadata
+        )
+        return {"message": "Job received", "job_id": request.job_id}
 
 class ExtendRequest(BaseModel):
     job_id: str
@@ -870,16 +1002,46 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
 
 @app.post("/webhook/fashion-generate")
 async def handle_fashion_webhook(request: FashionJobRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(
-        process_fashion_job,
-        request.job_id,
-        request.garment_image_url,
-        request.preset_id,
-        request.aspect_ratio,
-        request.model_options,
-        request.identity_id
-    )
-    return {"message": "Fashion job received", "job_id": request.job_id}
+    r = get_redis()
+    user_id = request.model_options.get("user_id", "anonymous") if request.model_options else "anonymous"
+
+    # Rate limiting (if Redis available)
+    if r:
+        allowed, remaining, retry_after = rate_limiter.check_rate_limit(r, user_id)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Try again in {retry_after}s.",
+                headers={"Retry-After": str(retry_after)}
+            )
+
+    # Enqueue to Redis if available, else fall back to direct processing
+    if r:
+        payload = {
+            "job_id": request.job_id,
+            "garment_image_url": request.garment_image_url,
+            "preset_id": request.preset_id,
+            "aspect_ratio": request.aspect_ratio,
+            "model_options": request.model_options,
+            "identity_id": request.identity_id,
+        }
+        position = task_queue.enqueue_task(r, user_id, request.job_id, "fashion_generate", payload)
+        supabase.table("jobs").update({
+            "status": "queued",
+            "provider_metadata": {"queue_position": position, "preset_id": request.preset_id}
+        }).eq("id", request.job_id).execute()
+        return {"message": "Fashion job queued", "job_id": request.job_id, "queue_position": position}
+    else:
+        background_tasks.add_task(
+            process_fashion_job,
+            request.job_id,
+            request.garment_image_url,
+            request.preset_id,
+            request.aspect_ratio,
+            request.model_options,
+            request.identity_id
+        )
+        return {"message": "Fashion job received", "job_id": request.job_id}
 
 import requests
 import tempfile

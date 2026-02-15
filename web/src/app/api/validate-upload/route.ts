@@ -16,7 +16,10 @@ export async function POST(request: Request) {
 
         const resp = await fetch(`${workerUrl}/webhook/validate-upload`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+            },
             body: JSON.stringify({ image_data }),
         })
 

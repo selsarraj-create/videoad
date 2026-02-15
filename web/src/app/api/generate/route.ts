@@ -55,7 +55,10 @@ export async function POST(request: Request) {
                 try {
                     await fetch(`${workerUrl}/webhook/generate`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+                        },
                         body: JSON.stringify({
                             job_id: job.id,
                             prompt: item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt,

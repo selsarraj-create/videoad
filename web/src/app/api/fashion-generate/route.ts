@@ -68,7 +68,10 @@ export async function POST(request: Request) {
             try {
                 await fetch(`${workerUrl}/webhook/fashion-generate`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+                    },
                     body: JSON.stringify({
                         job_id: job.id,
                         garment_image_url,

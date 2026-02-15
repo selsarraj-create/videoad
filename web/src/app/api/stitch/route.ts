@@ -44,7 +44,10 @@ export async function POST(request: Request) {
 
         const res = await fetch(`${workerUrl}/webhook/stitch`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Worker-Secret': process.env.WORKER_SHARED_SECRET || '',
+            },
             body: JSON.stringify({
                 project_id,
                 video_urls
