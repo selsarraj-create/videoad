@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     // Protected routes: redirect unauthenticated users to /login
-    const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard')
+    const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/admin')
 
     if (!user && isProtectedRoute) {
         const url = request.nextUrl.clone()
