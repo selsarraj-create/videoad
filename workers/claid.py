@@ -12,6 +12,28 @@ CLAID_API_KEY = os.environ.get("CLAID_API_KEY", "")
 CLAID_API_BASE = "https://api.claid.ai/v1"
 
 
+def _extract_output_url(data: dict) -> str | None:
+    """Extract the output image URL from various Claid response structures."""
+    # Try common paths: output.url, output_url, url, image_url
+    for key in ("output_url", "url", "image_url", "result_url"):
+        val = data.get(key)
+        if val and isinstance(val, str) and val.startswith("http"):
+            return val
+    # Try nested: output.url, output[0].url
+    output = data.get("output")
+    if isinstance(output, dict):
+        for key in ("url", "image_url"):
+            val = output.get(key)
+            if val and isinstance(val, str):
+                return val
+    elif isinstance(output, list) and output:
+        if isinstance(output[0], dict):
+            return output[0].get("url")
+        elif isinstance(output[0], str):
+            return output[0]
+    return None
+
+
 def generate_on_model(garment_image_url: str, person_image_url: str = None, options: dict = None) -> dict:
     """
     Takes a garment image and optionally a person reference image, and returns
@@ -73,27 +95,51 @@ def generate_on_model(garment_image_url: str, person_image_url: str = None, opti
         response.raise_for_status()
         result = response.json()
 
-        # Extract the output image URL from Claid response
-        output_url = None
-        if isinstance(result, dict):
-            # Claid returns { data: { output: { url: "..." } } } or similar
-            data = result.get("data") or result
-            if isinstance(data, dict):
-                output = data.get("output") or data
-                if isinstance(output, dict):
-                    output_url = output.get("url") or output.get("image_url")
-                elif isinstance(output, list) and output:
-                    output_url = output[0].get("url") if isinstance(output[0], dict) else None
+        # Claid returns async: {data: {status: "ACCEPTED", result_url: "..."}}
+        # We need to poll result_url until the image is ready
+        data = result.get("data", result)
+        status = data.get("status", "")
+        result_url = data.get("result_url")
 
-        if not output_url:
-            # Fallback: check top-level
-            output_url = result.get("url") or result.get("image_url")
+        if status == "ACCEPTED" and result_url:
+            logger.info(f"Claid.ai job accepted, polling {result_url}")
+            import time
+            for attempt in range(24):  # 24 × 5s = 2 min max
+                time.sleep(5)
+                poll_resp = requests.get(result_url, headers=headers, timeout=30)
+                if poll_resp.status_code == 200:
+                    poll_data = poll_resp.json()
+                    poll_inner = poll_data.get("data", poll_data)
+                    poll_status = poll_inner.get("status", "")
+                    logger.info(f"Claid.ai poll attempt {attempt+1}: status={poll_status}")
 
-        if not output_url:
-            raise Exception(f"No image URL in Claid response: {result}")
+                    if poll_status in ("COMPLETED", "completed", "DONE", "done", "SUCCESS", "success"):
+                        # Extract output URL
+                        output_url = _extract_output_url(poll_inner)
+                        if output_url:
+                            logger.info(f"Claid.ai on-model image generated: {output_url[:80]}")
+                            return {"image_url": output_url, "raw_response": poll_data}
+                        else:
+                            raise Exception(f"Claid completed but no output URL found: {poll_data}")
 
-        logger.info(f"Claid.ai on-model image generated: {output_url[:80]}")
-        return {"image_url": output_url, "raw_response": result}
+                    if poll_status in ("FAILED", "failed", "ERROR", "error"):
+                        raise Exception(f"Claid.ai job failed: {poll_data}")
+                elif poll_resp.status_code == 202:
+                    # Still processing
+                    logger.info(f"Claid.ai poll attempt {attempt+1}: still processing (202)")
+                    continue
+                else:
+                    logger.warning(f"Claid.ai poll returned {poll_resp.status_code}: {poll_resp.text[:200]}")
+
+            raise Exception("Claid.ai job timed out after 2 minutes of polling")
+
+        # If response already contains the output (non-async path)
+        output_url = _extract_output_url(data)
+        if output_url:
+            logger.info(f"Claid.ai on-model image generated: {output_url[:80]}")
+            return {"image_url": output_url, "raw_response": result}
+
+        raise Exception(f"No image URL in Claid response: {result}")
 
     except requests.exceptions.HTTPError as e:
         error_body = e.response.text[:500] if e.response is not None else 'no response'
