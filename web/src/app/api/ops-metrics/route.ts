@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase/db"
+import { getSupabaseAdmin } from "@/lib/supabase/db"
 
 const WORKER_URL = process.env.RAILWAY_WORKER_URL || ""
 const WORKER_SECRET = process.env.WORKER_SHARED_SECRET || ""
@@ -33,7 +33,7 @@ export async function GET() {
         }
 
         // 2. Enrich with Supabase job history (uses pooled admin client)
-        const supabase = supabaseAdmin
+        const supabase = getSupabaseAdmin()
 
         // Last 24h jobs
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()

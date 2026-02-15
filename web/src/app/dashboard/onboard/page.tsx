@@ -6,8 +6,10 @@ import { useSearchParams } from "next/navigation"
 import {
     Sparkles, Camera, Upload, User, Sun, ArrowRight, ArrowLeft,
     CheckCircle2, XCircle, Loader2, RefreshCcw,
-    Video as VideoIcon, Zap, Eye, RotateCcw, ImagePlus, Shield
+    Video as VideoIcon, Zap, Eye, RotateCcw, ImagePlus, Shield,
+    Volume2, VolumeX
 } from "lucide-react"
+import { useDirectorVoice } from "@/hooks/useDirectorVoice"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -131,6 +133,12 @@ export default function OnboardPage() {
     const [identity, setIdentity] = useState<Identity | null>(null)
     const [error, setError] = useState<string | null>(null)
 
+    // Voice Director state
+    const [userHasInteracted, setUserHasInteracted] = useState(false)
+    const [voiceMuted, setVoiceMuted] = useState(() =>
+        typeof window !== 'undefined' && localStorage.getItem('directorVoiceMuted') === 'true'
+    )
+
     // AI-Director state
     const [currentAngleIdx, setCurrentAngleIdx] = useState(0)
     const [poseDetection, setPoseDetection] = useState<PoseDetection | null>(null)
@@ -162,6 +170,20 @@ export default function OnboardPage() {
     const capturedCount = Object.values(captures).filter(c => c.validated).length
     const allCaptured = capturedCount === REQUIRED_ANGLES.length
     const currentAngle = REQUIRED_ANGLES[currentAngleIdx]
+
+    // Voice Director hook
+    const { isSpeaking, reset: resetVoice } = useDirectorVoice({
+        step,
+        currentAngleIdx,
+        captures,
+        muted: voiceMuted,
+        userHasInteracted,
+    })
+
+    // Persist mute preference
+    useEffect(() => {
+        localStorage.setItem('directorVoiceMuted', String(voiceMuted))
+    }, [voiceMuted])
 
     // ── Camera Management ─────────────────────────────────────────────────
 
@@ -495,6 +517,7 @@ export default function OnboardPage() {
 
     const handleStartOver = () => {
         stopCamera()
+        resetVoice()
         setStep('guide')
         setMode(null)
         setIdentity(null)
@@ -585,7 +608,7 @@ export default function OnboardPage() {
 
                             <div className="text-center">
                                 <Button
-                                    onClick={() => setStep('mode_select')}
+                                    onClick={() => { setUserHasInteracted(true); setStep('mode_select') }}
                                     className="h-16 px-12 text-sm uppercase tracking-[0.2em] font-bold rounded-none bg-foreground text-background hover:bg-primary hover:text-white transition-all shadow-xl hover:shadow-2xl"
                                 >
                                     Begin Calibration <ArrowRight className="w-4 h-4 ml-3" />
@@ -658,9 +681,23 @@ export default function OnboardPage() {
                     {step === 'ai_director' && (
                         <motion.div key="ai_director" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
                             <div className="text-center space-y-2">
-                                <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest mb-4">
-                                    AI-Director Active
-                                </Badge>
+                                <div className="flex items-center justify-center gap-3 mb-4">
+                                    <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">
+                                        AI-Director Active
+                                    </Badge>
+                                    {isSpeaking && (
+                                        <Badge className="bg-green-500/10 text-green-600 border-0 rounded-none text-[9px] uppercase tracking-widest animate-pulse">
+                                            Speaking
+                                        </Badge>
+                                    )}
+                                    <button
+                                        onClick={() => setVoiceMuted(m => !m)}
+                                        className="p-2 rounded-full border border-nimbus hover:border-primary text-muted-foreground hover:text-primary transition-all"
+                                        title={voiceMuted ? 'Unmute Director' : 'Mute Director'}
+                                    >
+                                        {voiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                                    </button>
+                                </div>
                                 <h2 className="font-serif text-4xl text-primary">
                                     {captures[currentAngle.key].validated
                                         ? '✓ Captured!'
