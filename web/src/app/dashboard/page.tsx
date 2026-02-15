@@ -48,9 +48,10 @@ import { ParticleSilhouette } from "@/components/ui/particle-silhouette"
 import { StatusPill } from "@/components/ui/status-pill"
 import { RevenueChart } from "@/components/revenue-chart"
 import { LookOfTheDay } from "@/components/look-of-the-day"
-import { DollarSign, TrendingUp, Clock, Award, Bell } from "lucide-react"
+import { ShowcaseGrid } from "@/components/showcase-grid"
+import { DollarSign, TrendingUp, Clock, Award, Bell, Globe } from "lucide-react"
 
-type Tab = 'try-on' | 'video' | 'marketplace' | 'revenue'
+type Tab = 'try-on' | 'video' | 'marketplace' | 'revenue' | 'showcase'
 
 interface MarketplaceItem {
     id: string;
@@ -125,6 +126,7 @@ export default function StudioPage() {
     const [jobs, setJobs] = useState<Job[]>([])
     const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>([])
     const [projectId, setProjectId] = useState<string | null>(null)
+    const [user, setUser] = useState<any>(null)
 
 
     const garmentFileRef = useRef<HTMLInputElement>(null)
@@ -159,6 +161,7 @@ export default function StudioPage() {
         getOrCreateDefaultProject().then(({ projectId: pid }) => {
             if (pid) setProjectId(pid)
         })
+        supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
         fetchPersonas()
     }, [])
 
@@ -509,6 +512,12 @@ export default function StudioPage() {
                             Revenue
                             {activeTab === 'revenue' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
+                        <button onClick={() => setActiveTab('showcase')}
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
+                                ${activeTab === 'showcase' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Showcase
+                            {activeTab === 'showcase' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
+                        </button>
                     </div>
                 </div>
 
@@ -524,11 +533,27 @@ export default function StudioPage() {
 
                 {/* ===== LEFT PANEL ===== */}
                 <section className={`flex flex-col overflow-y-auto glass-panel z-20 relative transition-all duration-500
-                    ${(activeTab === 'marketplace' || activeTab === 'revenue') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
+                    ${(activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
                     <div className={`flex-1 p-8 lg:p-12 w-full space-y-12 transition-all
-                        ${(activeTab === 'marketplace' || activeTab === 'revenue') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
+                        ${(activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
 
-                        {activeTab === 'try-on' ? (
+                        {activeTab === 'showcase' ? (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+                                <div className="space-y-2 border-b border-nimbus pb-8">
+                                    <h2 className="font-serif text-3xl tracking-tight">Community Showcase</h2>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-widest">Trending looks and community creations</p>
+                                </div>
+                                <ShowcaseGrid onRemix={(item) => {
+                                    // Handle Remix look
+                                    if (item.garment_metadata?.[0]) {
+                                        setGarmentImageUrl(item.garment_metadata[0].imageUrl)
+                                        setGarmentPreview(item.garment_metadata[0].imageUrl)
+                                        if (item.persona_id) setSelectedPersonaId(item.persona_id)
+                                        setActiveTab('try-on')
+                                    }
+                                }} />
+                            </motion.div>
+                        ) : activeTab === 'try-on' ? (
                             /* ---- TRY ON TAB ---- */
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
                                 {/* Identity Banner */}
@@ -923,7 +948,7 @@ export default function StudioPage() {
                 </section>
 
                 {/* ===== RIGHT: Archive (Gallery Masonry) ===== */}
-                {activeTab !== 'marketplace' && activeTab !== 'revenue' && (
+                {activeTab !== 'marketplace' && activeTab !== 'revenue' && activeTab !== 'showcase' && (
                     <aside className="col-span-12 lg:col-span-7 bg-[#FBFBFB] flex flex-col overflow-hidden relative">
                         {/* Background Detail */}
                         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
@@ -1021,7 +1046,26 @@ export default function StudioPage() {
                                                 )}
 
                                                 {job.status === 'completed' && job.output_url && (
-                                                    <div className="mt-4 pt-4 border-t border-nimbus/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <div className="mt-4 pt-4 border-t border-nimbus/20 space-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button variant="ghost" size="sm"
+                                                            className="w-full h-8 text-[10px] uppercase tracking-widest hover:bg-nimbus/20 rounded-none border border-nimbus"
+                                                            onClick={async () => {
+                                                                if (confirm("Publish to Community Showcase? This will share your look and video publicly.")) {
+                                                                    const { error } = await supabase.from('public_showcase').insert({
+                                                                        user_id: user?.id,
+                                                                        video_url: job.output_url,
+                                                                        persona_id: selectedPersonaId,
+                                                                        garment_metadata: [{
+                                                                            title: selectedMediaItem?.label || 'Designer Piece',
+                                                                            imageUrl: selectedMediaItem?.garment_image_url || selectedMediaItem?.image_url
+                                                                        }],
+                                                                        ai_labeled: true
+                                                                    });
+                                                                    if (!error) alert("Published to Showcase!");
+                                                                }
+                                                            }}>
+                                                            <Globe className="w-3 h-3 mr-2" /> Publish to Showcase
+                                                        </Button>
                                                         <Button variant="ghost" size="sm"
                                                             className="w-full h-8 text-[10px] uppercase tracking-widest hover:bg-nimbus/20 rounded-none border border-nimbus"
                                                             onClick={() => {
@@ -1101,6 +1145,6 @@ export default function StudioPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     )
 }
