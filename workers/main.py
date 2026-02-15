@@ -735,16 +735,37 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
         }).eq("id", job_id).execute()
 
         # Stage 2: Kie.ai — generate video from ALL on-model images + preset prompt
-        # Prepend master_body_collage as Ingredient 1 if available
+        # Prepend identity reference images: collage + face close-ups
         if identity_id:
+            reference_imgs = []  # will be prepended in order
+
+            # 1. Master body collage
             try:
                 collage_resp = supabase.table("identities").select("master_body_collage").eq("id", identity_id).single().execute()
                 collage_url = collage_resp.data.get("master_body_collage") if collage_resp.data else None
                 if collage_url:
-                    on_model_urls.insert(0, collage_url)
-                    print(f"  Prepended body collage as Ingredient 1: {collage_url[:60]}")
+                    reference_imgs.append(collage_url)
+                    print(f"  Ingredient: body collage: {collage_url[:60]}")
             except Exception as collage_err:
                 print(f"  Could not fetch body collage (continuing): {str(collage_err)}")
+
+            # 2. Face close-up angles (face_front, face_side)
+            try:
+                face_views = supabase.table("identity_views").select("angle,image_url").eq(
+                    "identity_id", identity_id
+                ).in_("angle", ["face_front", "face_side"]).eq("status", "validated").execute()
+
+                if face_views.data:
+                    for fv in face_views.data:
+                        reference_imgs.append(fv["image_url"])
+                        print(f"  Ingredient: {fv['angle']}: {fv['image_url'][:60]}")
+            except Exception as face_err:
+                print(f"  Could not fetch face angles (continuing): {str(face_err)}")
+
+            # Prepend all reference images before on-model images
+            if reference_imgs:
+                on_model_urls = reference_imgs + on_model_urls
+                print(f"  Total ingredients: {len(reference_imgs)} reference + {len(on_model_urls) - len(reference_imgs)} on-model")
 
         preset = get_preset(preset_id)
         hidden_prompt = preset["prompt"]
