@@ -14,23 +14,29 @@ CLAID_API_BASE = "https://api.claid.ai/v1"
 
 def _extract_output_url(data: dict) -> str | None:
     """Extract the output image URL from various Claid response structures."""
-    # Try common paths: output.url, output_url, url, image_url
-    for key in ("output_url", "url", "image_url", "result_url"):
+    # Claid's actual format: result.output_objects[0].tmp_url
+    result = data.get("result")
+    if isinstance(result, dict):
+        output_objects = result.get("output_objects")
+        if isinstance(output_objects, list) and output_objects:
+            obj = output_objects[0]
+            if isinstance(obj, dict):
+                for key in ("tmp_url", "url", "image_url", "claid_storage_uri", "object_uri"):
+                    val = obj.get(key)
+                    if val and isinstance(val, str) and val.startswith("http"):
+                        return val
+    # Fallback: try common top-level paths
+    for key in ("output_url", "url", "image_url", "tmp_url"):
         val = data.get(key)
         if val and isinstance(val, str) and val.startswith("http"):
             return val
-    # Try nested: output.url, output[0].url
+    # Try nested output dict
     output = data.get("output")
     if isinstance(output, dict):
-        for key in ("url", "image_url"):
+        for key in ("url", "image_url", "tmp_url"):
             val = output.get(key)
             if val and isinstance(val, str):
                 return val
-    elif isinstance(output, list) and output:
-        if isinstance(output[0], dict):
-            return output[0].get("url")
-        elif isinstance(output[0], str):
-            return output[0]
     return None
 
 
