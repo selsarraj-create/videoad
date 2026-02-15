@@ -478,10 +478,34 @@ def process_generate_identity(identity_id: str, selfie_url: str):
         # Use front master as the primary, or first available
         primary_url = front_master_url or next(iter(master_urls.values()))
 
-        supabase.table("identities").update({
+        # Generate body collage from all master angles (Nano Banana Pro / Gemini 3 Pro Image)
+        collage_url = None
+        if len(master_urls) >= 2:
+            try:
+                print(f"Generating body collage from {len(master_urls)} master angles...")
+                collage_result = gemini.generate_body_collage(list(master_urls.values()))
+                collage_bytes = collage_result["image_bytes"]
+                collage_mime = collage_result["mime_type"]
+                collage_ext = "png" if "png" in collage_mime else "jpeg"
+
+                collage_path = f"identities/{identity_id}/master_body_collage.{collage_ext}"
+                supabase.storage.from_("raw_assets").upload(
+                    collage_path, collage_bytes,
+                    file_options={"content-type": collage_mime, "upsert": "true"}
+                )
+                collage_url = supabase.storage.from_("raw_assets").get_public_url(collage_path)
+                print(f"Body collage ready: {collage_url[:80]}")
+            except Exception as collage_err:
+                print(f"Body collage generation failed (non-fatal): {str(collage_err)}")
+
+        update_fields = {
             "master_identity_url": primary_url,
             "status": "ready"
-        }).eq("id", identity_id).execute()
+        }
+        if collage_url:
+            update_fields["master_body_collage"] = collage_url
+
+        supabase.table("identities").update(update_fields).eq("id", identity_id).execute()
         print(f"All masters ready ({len(master_urls)} angles): {list(master_urls.keys())}")
 
     except Exception as e:
@@ -711,6 +735,17 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
         }).eq("id", job_id).execute()
 
         # Stage 2: Kie.ai — generate video from ALL on-model images + preset prompt
+        # Prepend master_body_collage as Ingredient 1 if available
+        if identity_id:
+            try:
+                collage_resp = supabase.table("identities").select("master_body_collage").eq("id", identity_id).single().execute()
+                collage_url = collage_resp.data.get("master_body_collage") if collage_resp.data else None
+                if collage_url:
+                    on_model_urls.insert(0, collage_url)
+                    print(f"  Prepended body collage as Ingredient 1: {collage_url[:60]}")
+            except Exception as collage_err:
+                print(f"  Could not fetch body collage (continuing): {str(collage_err)}")
+
         preset = get_preset(preset_id)
         hidden_prompt = preset["prompt"]
         print(f"Stage 2: Calling Kie.ai Veo with {len(on_model_urls)} reference image(s)")

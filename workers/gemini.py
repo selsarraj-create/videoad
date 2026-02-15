@@ -242,6 +242,68 @@ def generate_master_identity(image_url: str) -> dict:
 
 
 # =========================================================================
+# 2b. Generate Body Collage — Nano Banana Pro (Gemini 3 Pro Image)
+# =========================================================================
+
+COLLAGE_PROMPT = """Combine these 3 images into a single horizontal character sheet collage on a plain white background. Ensure consistent lighting and spacing between the three views."""
+
+
+def generate_body_collage(image_urls: list[str]) -> dict:
+    """
+    Use Gemini 3 Pro Image (Nano Banana Pro) to combine 3 master identity
+    angle images into a single horizontal character sheet collage.
+    Returns { image_bytes: bytes, mime_type: str }.
+    """
+    if not GEMINI_API_KEY:
+        raise Exception("GEMINI_API_KEY not set")
+
+    if not image_urls or len(image_urls) == 0:
+        raise Exception("No image URLs provided for collage generation")
+
+    # Build parts: all images as inlineData, then the prompt
+    parts = []
+    for url in image_urls:
+        img_bytes = _download_image_bytes(url)
+        mime = _guess_mime(url)
+        parts.append({
+            "inlineData": {
+                "mimeType": mime,
+                "data": base64.b64encode(img_bytes).decode(),
+            }
+        })
+
+    parts.append({"text": COLLAGE_PROMPT})
+
+    body = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+        },
+    }
+
+    resp = httpx.post(
+        _api_url("gemini-3-pro-image-preview"),
+        json=body,
+        timeout=180,
+    )
+
+    if resp.status_code != 200:
+        raise Exception(f"Gemini collage error {resp.status_code}: {resp.text[:500]}")
+
+    data = resp.json()
+
+    for part in data["candidates"][0]["content"]["parts"]:
+        if "inlineData" in part:
+            img_data = part["inlineData"]
+            return {
+                "image_bytes": base64.b64decode(img_data["data"]),
+                "mime_type": img_data.get("mimeType", "image/png"),
+            }
+
+    raise Exception("Gemini did not return a collage image in the response")
+
+
+# =========================================================================
 # 3. Pose Angle Detection — for AI-Director auto-shutter
 # =========================================================================
 
