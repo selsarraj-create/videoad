@@ -6,17 +6,17 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        let { person_image_url, garment_image_url, identity_master_id } = body
+        let { person_image_url, garment_image_url, identity_id } = body
 
-        // If identity_master_id is provided, resolve person_image_url from identity_masters
-        if (identity_master_id && !person_image_url) {
-            const { data: persona } = await supabase
-                .from('identity_masters')
-                .select('identity_image_url')
-                .eq('id', identity_master_id)
+        // If identity_id is provided, resolve person_image_url from identities table
+        if (identity_id && !person_image_url) {
+            const { data: identity } = await supabase
+                .from('identities')
+                .select('master_identity_url')
+                .eq('id', identity_id)
                 .single()
-            if (persona?.identity_image_url) {
-                person_image_url = persona.identity_image_url
+            if (identity?.master_identity_url) {
+                person_image_url = identity.master_identity_url
             }
         }
 
@@ -76,7 +76,6 @@ export async function POST(request: Request) {
         const workerUrl = process.env.RAILWAY_WORKER_URL
         if (!workerUrl) {
             console.error('RAILWAY_WORKER_URL not set — cannot process try-on')
-            // Mark job as failed so the UI can pick it up
             await supabase.from('jobs').update({
                 status: 'failed',
                 error_message: 'Worker not configured (RAILWAY_WORKER_URL not set)'

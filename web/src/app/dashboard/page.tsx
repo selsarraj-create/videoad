@@ -49,8 +49,9 @@ type Tab = 'try-on' | 'video'
 interface PersonaSlot {
     id: string
     name: string
-    identity_image_url: string
+    master_identity_url: string | null
     is_default: boolean
+    status: string
     created_at: string
 }
 
@@ -61,10 +62,6 @@ export default function StudioPage() {
     const [personaSlots, setPersonaSlots] = useState<PersonaSlot[]>([])
     const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null)
     const [personaLoading, setPersonaLoading] = useState(true)
-    const [addPersonaOpen, setAddPersonaOpen] = useState(false)
-    const [newPersonaName, setNewPersonaName] = useState('')
-    const [newPersonaImage, setNewPersonaImage] = useState<string | null>(null)
-    const [addingPersona, setAddingPersona] = useState(false)
 
     // Try-On state
     const [garmentImageUrl, setGarmentImageUrl] = useState("")
@@ -89,18 +86,18 @@ export default function StudioPage() {
     const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>([])
     const [projectId, setProjectId] = useState<string | null>(null)
 
-    const personaFileRef = useRef<HTMLInputElement>(null)
+
     const garmentFileRef = useRef<HTMLInputElement>(null)
     const supabase = createClient()
 
     // Derived: get selected persona's image URL
     const selectedPersona = personaSlots.find(p => p.id === selectedPersonaId)
-    const masterIdentityUrl = selectedPersona?.identity_image_url || null
+    const masterIdentityUrl = selectedPersona?.master_identity_url || null
 
     // Fetch persona slots
     const fetchPersonas = useCallback(async () => {
         try {
-            const res = await fetch('/api/identity-masters')
+            const res = await fetch('/api/personas')
             const data = await res.json()
             if (data.personas) {
                 setPersonaSlots(data.personas)
@@ -160,35 +157,10 @@ export default function StudioPage() {
         }
     }, [jobs])
 
-    // Add persona handler
-    const handleAddPersona = async () => {
-        if (!newPersonaName.trim() || !newPersonaImage) return
-        setAddingPersona(true)
-        try {
-            const res = await fetch('/api/identity-masters', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: newPersonaName.trim(), image_data: newPersonaImage })
-            })
-            const data = await res.json()
-            if (data.success && data.persona) {
-                await fetchPersonas()
-                setSelectedPersonaId(data.persona.id)
-            }
-        } catch (err) {
-            console.error('Failed to add persona:', err)
-        } finally {
-            setAddingPersona(false)
-            setAddPersonaOpen(false)
-            setNewPersonaName('')
-            setNewPersonaImage(null)
-        }
-    }
-
     // Delete persona handler
     const handleDeletePersona = async (id: string) => {
         try {
-            await fetch(`/api/identity-masters?id=${id}`, { method: 'DELETE' })
+            await fetch(`/api/personas?id=${id}`, { method: 'DELETE' })
             await fetchPersonas()
         } catch (err) {
             console.error('Failed to delete persona:', err)
@@ -239,7 +211,7 @@ export default function StudioPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    identity_master_id: selectedPersonaId,
+                    identity_id: selectedPersonaId,
                     person_image_url: masterIdentityUrl,
                     garment_image_url: garmentImageUrl
                 })
@@ -289,7 +261,7 @@ export default function StudioPage() {
                     garment_image_url: selectedMediaItem.image_url,
                     preset_id: selectedPreset.id,
                     aspect_ratio: aspectRatio,
-                    identity_master_id: selectedPersonaId || ''
+                    identity_id: selectedPersonaId || ''
                 })
             })
         } catch (e) { console.error(e) }
@@ -419,9 +391,11 @@ export default function StudioPage() {
                                             <p className="font-serif text-lg text-primary">Identity Required</p>
                                             <p className="text-xs text-muted-foreground leading-relaxed">Create your first persona to begin. You can have up to 5 different looks.</p>
                                         </div>
-                                        <Button onClick={() => setAddPersonaOpen(true)} className="w-full bg-foreground text-background rounded-none hover:bg-primary transition-colors h-12 text-xs uppercase tracking-widest">
-                                            <Plus className="w-4 h-4 mr-2" /> Create First Persona
-                                        </Button>
+                                        <Link href="/dashboard/onboard">
+                                            <Button className="w-full bg-foreground text-background rounded-none hover:bg-primary transition-colors h-12 text-xs uppercase tracking-widest">
+                                                <Plus className="w-4 h-4 mr-2" /> Create First Persona
+                                            </Button>
+                                        </Link>
                                     </div>
                                 )}
 
@@ -439,12 +413,18 @@ export default function StudioPage() {
                                                 key={persona.id}
                                                 onClick={() => setSelectedPersonaId(persona.id)}
                                                 className={`relative flex-shrink-0 w-28 group snap-start transition-all duration-300 ${selectedPersonaId === persona.id
-                                                        ? 'ring-2 ring-primary shadow-lg scale-[1.02]'
-                                                        : 'opacity-70 hover:opacity-100'
+                                                    ? 'ring-2 ring-primary shadow-lg scale-[1.02]'
+                                                    : 'opacity-70 hover:opacity-100'
                                                     }`}
                                             >
                                                 <div className="aspect-[3/4] bg-white p-1 shadow-sm overflow-hidden">
-                                                    <img src={persona.identity_image_url} alt={persona.name} className="w-full h-full object-cover" />
+                                                    {persona.master_identity_url ? (
+                                                        <img src={persona.master_identity_url} alt={persona.name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full bg-nimbus/20 flex items-center justify-center">
+                                                            <User className="w-8 h-8 text-muted-foreground" />
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <p className="text-[9px] text-center mt-2 font-bold uppercase tracking-widest text-muted-foreground truncate">{persona.name}</p>
                                                 {persona.is_default && (
@@ -462,15 +442,12 @@ export default function StudioPage() {
 
                                         {/* Add Persona Slot */}
                                         {personaSlots.length < 5 && (
-                                            <button
-                                                onClick={() => setAddPersonaOpen(true)}
-                                                className="flex-shrink-0 w-28 snap-start"
-                                            >
+                                            <Link href="/dashboard/onboard" className="flex-shrink-0 w-28 snap-start">
                                                 <div className="aspect-[3/4] border-2 border-dashed border-nimbus flex items-center justify-center hover:border-primary transition-colors group cursor-pointer">
                                                     <Plus className="w-6 h-6 text-nimbus group-hover:text-primary transition-colors" />
                                                 </div>
                                                 <p className="text-[9px] text-center mt-2 font-bold uppercase tracking-widest text-muted-foreground">Add</p>
-                                            </button>
+                                            </Link>
                                         )}
                                     </div>
                                 </div>
@@ -745,62 +722,7 @@ export default function StudioPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Add Persona Dialog */}
-            <Dialog open={addPersonaOpen} onOpenChange={setAddPersonaOpen}>
-                <DialogContent className="sm:max-w-md rounded-none border-primary bg-background p-8">
-                    <DialogHeader>
-                        <DialogTitle className="font-serif text-2xl text-primary">New Persona</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-6 py-4">
-                        <BespokeInput
-                            value={newPersonaName}
-                            onChange={(e) => setNewPersonaName(e.target.value)}
-                            label="Persona Name"
-                            placeholder="e.g. Natural, Glam, Editorial..."
-                        />
 
-                        <div className="space-y-2">
-                            <Label className="uppercase tracking-widest text-[10px] font-bold text-muted-foreground">Master Photo</Label>
-                            {newPersonaImage ? (
-                                <div className="relative aspect-[3/4] max-h-[300px] mx-auto bg-white p-2 shadow-sm">
-                                    <img src={newPersonaImage} alt="Preview" className="w-full h-full object-cover" />
-                                    <button
-                                        onClick={() => setNewPersonaImage(null)}
-                                        className="absolute top-1 right-1 bg-stretch-limo text-white w-6 h-6 flex items-center justify-center rounded-none text-[10px]"
-                                    >×</button>
-                                </div>
-                            ) : (
-                                <div
-                                    onClick={() => personaFileRef.current?.click()}
-                                    className="border-2 border-dashed border-nimbus py-12 text-center cursor-pointer hover:border-primary transition-colors"
-                                >
-                                    <Camera className="w-6 h-6 text-nimbus mx-auto mb-2" />
-                                    <p className="text-xs text-muted-foreground">Click to upload photo</p>
-                                </div>
-                            )}
-                            <input ref={personaFileRef} type="file" accept="image/*" className="hidden"
-                                onChange={(e) => {
-                                    const f = e.target.files?.[0]
-                                    if (f) {
-                                        const reader = new FileReader()
-                                        reader.onload = (ev) => setNewPersonaImage(ev.target?.result as string)
-                                        reader.readAsDataURL(f)
-                                    }
-                                }} />
-                        </div>
-                    </div>
-                    <DialogFooter className="sm:justify-between items-center gap-4">
-                        <Button variant="ghost" onClick={() => { setAddPersonaOpen(false); setNewPersonaName(''); setNewPersonaImage(null) }} className="text-xs uppercase tracking-widest rounded-none">Cancel</Button>
-                        <Button
-                            onClick={handleAddPersona}
-                            disabled={!newPersonaName.trim() || !newPersonaImage || addingPersona}
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 text-xs uppercase tracking-widest rounded-none px-8 h-10"
-                        >
-                            {addingPersona ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Create Persona'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     )
 }

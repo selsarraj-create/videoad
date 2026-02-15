@@ -6,26 +6,13 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        const { garment_image_url, preset_id, aspect_ratio = '9:16', identity_master_id } = body
+        const { garment_image_url, preset_id, aspect_ratio = '9:16', identity_id } = body
 
         if (!garment_image_url || !preset_id) {
             return NextResponse.json(
                 { error: 'Missing garment_image_url or preset_id' },
                 { status: 400 }
             )
-        }
-
-        // Resolve identity_image_url from persona slot if provided
-        let identity_image_url: string | null = null
-        if (identity_master_id) {
-            const { data: persona } = await supabase
-                .from('identity_masters')
-                .select('identity_image_url')
-                .eq('id', identity_master_id)
-                .single()
-            if (persona?.identity_image_url) {
-                identity_image_url = persona.identity_image_url
-            }
         }
 
         // Get first available workspace/project (auth disabled)
@@ -59,7 +46,8 @@ export async function POST(request: Request) {
                 input_params: {
                     garment_image_url,
                     preset_id,
-                    pipeline: 'fashion'
+                    pipeline: 'fashion',
+                    identity_id: identity_id || ''
                 },
                 model: 'veo-3.1-fast',
                 tier: 'fashion',
@@ -86,8 +74,7 @@ export async function POST(request: Request) {
                         garment_image_url,
                         preset_id,
                         aspect_ratio,
-                        identity_master_id: identity_master_id || '',
-                        identity_image_url: identity_image_url || ''
+                        identity_id: identity_id || ''
                     })
                 })
             } catch (workerError) {

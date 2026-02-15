@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useSearchParams } from "next/navigation"
 import {
     Sparkles, Camera, Upload, User, Sun, ArrowRight, ArrowLeft,
     CheckCircle2, XCircle, Loader2, RefreshCcw,
@@ -151,6 +152,8 @@ export default function OnboardPage() {
     })
 
     const supabase = createClient()
+    const searchParams = useSearchParams()
+    const personaName = searchParams.get('name') || 'Default'
 
     const capturedCount = Object.values(captures).filter(c => c.validated).length
     const allCaptured = capturedCount === 3
@@ -315,6 +318,7 @@ export default function OnboardPage() {
                         raw_selfie_url: urlData.publicUrl,
                         status: 'pending',
                         onboarding_mode: mode || 'ai_director',
+                        name: personaName,
                     })
                     .select()
                     .single()

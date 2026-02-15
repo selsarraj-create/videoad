@@ -640,10 +640,8 @@ class FashionJobRequest(BaseModel):
     aspect_ratio: str = "9:16"
     model_options: dict = {}  # gender, ethnicity for Claid
     identity_id: str = ""  # If set, use all 3 master angle views
-    identity_master_id: str = ""  # Persona slot ID
-    identity_image_url: str = ""  # Pre-resolved persona image URL
 
-def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, aspect_ratio: str, model_options: dict, identity_id: str = "", identity_master_id: str = "", identity_image_url: str = ""):
+def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, aspect_ratio: str, model_options: dict, identity_id: str = ""):
     """
     Multi-angle fashion pipeline:
     1. Fetch 3 master identity images (front, profile, 3/4) from identity_views
@@ -656,21 +654,9 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
         # Stage 0: Update status
         supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
 
-        # Collect master identity URLs
+        # Collect master identity URLs (all 3 angles)
         master_urls = []
-
-        # Priority 1: Persona slot identity_image_url (pre-resolved from identity_masters)
-        if identity_image_url:
-            master_urls = [identity_image_url]
-            print(f"  Using persona slot image: {identity_image_url[:60]}")
-        # Priority 2: Persona slot ID (resolve from DB)
-        elif identity_master_id:
-            persona_resp = supabase.table("identity_masters").select("identity_image_url").eq("id", identity_master_id).single().execute()
-            if persona_resp.data and persona_resp.data.get("identity_image_url"):
-                master_urls = [persona_resp.data["identity_image_url"]]
-                print(f"  Resolved persona slot: {master_urls[0][:60]}")
-        # Priority 3: Multi-angle identity views
-        elif identity_id:
+        if identity_id:
             views_resp = supabase.table("identity_views").select("angle, master_url").eq(
                 "identity_id", identity_id
             ).execute()
@@ -824,9 +810,7 @@ async def handle_fashion_webhook(request: FashionJobRequest, background_tasks: B
         request.preset_id,
         request.aspect_ratio,
         request.model_options,
-        request.identity_id,
-        request.identity_master_id,
-        request.identity_image_url
+        request.identity_id
     )
     return {"message": "Fashion job received", "job_id": request.job_id}
 
