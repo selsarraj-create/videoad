@@ -16,6 +16,7 @@ from .auth_middleware import WorkerAuthMiddleware
 from . import queue as task_queue
 from . import rate_limiter
 from . import fallback_limiter
+from . import metrics
 
 load_dotenv()
 
@@ -127,6 +128,7 @@ def _queue_consumer_loop():
 async def lifespan(app: FastAPI):
     # Startup
     print("Worker starting up...")
+    metrics.set_gauge("start_time", time.time())
     r = get_redis()
     if r:
         # Recover any in-flight tasks from a previous crash
@@ -159,6 +161,20 @@ def health_check():
         "gemini_key_prefix": gemini_key[:8] + "..." if gemini_key else "MISSING",
         "supabase_url_set": bool(sb_url),
     }
+
+
+@app.get("/metrics")
+def metrics_endpoint():
+    """Return a snapshot of all worker metrics."""
+    r = get_redis()
+    if r:
+        try:
+            metrics.set_gauge("queue_depth", task_queue.get_queue_length(r))
+            metrics.set_gauge("processing_count", task_queue.get_processing_count(r))
+        except Exception:
+            pass
+    metrics.set_gauge("active_fallback_jobs", fallback_limiter.get_active_jobs())
+    return metrics.get_snapshot()
 
 
 @app.get("/queue/status")
@@ -309,6 +325,9 @@ async def handle_webhook(request: VideoJobRequest, background_tasks: BackgroundT
     duration = request.duration
     if request.provider_metadata and "duration" in request.provider_metadata:
         duration = request.provider_metadata["duration"]
+
+    _req_start = time.time()
+    metrics.inc_counter("requests.generate")
 
     r = get_redis()
     user_id = request.provider_metadata.get("user_id", "anonymous") if request.provider_metadata else "anonymous"
@@ -1039,6 +1058,9 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
 
 @app.post("/webhook/fashion-generate")
 async def handle_fashion_webhook(request: FashionJobRequest, background_tasks: BackgroundTasks):
+    _req_start = time.time()
+    metrics.inc_counter("requests.fashion_generate")
+
     r = get_redis()
     user_id = request.model_options.get("user_id", "anonymous") if request.model_options else "anonymous"
 
