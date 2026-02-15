@@ -219,7 +219,7 @@ def generate_master_identity(image_url: str) -> dict:
     }
 
     resp = httpx.post(
-        _api_url("gemini-2.0-flash-preview-image-generation"),
+        _api_url("gemini-3-pro-image-preview"),
         json=body,
         timeout=180,
     )
