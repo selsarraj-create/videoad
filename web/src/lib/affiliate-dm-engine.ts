@@ -409,7 +409,7 @@ export async function calculateSavings(userId: string, period: 'month' | 'all'):
     platformFeeSaved: number
     periodLabel: string
 }> {
-    let query = supabase
+    let query = getSupabase()
         .from('click_events')
         .select('commission_amount')
         .eq('user_id', userId)
