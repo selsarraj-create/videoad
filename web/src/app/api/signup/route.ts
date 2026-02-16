@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
+const VALID_TIERS = ['starter', 'pro', 'high_octane'] as const
+
 export async function POST(request: Request) {
     try {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -19,7 +21,7 @@ export async function POST(request: Request) {
             )
         }
 
-        const { email, password } = await request.json()
+        const { email, password, selected_tier } = await request.json()
 
         if (!email || !password) {
             return NextResponse.json(
@@ -34,6 +36,9 @@ export async function POST(request: Request) {
                 { status: 400 }
             )
         }
+
+        // Validate tier (default to 'starter' if invalid or missing)
+        const tier = VALID_TIERS.includes(selected_tier) ? selected_tier : 'starter'
 
         // Use service-role client to bypass email confirmation
         const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
@@ -58,7 +63,36 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: error.message }, { status: 400 })
         }
 
-        return NextResponse.json({ success: true, userId: data.user.id })
+        // Set the user's subscription tier in their profile
+        const userId = data.user.id
+        const now = new Date()
+
+        // For Pro tier, grant a 7-day trial
+        const trialEndsAt = tier === 'pro'
+            ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+            : null
+
+        // High-Octane gets 20 monthly credits
+        const monthlyGrant = tier === 'high_octane' ? 20 : 0
+        const initialCredits = tier === 'high_octane' ? 20 : 0
+
+        const { error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .update({
+                subscription_status: tier,
+                trial_ends_at: trialEndsAt,
+                credit_balance: initialCredits,
+                monthly_credit_grant: monthlyGrant,
+                render_priority: tier === 'high_octane' ? 1 : tier === 'pro' ? 2 : 3,
+            })
+            .eq('id', userId)
+
+        if (profileError) {
+            console.error('Profile tier update failed:', profileError)
+            // Don't fail the signup, just log — the user was created
+        }
+
+        return NextResponse.json({ success: true, userId, tier })
     } catch (err) {
         console.error('Signup route exception:', err)
         return NextResponse.json(

@@ -325,18 +325,19 @@ export default function Home() {
       </section>
 
       {/* ===== FOOTER ===== */}
-      <footer className="border-t border-primary/10 py-12 px-6 bg-[#FAFAFA]">
-        <div className="max-w-[1800px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <footer className="border-t border-primary/10 py-8 px-6 bg-[#FAFAFA]">
+        <div className="max-w-[1800px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 opacity-60">
             <Sparkles className="w-4 h-4 text-primary" />
             <span className="font-serif text-lg tracking-tight">FASHION<span className="font-sans text-[10px] ml-1 opacity-60">STUDIO</span></span>
           </div>
-          <div className="flex gap-8 text-[10px] uppercase tracking-widest text-muted-foreground">
-            <a href="#" className="hover:text-primary transition-colors">Manifesto</a>
-            <a href="#" className="hover:text-primary transition-colors">Collections</a>
-            <a href="#" className="hover:text-primary transition-colors">Legal</a>
+          <div className="flex gap-6 text-[10px] uppercase tracking-widest text-muted-foreground">
+            <Link href="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
+            <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
           </div>
-          <p className="text-[10px] text-muted-foreground opacity-50">&copy; 2026 Fashion Studio. All rights reserved.</p>
+          <p className="text-[10px] text-muted-foreground opacity-60">
+            LookMaison.com All Rights Reserved. Copyright &copy; 2026
+          </p>
         </div>
       </footer>
     </div>

@@ -1,8 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { checkModeration } from '@/lib/moderation'
 
 export async function POST(request: Request) {
     const supabase = await createClient()
+
+    // Auth check for moderation
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+        const moderationGate = await checkModeration(user.id)
+        if (!moderationGate.allowed) {
+            return NextResponse.json(moderationGate.response, { status: moderationGate.status })
+        }
+    }
 
     try {
         const body = await request.json()

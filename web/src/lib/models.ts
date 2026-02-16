@@ -1,3 +1,5 @@
+import type { SubscriptionTier } from './tier-config'
+
 export type ModelCategory = 'Cinema' | 'Social' | 'Production' | 'Product'
 export type CreditTier = 'Eco' | 'Standard' | 'Premium'
 export type Provider = 'Kie.ai' | 'WaveSpeedAI'
@@ -12,6 +14,8 @@ export interface ModelSpec {
     baseCredits: number // credits per generation (standard duration/resolution)
     supportedDurations: number[] // available duration options in seconds
     maxResolution?: '720p' | '1080p' | '4k'
+    userCredits: number           // user-facing credit cost per generation (1 or 3)
+    requiresTier: SubscriptionTier // minimum tier required to access
 }
 
 // Actual Kie.ai credit costs (as of Feb 2026)
@@ -27,7 +31,9 @@ export const MODELS: ModelSpec[] = [
         description: 'High-speed generation perfect for social media trends.',
         baseCredits: 60, // 60 credits per video (~$0.30)
         supportedDurations: [8], // Veo 3.1 is fixed at 8s
-        maxResolution: '1080p'
+        maxResolution: '1080p',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     // Cinema (Hero)
     {
@@ -39,7 +45,9 @@ export const MODELS: ModelSpec[] = [
         description: 'Best-in-class cinematic realism and complex scene understanding.',
         baseCredits: 30, // 30 credits for 10s (~$0.15), 35 for 15s
         supportedDurations: [10, 15],
-        maxResolution: '1080p'
+        maxResolution: '1080p',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     {
         id: 'wan-2.6',
@@ -50,7 +58,9 @@ export const MODELS: ModelSpec[] = [
         description: 'Exclusive 4K upscaling and detailed texture rendering.',
         baseCredits: 60, // Estimated (WaveSpeedAI pricing)
         supportedDurations: [5, 10],
-        maxResolution: '4k'
+        maxResolution: '4k',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     {
         id: 'hailuo-2.3',
@@ -61,7 +71,9 @@ export const MODELS: ModelSpec[] = [
         description: 'Balanced performance for social content with moderate complexity.',
         baseCredits: 30, // 30 credits for 6s 768p (~$0.15), 50 for 10s
         supportedDurations: [6, 10],
-        maxResolution: '1080p'
+        maxResolution: '1080p',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     {
         id: 'grok-imagine',
@@ -72,7 +84,9 @@ export const MODELS: ModelSpec[] = [
         description: 'Fast, affordable video with coherent motion and synchronized audio.',
         baseCredits: 20, // 20 credits for 6s (~$0.10), 30 for 10s
         supportedDurations: [6, 10],
-        maxResolution: '1080p'
+        maxResolution: '1080p',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     // Production (Consistency)
     {
@@ -84,7 +98,9 @@ export const MODELS: ModelSpec[] = [
         description: 'Professional grade visual consistency for long-form content.',
         baseCredits: 55, // 55 credits for 5s HD (~$0.28), 110 for 10s
         supportedDurations: [5, 10],
-        maxResolution: '1080p'
+        maxResolution: '1080p',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     {
         id: 'seedance-1.5-pro',
@@ -95,7 +111,9 @@ export const MODELS: ModelSpec[] = [
         description: 'Cinema-quality video with native audio and multilingual dialogue.',
         baseCredits: 28, // 28 credits for 8s 720p (~$0.14), with audio 56
         supportedDurations: [4, 8, 12],
-        maxResolution: '720p'
+        maxResolution: '720p',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     {
         id: 'seedance-2.0-pro',
@@ -106,7 +124,9 @@ export const MODELS: ModelSpec[] = [
         description: 'Advanced character consistency and motion control.',
         baseCredits: 80, // Estimated (WaveSpeedAI pricing)
         supportedDurations: [5, 10],
-        maxResolution: '1080p'
+        maxResolution: '1080p',
+        userCredits: 1,
+        requiresTier: 'starter',
     },
     // Product (E-comm)
     {
@@ -118,7 +138,23 @@ export const MODELS: ModelSpec[] = [
         description: 'Optimized for product photography and clean backgrounds.',
         baseCredits: 60, // Uses Veo 3.1 Fast under the hood
         supportedDurations: [8],
-        maxResolution: '1080p'
+        maxResolution: '1080p',
+        userCredits: 1,
+        requiresTier: 'starter',
+    },
+    // High-Octane Exclusive
+    {
+        id: 'kling-3.0-omni',
+        name: 'Kling 3.0 Omni',
+        provider: 'Kie.ai',
+        category: 'Cinema',
+        tier: 'Premium',
+        description: 'Ultra-premium cinematic engine with photorealistic motion and scene control.',
+        baseCredits: 180,
+        supportedDurations: [5, 10],
+        maxResolution: '4k',
+        userCredits: 3,
+        requiresTier: 'high_octane',
     }
 ]
 
