@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { refreshLongLivedToken } from '@/lib/meta-client'
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+function getSupabase() {
+    if (!_supabase) {
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+        _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!)
+    }
+    return _supabase
+}
 
 /**
  * POST /api/meta/refresh-tokens
@@ -26,7 +30,7 @@ export async function POST(request: Request) {
         // Find tokens expiring within 10 days
         const tenDaysFromNow = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
 
-        const { data: expiring, error: fetchError } = await supabase
+        const { data: expiring, error: fetchError } = await getSupabase()
             .from('instagram_connections')
             .select('id, user_id, access_token, ig_username, token_expires_at')
             .eq('is_active', true)
@@ -50,7 +54,7 @@ export async function POST(request: Request) {
                 const newToken = await refreshLongLivedToken(conn.access_token)
                 const newExpiry = new Date(Date.now() + newToken.expires_in * 1000)
 
-                await supabase
+                await getSupabase()
                     .from('instagram_connections')
                     .update({
                         access_token: newToken.access_token,
@@ -70,7 +74,7 @@ export async function POST(request: Request) {
 
                 // Mark as inactive if token is truly expired
                 if (refreshErr.message.includes('expired') || refreshErr.message.includes('invalid')) {
-                    await supabase
+                    await getSupabase()
                         .from('instagram_connections')
                         .update({ is_active: false, updated_at: new Date().toISOString() })
                         .eq('id', conn.id)

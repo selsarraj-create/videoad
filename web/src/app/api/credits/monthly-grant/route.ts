@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { grantMonthlyCredits } from '@/lib/credit-router'
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+function getSupabase() {
+    if (!_supabase) {
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+        _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!)
+    }
+    return _supabase
+}
 
 /**
  * POST /api/credits/monthly-grant
@@ -22,7 +26,7 @@ export async function POST(request: Request) {
 
     try {
         // Find all High-Octane users with monthly_credit_grant > 0
-        const { data: users, error } = await supabase
+        const { data: users, error } = await getSupabase()
             .from('profiles')
             .select('id, monthly_credit_grant')
             .eq('subscription_status', 'high_octane')
