@@ -37,7 +37,8 @@ import { Label } from "@/components/ui/label"
 import {
     Upload, Loader2, Sparkles, Image as ImageIcon,
     FastForward, Library, ExternalLink, Camera,
-    Video, User, Shirt, Check, Plus, ArrowRight, Trash2, X, LogOut
+    Video, User, Shirt, Check, Plus, ArrowRight, Trash2, X, LogOut,
+    Pencil, Star, ChevronDown, UserCircle
 } from "lucide-react"
 import { PresetGrid } from "@/components/preset-grid"
 import { getOrCreateDefaultProject } from "@/app/actions"
@@ -53,7 +54,7 @@ import { DollarSign, TrendingUp, Clock, Award, Bell, Globe, Lock, Zap, CreditCar
 import type { SubscriptionTier } from "@/lib/tier-config"
 import type { AccountStatus } from "@/lib/moderation"
 
-type Tab = 'try-on' | 'video' | 'marketplace' | 'revenue' | 'showcase' | 'instagram'
+type Tab = 'identities' | 'try-on' | 'video' | 'marketplace' | 'revenue' | 'showcase' | 'instagram'
 
 interface MarketplaceItem {
     id: string;
@@ -91,8 +92,12 @@ export default function StudioPage() {
 
     // Persona state
     const [personaSlots, setPersonaSlots] = useState<PersonaSlot[]>([])
+    const [allPersonaSlots, setAllPersonaSlots] = useState<PersonaSlot[]>([])
     const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null)
     const [personaLoading, setPersonaLoading] = useState(true)
+    const [renamingId, setRenamingId] = useState<string | null>(null)
+    const [renameValue, setRenameValue] = useState('')
+    const [identityMessage, setIdentityMessage] = useState<string | null>(null)
 
     // Try-On state
     const [garmentImageUrl, setGarmentImageUrl] = useState("")
@@ -172,18 +177,25 @@ export default function StudioPage() {
     const selectedPersona = personaSlots.find(p => p.id === selectedPersonaId)
     const masterIdentityUrl = selectedPersona?.master_identity_url || null
 
-    // Fetch persona slots
+    // Fetch persona slots (ready only for tryon selector)
     const fetchPersonas = useCallback(async () => {
         try {
-            const res = await fetch('/api/personas')
-            const data = await res.json()
-            if (data.personas) {
-                setPersonaSlots(data.personas)
+            const [readyRes, allRes] = await Promise.all([
+                fetch('/api/personas'),
+                fetch('/api/personas?all=true'),
+            ])
+            const readyData = await readyRes.json()
+            const allData = await allRes.json()
+            if (readyData.personas) {
+                setPersonaSlots(readyData.personas)
                 // Auto-select default or first
-                if (!selectedPersonaId || !data.personas.find((p: PersonaSlot) => p.id === selectedPersonaId)) {
-                    const defaultP = data.personas.find((p: PersonaSlot) => p.is_default) || data.personas[0]
+                if (!selectedPersonaId || !readyData.personas.find((p: PersonaSlot) => p.id === selectedPersonaId)) {
+                    const defaultP = readyData.personas.find((p: PersonaSlot) => p.is_default) || readyData.personas[0]
                     if (defaultP) setSelectedPersonaId(defaultP.id)
                 }
+            }
+            if (allData.personas) {
+                setAllPersonaSlots(allData.personas)
             }
         } catch (err) {
             console.error('Failed to fetch personas:', err)
@@ -313,6 +325,43 @@ export default function StudioPage() {
             console.error('Failed to delete persona:', err)
         }
     }
+
+    // Rename persona handler
+    const handleRenamePersona = async (id: string, newName: string) => {
+        try {
+            await fetch('/api/personas', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, name: newName }),
+            })
+            setRenamingId(null)
+            await fetchPersonas()
+        } catch (err) {
+            console.error('Failed to rename persona:', err)
+        }
+    }
+
+    // Set default persona handler
+    const handleSetDefault = async (id: string) => {
+        try {
+            await fetch('/api/personas', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, is_default: true }),
+            })
+            await fetchPersonas()
+        } catch (err) {
+            console.error('Failed to set default persona:', err)
+        }
+    }
+
+    // Zero-identity redirect: if user switches to try-on and has no ready identities
+    useEffect(() => {
+        if (activeTab === 'try-on' && !personaLoading && personaSlots.length === 0) {
+            setActiveTab('identities')
+            setIdentityMessage('Build your first identity to start creating')
+        }
+    }, [activeTab, personaLoading, personaSlots.length])
 
     // File upload handler (garments only — person uses Master Identity)
     const uploadFile = async (file: File) => {
@@ -597,6 +646,12 @@ export default function StudioPage() {
 
                     {/* Tab Switcher - Minimal Text Only */}
                     <div className="flex items-center gap-8 ml-12 overflow-x-auto scrollbar-none pb-1">
+                        <button onClick={() => setActiveTab('identities')}
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2 
+                                ${activeTab === 'identities' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Identities
+                            {activeTab === 'identities' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
+                        </button>
                         <button onClick={() => setActiveTab('try-on')}
                             className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2 
                                 ${activeTab === 'try-on' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
@@ -675,9 +730,9 @@ export default function StudioPage() {
 
                 {/* ===== LEFT PANEL ===== */}
                 <section className={`flex flex-col overflow-y-auto glass-panel z-20 relative transition-all duration-500
-                    ${(activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
+                    ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
                     <div className={`flex-1 p-8 lg:p-12 w-full space-y-12 transition-all
-                        ${(activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
+                        ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
 
                         {activeTab === 'showcase' ? (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
@@ -697,74 +752,162 @@ export default function StudioPage() {
                                     }
                                 }} />
                             </motion.div>
+                        ) : activeTab === 'identities' ? (
+                            /* ---- IDENTITIES TAB ---- */
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-10">
+                                <div className="space-y-2 border-b border-nimbus pb-8">
+                                    <h2 className="font-serif text-3xl tracking-tight">Your Identities</h2>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-widest">
+                                        Create up to 5 unique personas · {allPersonaSlots.length} of 5 used
+                                    </p>
+                                </div>
+
+                                {/* Redirect message */}
+                                {identityMessage && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="p-5 border-l-2 border-primary bg-primary/5"
+                                    >
+                                        <p className="text-xs text-foreground font-bold uppercase tracking-widest">{identityMessage}</p>
+                                        <button onClick={() => setIdentityMessage(null)} className="text-[10px] text-muted-foreground hover:text-foreground mt-1">Dismiss</button>
+                                    </motion.div>
+                                )}
+
+                                {/* Identity Cards Grid */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {allPersonaSlots.map((persona) => (
+                                        <div
+                                            key={persona.id}
+                                            className={`group relative bg-white border transition-all duration-300 hover:shadow-xl overflow-hidden
+                                                ${persona.is_default ? 'border-primary shadow-md' : 'border-nimbus hover:border-primary/40'}`}
+                                        >
+                                            {/* Thumbnail */}
+                                            <div className="aspect-[3/4] bg-nimbus/10 overflow-hidden">
+                                                {persona.master_identity_url ? (
+                                                    <img src={persona.master_identity_url} alt={persona.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                                ) : (
+                                                    <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                                                        <UserCircle className="w-16 h-16 text-nimbus" />
+                                                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                                                            {persona.status === 'pending' ? 'Processing...' : persona.status === 'generating' ? 'Generating...' : 'No Image'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Info Bar */}
+                                            <div className="p-4 space-y-3">
+                                                {/* Name (inline editable) */}
+                                                {renamingId === persona.id ? (
+                                                    <form onSubmit={(e) => { e.preventDefault(); handleRenamePersona(persona.id, renameValue) }} className="flex gap-2">
+                                                        <input
+                                                            autoFocus
+                                                            value={renameValue}
+                                                            onChange={(e) => setRenameValue(e.target.value)}
+                                                            className="flex-1 h-8 px-2 text-sm border border-nimbus bg-white focus:border-primary focus:outline-none"
+                                                            onBlur={() => setRenamingId(null)}
+                                                        />
+                                                        <button type="submit" className="h-8 px-3 bg-foreground text-background text-[10px] uppercase tracking-widest font-bold hover:bg-primary transition-colors">
+                                                            Save
+                                                        </button>
+                                                    </form>
+                                                ) : (
+                                                    <div className="flex items-center justify-between">
+                                                        <h3 className="font-bold text-sm uppercase tracking-widest truncate">{persona.name}</h3>
+                                                        <button
+                                                            onClick={() => { setRenamingId(persona.id); setRenameValue(persona.name) }}
+                                                            className="p-1 text-muted-foreground hover:text-primary transition-colors opacity-0 group-hover:opacity-100"
+                                                        >
+                                                            <Pencil className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {/* Status + Default */}
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className={`rounded-none border-0 text-[8px] uppercase tracking-widest px-2 py-0.5
+                                                        ${persona.status === 'ready' ? 'bg-green-500/10 text-green-600'
+                                                            : persona.status === 'generating' ? 'bg-amber-500/10 text-amber-600'
+                                                                : persona.status === 'failed' ? 'bg-red-500/10 text-red-600'
+                                                                    : 'bg-foreground/5 text-muted-foreground'}`}>
+                                                        {persona.status}
+                                                    </Badge>
+                                                    {persona.is_default && (
+                                                        <Badge className="rounded-none border-0 bg-primary/10 text-primary text-[8px] uppercase tracking-widest px-2 py-0.5">
+                                                            <Star className="w-2.5 h-2.5 mr-1" /> Default
+                                                        </Badge>
+                                                    )}
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="flex items-center gap-2 pt-2 border-t border-nimbus/50">
+                                                    {!persona.is_default && persona.status === 'ready' && (
+                                                        <button
+                                                            onClick={() => handleSetDefault(persona.id)}
+                                                            className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                                                        >
+                                                            <Star className="w-3 h-3" /> Set Default
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleDeletePersona(persona.id)}
+                                                        className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground hover:text-red-500 transition-colors flex items-center gap-1 ml-auto"
+                                                    >
+                                                        <Trash2 className="w-3 h-3" /> Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {/* New Identity Card */}
+                                    {allPersonaSlots.length < 5 && (
+                                        <Link href="/dashboard/onboard" className="block">
+                                            <div className="border-2 border-dashed border-nimbus hover:border-primary transition-all duration-300 group cursor-pointer h-full min-h-[300px] flex flex-col items-center justify-center gap-4">
+                                                <div className="w-16 h-16 border-2 border-dashed border-nimbus group-hover:border-primary flex items-center justify-center transition-colors">
+                                                    <Plus className="w-7 h-7 text-nimbus group-hover:text-primary transition-colors" />
+                                                </div>
+                                                <div className="text-center">
+                                                    <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground group-hover:text-foreground transition-colors">New Identity</p>
+                                                    <p className="text-[10px] text-muted-foreground mt-1">AI-Director or manual upload</p>
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    )}
+                                </div>
+                            </motion.div>
+
                         ) : activeTab === 'try-on' ? (
                             /* ---- TRY ON TAB ---- */
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
-                                {/* Identity Banner */}
-                                {!personaLoading && personaSlots.length === 0 && (
-                                    <div className="p-6 border border-nimbus bg-white/50 flex flex-col gap-4">
-                                        <div className="space-y-2">
-                                            <p className="font-serif text-lg text-primary">Identity Required</p>
-                                            <p className="text-xs text-muted-foreground leading-relaxed">Create your first persona to begin. You can have up to 5 different looks.</p>
-                                        </div>
-                                        <Link href="/dashboard/onboard">
-                                            <Button className="w-full bg-foreground text-background rounded-none hover:bg-primary transition-colors h-12 text-xs uppercase tracking-widest">
-                                                <Plus className="w-4 h-4 mr-2" /> Create First Persona
-                                            </Button>
-                                        </Link>
-                                    </div>
-                                )}
 
-                                {/* Step 1: Persona Gallery */}
+                                {/* Identity Selector (compact dropdown) */}
                                 <div className="space-y-6">
                                     <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
-                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">01 / Personas</Label>
-                                        {selectedPersona && <span className="text-[10px] text-primary italic font-serif">{selectedPersona.name}</span>}
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">01 / Identity</Label>
+                                        <button
+                                            onClick={() => setActiveTab('identities')}
+                                            className="text-[10px] text-primary hover:text-foreground font-bold uppercase tracking-widest transition-colors"
+                                        >
+                                            Manage Identities
+                                        </button>
                                     </div>
 
-                                    {/* Horizontal Gallery */}
-                                    <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
-                                        {personaSlots.map((persona) => (
-                                            <button
-                                                key={persona.id}
-                                                onClick={() => setSelectedPersonaId(persona.id)}
-                                                className={`relative flex-shrink-0 w-28 group snap-start transition-all duration-300 ${selectedPersonaId === persona.id
-                                                    ? 'ring-2 ring-primary shadow-lg scale-[1.02]'
-                                                    : 'opacity-70 hover:opacity-100'
-                                                    }`}
-                                            >
-                                                <div className="aspect-[3/4] bg-white p-1 shadow-sm overflow-hidden">
-                                                    {persona.master_identity_url ? (
-                                                        <img src={persona.master_identity_url} alt={persona.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full bg-nimbus/20 flex items-center justify-center">
-                                                            <User className="w-8 h-8 text-muted-foreground" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <p className="text-[9px] text-center mt-2 font-bold uppercase tracking-widest text-muted-foreground truncate">{persona.name}</p>
-                                                {persona.is_default && (
-                                                    <Badge className="absolute top-1 left-1 bg-primary text-primary-foreground border-0 rounded-none text-[7px] uppercase tracking-widest px-1 py-0">Default</Badge>
-                                                )}
-                                                {/* Delete button on hover */}
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDeletePersona(persona.id) }}
-                                                    className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[10px]"
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
-                                            </button>
-                                        ))}
-
-                                        {/* Add Persona Slot */}
-                                        {personaSlots.length < 5 && (
-                                            <Link href="/dashboard/onboard" className="flex-shrink-0 w-28 snap-start">
-                                                <div className="aspect-[3/4] border-2 border-dashed border-nimbus flex items-center justify-center hover:border-primary transition-colors group cursor-pointer">
-                                                    <Plus className="w-6 h-6 text-nimbus group-hover:text-primary transition-colors" />
-                                                </div>
-                                                <p className="text-[9px] text-center mt-2 font-bold uppercase tracking-widest text-muted-foreground">Add</p>
-                                            </Link>
-                                        )}
+                                    <div className="relative">
+                                        <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                                        <select
+                                            value={selectedPersonaId || ''}
+                                            onChange={(e) => setSelectedPersonaId(e.target.value)}
+                                            className="w-full h-12 pl-10 pr-10 bg-white/60 border border-nimbus text-foreground appearance-none focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-bold uppercase tracking-widest cursor-pointer"
+                                        >
+                                            {personaSlots.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name}{p.is_default ? ' (Default)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50 pointer-events-none" />
                                     </div>
                                 </div>
 

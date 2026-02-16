@@ -3,8 +3,9 @@ import { NextResponse, NextRequest } from 'next/server'
 
 const MAX_IDENTITIES = 5
 
-// GET — List ready personas for the authenticated user
-export async function GET() {
+// GET — List personas for the authenticated user
+// ?all=true returns all statuses (for identity management); default returns only 'ready'
+export async function GET(request: NextRequest) {
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -13,12 +14,20 @@ export async function GET() {
     }
 
     try {
-        const { data, error } = await supabase
+        const { searchParams } = new URL(request.url)
+        const showAll = searchParams.get('all') === 'true'
+
+        let query = supabase
             .from('identities')
             .select('id, name, master_identity_url, is_default, status, created_at')
             .eq('user_id', user.id)
-            .eq('status', 'ready')
             .order('created_at', { ascending: true })
+
+        if (!showAll) {
+            query = query.eq('status', 'ready')
+        }
+
+        const { data, error } = await query
 
         if (error) {
             console.error('List personas error:', error)
@@ -95,6 +104,66 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ success: true })
     } catch (err) {
         console.error('Personas DELETE error:', err)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
+
+// PATCH — Rename or set-default on a persona
+export async function PATCH(request: NextRequest) {
+    const supabase = await createClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    try {
+        const body = await request.json()
+        const { id, name, is_default } = body
+
+        if (!id) {
+            return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+        }
+
+        // Verify ownership
+        const { data: identity } = await supabase
+            .from('identities')
+            .select('user_id')
+            .eq('id', id)
+            .single()
+
+        if (!identity || identity.user_id !== user.id) {
+            return NextResponse.json({ error: 'Identity not found' }, { status: 404 })
+        }
+
+        const updates: Record<string, unknown> = {}
+        if (name !== undefined) updates.name = name
+        if (is_default === true) {
+            // Clear other defaults first
+            await supabase
+                .from('identities')
+                .update({ is_default: false })
+                .eq('user_id', user.id)
+            updates.is_default = true
+        }
+
+        if (Object.keys(updates).length === 0) {
+            return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+        }
+
+        const { error: updateError } = await supabase
+            .from('identities')
+            .update(updates)
+            .eq('id', id)
+
+        if (updateError) {
+            console.error('Patch error:', updateError)
+            return NextResponse.json({ error: 'Failed to update persona' }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true })
+    } catch (err) {
+        console.error('Personas PATCH error:', err)
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     }
 }
