@@ -24,6 +24,7 @@ export interface TierConfig {
     monthly_credit_grant: number
     render_priority: number          // 1 = highest
     engine_access: string[]          // Model IDs unlocked at this tier
+    wardrobe_limit: number           // Max items in wardrobe (Infinity = unlimited)
 }
 
 // ── Tier Definitions ──────────────────────────────────────────
@@ -44,6 +45,7 @@ const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
         monthly_credit_grant: 0,
         render_priority: 3,
         engine_access: ['veo-3.1-fast'],
+        wardrobe_limit: 5,
     },
     pro: {
         id: 'pro',
@@ -60,6 +62,7 @@ const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
         monthly_credit_grant: 0,
         render_priority: 2,
         engine_access: ['veo-3.1-fast'],
+        wardrobe_limit: 100,
     },
     high_octane: {
         id: 'high_octane',
@@ -76,6 +79,7 @@ const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
         monthly_credit_grant: 20,
         render_priority: 1,
         engine_access: ['veo-3.1-fast', 'kling-3.0-omni'],
+        wardrobe_limit: Infinity,
     },
 }
 
@@ -130,3 +134,10 @@ export function getRequiredTierForEngine(engineId: string): SubscriptionTier {
 }
 
 export const ALL_TIERS: TierConfig[] = Object.values(TIER_CONFIGS)
+
+/**
+ * Get the wardrobe item limit for a given tier.
+ */
+export function getWardrobeLimit(tier: SubscriptionTier): number {
+    return getTierConfig(tier).wardrobe_limit
+}

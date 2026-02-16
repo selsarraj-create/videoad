@@ -11,6 +11,7 @@ from supabase import create_client, Client
 from .kie import generate_video, get_task_status
 from . import fashn
 from . import gemini
+from . import claid as claid_module
 from .upscale import upscale_image, upscale_batch
 from .presets import get_prompt, get_preset
 from .auth_middleware import WorkerAuthMiddleware
@@ -20,6 +21,7 @@ from . import fallback_limiter
 from . import metrics
 from . import autoscaler
 import httpx
+import hashlib
 
 def stitch_collage_via_sharp(image_urls: list[str], layout: str = "horizontal", identity_id: str = None) -> dict:
     """Call the local Node.js Sharp stitcher service."""
@@ -598,6 +600,90 @@ async def handle_try_on_webhook(request: TryOnRequest):
     except Exception as e:
         print(f"Try-on endpoint error: {str(e)}")
         return {"message": f"Try-on failed: {str(e)[:200]}", "job_id": request.job_id}
+
+# =========================================================================
+# Garment Cleaning Pipeline: Claid.ai background removal + cache
+# =========================================================================
+
+class CleanGarmentRequest(BaseModel):
+    wardrobe_id: str
+    image_url: str
+    source_url_hash: str
+
+def process_clean_garment(wardrobe_id: str, image_url: str, source_url_hash: str):
+    """Cache-check first, then Claid.ai clean, then callback to Vercel."""
+    print(f"[Claid Pipeline] wardrobe_id={wardrobe_id}, hash={source_url_hash[:16]}...")
+
+    try:
+        # Mark wardrobe item as 'cleaning'
+        supabase.table("wardrobe").update({"status": "cleaning"}).eq("id", wardrobe_id).execute()
+
+        # Step A: Cache check
+        cache_result = supabase.table("garment_cache").select("clean_url").eq("source_url_hash", source_url_hash).execute()
+
+        clean_url = None
+        if cache_result.data and len(cache_result.data) > 0:
+            clean_url = cache_result.data[0]["clean_url"]
+            print(f"[Claid Pipeline] Cache HIT — using existing clean URL")
+        else:
+            # Step B: Claid.ai processing
+            print(f"[Claid Pipeline] Cache MISS — calling Claid.ai API")
+            clean_url = claid_module.clean_garment(image_url, supabase_client=get_supabase())
+
+            # Save to garment_cache
+            supabase.table("garment_cache").upsert({
+                "source_url_hash": source_url_hash,
+                "source_url": image_url,
+                "clean_url": clean_url,
+            }).execute()
+            print(f"[Claid Pipeline] Cached clean result for hash {source_url_hash[:16]}")
+
+        # Update wardrobe row directly
+        supabase.table("wardrobe").update({
+            "clean_image_url": clean_url,
+            "status": "ready",
+        }).eq("id", wardrobe_id).execute()
+
+        # Also callback to Vercel webhook (belt-and-suspenders)
+        callback_url = os.environ.get("VERCEL_URL", "")
+        if callback_url:
+            try:
+                httpx.post(
+                    f"{callback_url}/api/wardrobe/clean",
+                    json={
+                        "wardrobe_id": wardrobe_id,
+                        "clean_url": clean_url,
+                        "status": "ready",
+                    },
+                    headers={
+                        "x-worker-secret": os.environ.get("WORKER_SHARED_SECRET", ""),
+                    },
+                    timeout=15,
+                )
+            except Exception as cb_err:
+                print(f"[Claid Pipeline] Callback failed (non-fatal): {cb_err}")
+
+        print(f"[Claid Pipeline] Done — wardrobe {wardrobe_id} is ready")
+
+    except Exception as e:
+        print(f"[Claid Pipeline] FAILED for {wardrobe_id}: {str(e)}")
+        supabase.table("wardrobe").update({
+            "status": "failed",
+        }).eq("id", wardrobe_id).execute()
+
+@app.post("/webhooks/clean-garment")
+async def handle_clean_garment(request: CleanGarmentRequest):
+    """Synchronous Claid cleaning — Railway keeps container alive."""
+    try:
+        process_clean_garment(
+            request.wardrobe_id,
+            request.image_url,
+            request.source_url_hash,
+        )
+        return {"message": "Garment cleaned", "wardrobe_id": request.wardrobe_id}
+    except Exception as e:
+        print(f"Clean garment endpoint error: {str(e)}")
+        return {"message": f"Cleaning failed: {str(e)[:200]}", "wardrobe_id": request.wardrobe_id}
 
 # =========================================================================
 # Identity Pipeline: Validate Selfie + Generate Master Identity
