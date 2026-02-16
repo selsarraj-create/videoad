@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
         }
         if (clean_url) updateData.clean_image_url = clean_url
 
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- wardrobe table pending type generation
+        const { error: updateError } = await (supabase as any)
             .from('wardrobe')
             .update(updateData)
             .eq('id', wardrobe_id)

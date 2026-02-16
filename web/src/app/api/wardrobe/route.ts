@@ -13,7 +13,8 @@ export async function GET() {
     }
 
     try {
-        const { data, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
             .from('wardrobe')
             .select('*')
             .eq('user_id', user.id)
@@ -80,7 +81,8 @@ export async function POST(request: NextRequest) {
         const tier = (profile?.subscription_status || 'starter') as SubscriptionTier
         const limit = getWardrobeLimit(tier)
 
-        const { count, error: countError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count, error: countError } = await (supabase as any)
             .from('wardrobe')
             .select('id', { count: 'exact', head: true })
             .eq('user_id', user.id)
@@ -106,7 +108,8 @@ export async function POST(request: NextRequest) {
         }
 
         // ── Insert wardrobe item (pending) ──────────────────────
-        const { data: item, error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: item, error: insertError } = await (supabase as any)
             .from('wardrobe')
             .insert({
                 user_id: user.id,
@@ -150,7 +153,8 @@ export async function POST(request: NextRequest) {
         } else {
             console.warn('RAILWAY_WORKER_URL not set — skipping Claid cleaning')
             // Mark as ready without cleaning (dev fallback)
-            await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
                 .from('wardrobe')
                 .update({ status: 'ready', clean_image_url: image_url })
                 .eq('id', item.id)
@@ -188,7 +192,8 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 })
         }
 
-        const { error: deleteError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: deleteError } = await (supabase as any)
             .from('wardrobe')
             .delete()
             .eq('id', id)
