@@ -1,51 +1,223 @@
+/**
+ * MarketplaceBridge v2 — Fashion Asset Pipeline
+ * 
+ * Architecture:
+ * 1. Library Lookup: Check asset_library for cached VTO renders
+ * 2. Google Merchant API: Ingest product data with real product images
+ * 3. Vertex AI VTO: Generate Universal Model try-on renders
+ * 4. SynthID + IPTC: Compliance watermarking
+ * 5. Skimlinks Link API: Wrap merchant URLs at click time only
+ * 6. eBay Browse API: Secondary source (unchanged)
+ * 7. Premium Fallbacks: Staff Pick items when APIs are offline
+ */
+
 import axios from 'axios';
+import { merchantIngestor, MerchantProduct } from './merchant-ingestor';
+import { vertexVTO } from './vertex-vto';
+import { complianceTagger } from './compliance-tagger';
 
 export interface UnifiedGarment {
     id: string;
-    source: 'skimlinks' | 'ebay';
+    source: 'merchant' | 'ebay' | 'library';
     title: string;
     price: string;
     currency: string;
-    imageUrl: string;
-    affiliateUrl: string;
+    imageUrl: string;            // Product image OR VTO render
+    originalImageUrl?: string;   // Raw merchant product image
+    vtoImageUrl?: string;        // VTO render (if generated)
+    affiliateUrl: string;        // Skimlinks-wrapped at serve time
+    merchantLink?: string;       // Raw merchant URL (for Skimlinks wrapping)
     brand?: string;
     category?: string;
+    merchantOfferId?: string;
     authenticityGuaranteed?: boolean;
+    synthidApplied?: boolean;
 }
 
 export class MarketplaceBridge {
-    private skimlinksClientId: string;
-    private skimlinksClientSecret: string;
     private skimlinksPublisherId: string;
     private ebayClientId: string;
     private ebayClientSecret: string;
-    private skimlinksToken: string | null = null;
     private ebayToken: string | null = null;
+    private supabaseUrl: string;
+    private supabaseKey: string;
 
     constructor() {
-        this.skimlinksClientId = process.env.SKIMLINKS_CLIENT_ID || '';
-        this.skimlinksClientSecret = process.env.SKIMLINKS_CLIENT_SECRET || '';
         this.skimlinksPublisherId = process.env.SKIMLINKS_PUBLISHER_ID || '';
         this.ebayClientId = process.env.EBAY_CLIENT_ID || '';
         this.ebayClientSecret = process.env.EBAY_CLIENT_SECRET || '';
+        this.supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+        this.supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
     }
 
-    private async getSkimlinksToken(): Promise<string | null> {
-        if (this.skimlinksToken) return this.skimlinksToken;
+    // ============================================================
+    // 1. LIBRARY LOOKUP (The Cost-Saver)
+    // ============================================================
+
+    /**
+     * Check asset_library for cached VTO renders matching the query.
+     * Returns immediately if found, saving Merchant API + Vertex AI costs.
+     */
+    private async libraryLookup(query: string, category?: string): Promise<UnifiedGarment[]> {
+        if (!this.supabaseUrl || !this.supabaseKey) return [];
+
         try {
-            // Updated endpoint to fix 405 error
-            const resp = await axios.post('https://authentication.skimapis.com/access_token', {
-                client_id: this.skimlinksClientId,
-                client_secret: this.skimlinksClientSecret,
-                grant_type: 'client_credentials'
-            });
-            this.skimlinksToken = resp.data.access_token;
-            return this.skimlinksToken;
-        } catch (error) {
-            console.error('[Marketplace] Skimlinks Auth Error:', error);
-            return null;
+            // Build search tags
+            const tags = [query.toLowerCase()];
+            if (category && category !== 'All') tags.push(category.toLowerCase());
+
+            // Use full-text search on title + tag matching
+            const searchParam = encodeURIComponent(query);
+            const resp = await fetch(
+                `${this.supabaseUrl}/rest/v1/asset_library?or=(title.ilike.*${searchParam}*,tags.cs.{${tags.join(',')}})&limit=20`,
+                {
+                    headers: {
+                        'apikey': this.supabaseKey,
+                        'Authorization': `Bearer ${this.supabaseKey}`,
+                    },
+                }
+            );
+
+            if (!resp.ok) {
+                console.log('[Marketplace] Library lookup failed, proceeding to API.');
+                return [];
+            }
+
+            const items = await resp.json();
+            if (!items || items.length === 0) return [];
+
+            console.log(`[Marketplace] Library HIT: ${items.length} cached items for "${query}"`);
+
+            return items.map((item: any) => ({
+                id: `lib-${item.id}`,
+                source: 'library' as const,
+                title: item.title,
+                price: item.price || '0.00',
+                currency: item.currency || 'USD',
+                imageUrl: item.universal_vto_url || item.original_image_url,
+                originalImageUrl: item.original_image_url,
+                vtoImageUrl: item.universal_vto_url,
+                affiliateUrl: this.wrapSkimlinks(item.merchant_link, ''),
+                merchantLink: item.merchant_link,
+                brand: item.brand,
+                category: item.category,
+                merchantOfferId: item.merchant_offer_id,
+                synthidApplied: item.synthid_applied,
+            }));
+        } catch (error: any) {
+            console.log('[Marketplace] Library lookup error:', error.message);
+            return [];
         }
     }
+
+    // ============================================================
+    // 2. GOOGLE MERCHANT API INGESTION
+    // ============================================================
+
+    /**
+     * Fetch products from Google Merchant API and optionally run VTO.
+     * Results are indexed in asset_library for future cache hits.
+     */
+    async fetchMerchantItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
+        const searchTerm = query || (category && category !== 'All' ? category : 'luxury fashion');
+
+        try {
+            const products = await merchantIngestor.searchProducts(searchTerm, 20);
+            if (products.length === 0) {
+                console.log('[Marketplace] Merchant API returned no results.');
+                return [];
+            }
+
+            console.log(`[Marketplace] Merchant API: ${products.length} products for "${searchTerm}"`);
+
+            // Map products to garments — use original product images
+            // VTO generation happens on-demand via /api/marketplace-vto
+            const garments: UnifiedGarment[] = products.map((p: MerchantProduct) => ({
+                id: `merchant-${p.offerId}`,
+                source: 'merchant' as const,
+                title: p.title,
+                price: p.price,
+                currency: p.currency,
+                imageUrl: p.imageLink,               // High-res product image
+                originalImageUrl: p.imageLink,
+                affiliateUrl: this.wrapSkimlinks(p.link, userId),
+                merchantLink: p.link,
+                brand: p.brand,
+                category: p.category || category,
+                merchantOfferId: p.offerId,
+            }));
+
+            // Background: index new products in asset_library for future lookups
+            this.indexProducts(products).catch(err =>
+                console.log('[Marketplace] Background indexing error:', err.message)
+            );
+
+            return garments;
+        } catch (error: any) {
+            console.error('[Marketplace] Merchant API Error:', error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Index products in asset_library for future cache hits.
+     * Called in background — doesn't block the response.
+     */
+    private async indexProducts(products: MerchantProduct[]): Promise<void> {
+        if (!this.supabaseUrl || !this.supabaseKey) return;
+
+        for (const p of products) {
+            try {
+                await fetch(`${this.supabaseUrl}/rest/v1/asset_library`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': this.supabaseKey,
+                        'Authorization': `Bearer ${this.supabaseKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=ignore-duplicates',
+                    },
+                    body: JSON.stringify({
+                        merchant_offer_id: p.offerId,
+                        title: p.title,
+                        brand: p.brand,
+                        category: p.category,
+                        original_image_url: p.imageLink,
+                        merchant_link: p.link,
+                        price: p.price,
+                        currency: p.currency,
+                        tags: [
+                            p.brand?.toLowerCase(),
+                            p.category?.toLowerCase(),
+                            ...p.title.toLowerCase().split(/\s+/).slice(0, 5),
+                        ].filter(Boolean),
+                    }),
+                });
+            } catch (err) {
+                // Silently continue — indexing is best-effort
+            }
+        }
+    }
+
+    // ============================================================
+    // 3. SKIMLINKS LINK API (Commission-Only Bridge)
+    // ============================================================
+
+    /**
+     * Wrap a merchant URL with Skimlinks for affiliate commission tracking.
+     * Called at serve time — never at ingestion.
+     */
+    wrapSkimlinks(merchantUrl: string, userId: string): string {
+        if (!this.skimlinksPublisherId || !merchantUrl || merchantUrl === '#') {
+            return merchantUrl || '#';
+        }
+        const encodedUrl = encodeURIComponent(merchantUrl);
+        const xcust = userId ? `&xcust=${userId}` : '';
+        return `https://go.skimresources.com/?id=${this.skimlinksPublisherId}&url=${encodedUrl}${xcust}`;
+    }
+
+    // ============================================================
+    // 4. EBAY (Secondary Source — Unchanged)
+    // ============================================================
 
     private async getEbayToken(): Promise<string | null> {
         if (!this.ebayClientId || !this.ebayClientSecret) {
@@ -72,56 +244,9 @@ export class MarketplaceBridge {
         }
     }
 
-    /**
-     * Fetch high-end retail from Skimlinks Product Search API
-     */
-    async fetchSkimlinksItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
-        const token = await this.getSkimlinksToken();
-        if (!token) return [];
-
-        // Fallback: If no query, use category or a generic term to avoid empty results
-        const searchTerm = query || (category && category !== 'All' ? category : 'luxury');
-
-        try {
-            console.log(`[Marketplace] Fetching Skimlinks Offers V4: "${searchTerm}" (Original Q: "${query}", Cat: ${category})`);
-
-            // CORRECT V4 SPEC: 
-            // - access_token must be a query parameter
-            // - keyword parameter is 'search' (not 'q')
-            const resp = await axios.get(`https://merchants.skimapis.com/v4/publisher/${this.skimlinksPublisherId}/offers`, {
-                params: {
-                    search: searchTerm,
-                    limit: 20,
-                    access_token: token
-                }
-            });
-
-            console.log(`[Marketplace] Skimlinks V4 Response: ${resp.data.offers?.length || 0} items found`);
-            if (resp.data.offers?.length > 0) {
-                console.log('[Marketplace] Sample Skimlinks Offer Schema:', JSON.stringify(resp.data.offers[0]).substring(0, 500));
-            }
-
-            return (resp.data.offers || []).map((o: any) => ({
-                id: `skim-${o.id}`,
-                source: 'skimlinks',
-                title: o.description || o.offer_name || o.title || 'Designer Piece',
-                price: o.price || '0.00',
-                currency: o.currency || 'USD',
-                // Correct path: merchant_details.metadata.logo (verified from live response)
-                imageUrl: o.image_url || o.image || o.merchant_details?.metadata?.logo || o.merchant_details?.logo || '',
-                affiliateUrl: `${o.url || o.offer_url || '#'}${(o.url || o.offer_url || '').includes('?') ? '&' : '?'}xcust=${userId}`,
-                brand: o.merchant_details?.name || o.merchant_details?.domain || 'Retailer',
-                category: category
-            }));
-        } catch (error: any) {
-            console.error('[Marketplace] Skimlinks V4 Search Error:', error.response?.status, error.response?.data || error.message);
-            return [];
-        }
-    }
-
     private getEbayCategoryId(category?: string): string | null {
         const mapping: Record<string, string> = {
-            'Outerwear': '15724', // Women's Clothing
+            'Outerwear': '15724',
             'Shirts': '15724',
             'Bags': '169291',
             'Accessories': '4251',
@@ -130,14 +255,10 @@ export class MarketplaceBridge {
         return category ? mapping[category] || null : null;
     }
 
-    /**
-     * Fetch vintage luxury from eBay Browse API
-     */
     async fetchEbayItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
         const token = await this.getEbayToken();
         if (!token) return [];
 
-        // Fallback for eBay as well
         const searchTerm = query || (category && category !== 'All' ? category : 'vintage luxury');
 
         try {
@@ -157,7 +278,7 @@ export class MarketplaceBridge {
 
             return (resp.data.itemSummaries || []).map((item: any) => ({
                 id: `ebay-${item.itemId}`,
-                source: 'ebay',
+                source: 'ebay' as const,
                 title: item.title,
                 price: item.price.value,
                 currency: item.price.currency,
@@ -172,14 +293,15 @@ export class MarketplaceBridge {
         }
     }
 
-    /**
-     * getFallbackItems: Premium mock data for empty/failed states
-     */
+    // ============================================================
+    // 5. FALLBACKS (Premium Staff Picks)
+    // ============================================================
+
     private getFallbackItems(): UnifiedGarment[] {
         return [
             {
                 id: 'fallback-1',
-                source: 'skimlinks',
+                source: 'merchant',
                 title: 'Loro Piana - Open Walk Suede Boots',
                 price: '950.00',
                 currency: 'USD',
@@ -202,7 +324,7 @@ export class MarketplaceBridge {
             },
             {
                 id: 'fallback-3',
-                source: 'skimlinks',
+                source: 'merchant',
                 title: 'Brunello Cucinelli - Double-Breasted Cashmere Coat',
                 price: '4800.00',
                 currency: 'USD',
@@ -214,18 +336,46 @@ export class MarketplaceBridge {
         ];
     }
 
+    // ============================================================
+    // 6. UNIFIED SEARCH (Entry Point)
+    // ============================================================
+
     /**
-     * searchAll: Primary entry point with user-scoped tracking
+     * Primary search entry point with full pipeline:
+     * 1. Library cache check
+     * 2. Google Merchant API (on miss)
+     * 3. eBay secondary source
+     * 4. Premium fallbacks (last resort)
      */
     async searchAll(query: string, userId: string, category?: string, brand?: string): Promise<UnifiedGarment[]> {
-        const [skimlinks, ebay] = await Promise.all([
-            this.fetchSkimlinksItems(query, userId, category),
+        // Step 1: Library Lookup (cost-saver)
+        let libraryItems = await this.libraryLookup(query || category || 'luxury', category);
+        if (libraryItems.length >= 5) {
+            console.log(`[Marketplace] Full library cache hit (${libraryItems.length} items).`);
+            if (brand && brand !== 'All') {
+                libraryItems = libraryItems.filter(i => i.brand?.toLowerCase() === brand.toLowerCase());
+            }
+            return libraryItems;
+        }
+
+        // Step 2: Fresh ingestion from Merchant API + eBay
+        const [merchant, ebay] = await Promise.all([
+            this.fetchMerchantItems(query, userId, category),
             this.fetchEbayItems(query, userId, category)
         ]);
 
-        let combined = [...skimlinks, ...ebay];
+        let combined = [...libraryItems, ...merchant, ...ebay];
 
-        // If both fail, provide premium fallbacks
+        // Deduplicate by merchantOfferId
+        const seen = new Set<string>();
+        combined = combined.filter(item => {
+            const key = item.merchantOfferId || item.id;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        // Step 3: Fallbacks if everything is empty
         if (combined.length === 0) {
             console.log('[Marketplace] APIs offline/empty. Loading premium fallbacks.');
             combined = this.getFallbackItems();
