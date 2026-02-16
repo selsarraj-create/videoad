@@ -4,11 +4,11 @@ import { useState, Suspense } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
-import { Loader2, Sparkles, Mail } from "lucide-react"
+import { Loader2, Sparkles, Mail, Lock, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { motion } from "framer-motion"
+import { BespokeInput } from "@/components/ui/bespoke-input"
 
 /* ── SVG brand icons ── */
 function GoogleIcon({ className }: { className?: string }) {
@@ -42,7 +42,6 @@ function LoginContent() {
     const searchParams = useSearchParams()
     const supabase = createClient()
 
-    // Check for callback errors
     const callbackError = searchParams.get('error')
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -62,7 +61,6 @@ function LoginContent() {
                 router.refresh()
             }
         } else {
-            // Server-side signup with auto-confirm
             const res = await fetch('/api/signup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -73,7 +71,6 @@ function LoginContent() {
                 setError(data.error || 'Sign up failed')
                 setLoading(false)
             } else {
-                // Auto-login after successful signup
                 const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
                 if (loginError) {
                     setSuccess("Account created! Sign in with your credentials.")
@@ -105,119 +102,136 @@ function LoginContent() {
     }
 
     return (
-        <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center p-4 selection:bg-purple-500/30">
-            {/* Background Glow Effects */}
-            <div className="absolute top-1/3 left-1/4 w-[400px] h-[400px] bg-purple-900/15 rounded-full blur-[150px] pointer-events-none" />
-            <div className="absolute bottom-1/3 right-1/4 w-[350px] h-[350px] bg-blue-900/10 rounded-full blur-[130px] pointer-events-none" />
+        <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 selection:bg-primary/20 relative overflow-hidden font-sans">
+            {/* Subtle background texture */}
+            <div className="absolute inset-0 bg-noise opacity-30 pointer-events-none" />
+
+            {/* Decorative floating elements */}
+            <motion.div
+                animate={{ y: [0, -20, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-20 right-[15%] w-32 h-32 border border-nimbus/40 rotate-12 hidden lg:block"
+            />
+            <motion.div
+                animate={{ y: [0, 15, 0] }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute bottom-32 left-[10%] w-24 h-24 border border-nimbus/30 -rotate-6 hidden lg:block"
+            />
 
             {/* Logo */}
-            <Link href="/" className="mb-8 flex items-center gap-2 group z-10">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center border border-purple-500/30 shadow-xl group-hover:scale-105 transition-transform">
-                    <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <h1 className="font-bold text-2xl tracking-tighter text-white">
-                    FASHION<span className="font-light text-zinc-600">STUDIO</span>
-                </h1>
-            </Link>
+            <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+            >
+                <Link href="/" className="mb-12 flex items-center gap-3 group z-10 relative">
+                    <div className="w-10 h-10 bg-primary flex items-center justify-center group-hover:shadow-lg transition-shadow">
+                        <Sparkles className="w-5 h-5 text-primary-foreground" />
+                    </div>
+                    <h1 className="font-serif text-2xl tracking-tight text-foreground">
+                        FASHION<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">STUDIO</span>
+                    </h1>
+                </Link>
+            </motion.div>
 
-            <Card className="w-full max-w-md bg-zinc-900/50 border-zinc-800 backdrop-blur-xl shadow-2xl relative overflow-hidden z-10">
-                {/* Top gradient bar */}
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-600 via-pink-500 to-blue-500 opacity-80" />
+            {/* Main Card */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.15 }}
+                className="w-full max-w-md relative z-10"
+            >
+                <div className="frosted-touch p-10 shadow-xl space-y-8">
+                    {/* Header */}
+                    <div className="text-center space-y-2">
+                        <h2 className="font-serif text-3xl tracking-tight text-foreground">
+                            {mode === 'login' ? 'Welcome Back' : 'Join the Studio'}
+                        </h2>
+                        <p className="text-xs text-muted-foreground uppercase tracking-[0.2em]">
+                            {mode === 'login'
+                                ? 'Sign in to your creative space'
+                                : 'Begin your fashion journey'
+                            }
+                        </p>
+                    </div>
 
-                <CardHeader className="space-y-1 text-center pb-2">
-                    <CardTitle className="text-2xl font-bold tracking-tight text-white">
-                        {mode === 'login' ? 'Welcome back' : 'Create account'}
-                    </CardTitle>
-                    <CardDescription className="text-zinc-400">
-                        {mode === 'login'
-                            ? 'Sign in to access your fashion studio'
-                            : 'Sign up to start creating fashion videos'
-                        }
-                    </CardDescription>
-                </CardHeader>
-
-                {/* Mode Tabs */}
-                <div className="px-6">
-                    <div className="flex bg-zinc-950/50 rounded-lg p-0.5 border border-zinc-800">
+                    {/* Mode Tabs */}
+                    <div className="flex border border-nimbus">
                         <button
                             onClick={() => { setMode('login'); setError(null); setSuccess(null) }}
-                            className={`flex-1 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${mode === 'login'
-                                ? 'bg-zinc-800 text-white shadow-sm'
-                                : 'text-zinc-500 hover:text-zinc-300'
+                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 ${mode === 'login'
+                                ? 'bg-foreground text-background'
+                                : 'bg-transparent text-muted-foreground hover:text-foreground'
                                 }`}
                         >
                             Sign In
                         </button>
                         <button
                             onClick={() => { setMode('signup'); setError(null); setSuccess(null) }}
-                            className={`flex-1 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${mode === 'signup'
-                                ? 'bg-purple-900/40 text-purple-300 shadow-sm border border-purple-800/50'
-                                : 'text-zinc-500 hover:text-zinc-300'
+                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 border-l border-nimbus ${mode === 'signup'
+                                ? 'bg-foreground text-background'
+                                : 'bg-transparent text-muted-foreground hover:text-foreground'
                                 }`}
                         >
                             Create Account
                         </button>
                     </div>
-                </div>
 
-                <CardContent className="space-y-4 pt-4">
-                    {/* Social Login Buttons */}
+                    {/* Social Login */}
                     <div className="grid grid-cols-2 gap-3">
-                        <Button
-                            variant="outline"
-                            className="h-11 bg-zinc-950/50 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 text-white transition-all duration-200 group"
+                        <button
+                            className="h-12 border border-nimbus bg-white/50 hover:bg-white transition-all duration-300 flex items-center justify-center gap-2 group"
                             onClick={() => handleSocialLogin('google')}
                             disabled={socialLoading !== null}
                         >
                             {socialLoading === 'google' ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                             ) : (
                                 <>
-                                    <GoogleIcon className="w-4 h-4 mr-2" />
-                                    <span className="text-sm font-medium">Google</span>
+                                    <GoogleIcon className="w-4 h-4" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground group-hover:text-foreground transition-colors">Google</span>
                                 </>
                             )}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="h-11 bg-zinc-950/50 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 text-white transition-all duration-200 group"
+                        </button>
+                        <button
+                            className="h-12 border border-nimbus bg-white/50 hover:bg-white transition-all duration-300 flex items-center justify-center gap-2 group"
                             onClick={() => handleSocialLogin('github')}
                             disabled={socialLoading !== null}
                         >
                             {socialLoading === 'github' ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                             ) : (
                                 <>
-                                    <GitHubIcon className="w-4 h-4 mr-2" />
-                                    <span className="text-sm font-medium">GitHub</span>
+                                    <GitHubIcon className="w-4 h-4 text-foreground" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground group-hover:text-foreground transition-colors">GitHub</span>
                                 </>
                             )}
-                        </Button>
+                        </button>
                     </div>
 
                     {/* Divider */}
                     <div className="relative">
                         <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-zinc-800/50" />
+                            <div className="w-full border-t border-nimbus" />
                         </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-zinc-900/50 backdrop-blur px-3 text-zinc-500 font-medium tracking-wider">
+                        <div className="relative flex justify-center">
+                            <span className="bg-background/80 backdrop-blur-sm px-4 text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-bold">
                                 or continue with email
                             </span>
                         </div>
                     </div>
 
                     {/* Email/Password Form */}
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-5">
                         <div className="space-y-2">
-                            <Label htmlFor="email" className="text-zinc-300">Email</Label>
+                            <Label htmlFor="email" className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">Email</Label>
                             <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                                <Input
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                                <input
                                     id="email"
                                     type="email"
                                     placeholder="name@example.com"
-                                    className="pl-10 bg-zinc-950/50 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-purple-500/50 focus:ring-purple-500/20 transition-all duration-200"
+                                    className="w-full h-12 pl-10 pr-4 bg-white/60 border border-nimbus text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
@@ -226,68 +240,83 @@ function LoginContent() {
                         </div>
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <Label htmlFor="password" className="text-zinc-300">Password</Label>
+                                <Label htmlFor="password" className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">Password</Label>
                                 {mode === 'login' && (
                                     <Link
                                         href="/login/forgot-password"
-                                        className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                                        className="text-[10px] text-primary hover:text-foreground transition-colors uppercase tracking-widest font-bold"
                                     >
-                                        Forgot password?
+                                        Forgot?
                                     </Link>
                                 )}
                             </div>
-                            <Input
-                                id="password"
-                                type="password"
-                                placeholder={mode === 'signup' ? 'Min 6 characters' : '••••••••'}
-                                className="bg-zinc-950/50 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-purple-500/50 focus:ring-purple-500/20 transition-all duration-200"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                minLength={6}
-                            />
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                                <input
+                                    id="password"
+                                    type="password"
+                                    placeholder={mode === 'signup' ? 'Min 6 characters' : '••••••••'}
+                                    className="w-full h-12 pl-10 pr-4 bg-white/60 border border-nimbus text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    minLength={6}
+                                />
+                            </div>
                         </div>
 
                         {/* Error / Success Messages */}
                         {(error || callbackError) && (
-                            <div className="p-3 rounded-lg bg-red-900/20 border border-red-900/50 text-red-400 text-sm font-medium animate-in fade-in slide-in-from-top-1">
-                                {error || 'Authentication failed. Please try again.'}
+                            <div className="p-4 border-l-2 border-destructive bg-destructive/5">
+                                <p className="text-[10px] font-bold text-destructive uppercase tracking-widest mb-1">Error</p>
+                                <p className="text-xs text-muted-foreground">{error || 'Authentication failed. Please try again.'}</p>
                             </div>
                         )}
 
                         {success && (
-                            <div className="p-3 rounded-lg bg-green-900/20 border border-green-900/50 text-green-400 text-sm font-medium animate-in fade-in slide-in-from-top-1">
-                                {success}
+                            <div className="p-4 border-l-2 border-primary bg-primary/5">
+                                <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Success</p>
+                                <p className="text-xs text-muted-foreground">{success}</p>
                             </div>
                         )}
 
                         <Button
                             type="submit"
-                            className={`w-full h-11 font-bold shadow-lg transition-all duration-200 mt-2 ${mode === 'login'
-                                ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-purple-900/20'
-                                : 'bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-500 hover:via-pink-500 hover:to-purple-500 text-white shadow-purple-900/20'
-                                }`}
+                            className="w-full h-14 bg-foreground text-background hover:bg-primary text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 rounded-none shadow-xl hover:shadow-2xl"
                             disabled={loading}
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === 'login' ? "Sign In" : "Create Account"}
+                            {loading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <>
+                                    {mode === 'login' ? 'Sign In' : 'Create Account'}
+                                    <ArrowRight className="w-4 h-4 ml-2" />
+                                </>
+                            )}
                         </Button>
                     </form>
-                </CardContent>
-                <CardFooter className="flex flex-col gap-4 text-center text-xs text-zinc-500 pt-0">
-                    <div className="w-full h-px bg-zinc-800/50" />
-                    <p>
-                        {mode === 'login'
-                            ? <>Don&apos;t have an account? <button onClick={() => setMode('signup')} className="text-purple-400 hover:text-purple-300 font-medium transition-colors">Create one</button></>
-                            : <>Already have an account? <button onClick={() => setMode('login')} className="text-purple-400 hover:text-purple-300 font-medium transition-colors">Sign in</button></>
-                        }
-                    </p>
-                </CardFooter>
-            </Card>
+
+                    {/* Footer toggle */}
+                    <div className="text-center pt-2">
+                        <p className="text-xs text-muted-foreground">
+                            {mode === 'login'
+                                ? <>Don&apos;t have an account?{' '}<button onClick={() => setMode('signup')} className="text-primary hover:text-foreground font-bold uppercase tracking-widest text-[10px] transition-colors">Create one</button></>
+                                : <>Already have an account?{' '}<button onClick={() => setMode('login')} className="text-primary hover:text-foreground font-bold uppercase tracking-widest text-[10px] transition-colors">Sign in</button></>
+                            }
+                        </p>
+                    </div>
+                </div>
+            </motion.div>
 
             {/* Footer */}
-            <p className="mt-6 text-xs text-zinc-600 z-10">
-                By continuing, you agree to our Terms of Service and Privacy Policy.
-            </p>
+            <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="mt-8 text-[10px] text-muted-foreground/60 z-10 uppercase tracking-widest"
+            >
+                © 2026 Fashion Studio. All rights reserved.
+            </motion.p>
         </div>
     )
 }
@@ -295,8 +324,8 @@ function LoginContent() {
 export default function LoginPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
             </div>
         }>
             <LoginContent />
