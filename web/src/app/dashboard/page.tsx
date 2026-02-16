@@ -118,6 +118,7 @@ export default function StudioPage() {
     const [marketplaceBrand, setMarketplaceBrand] = useState("All")
     const [trendKeywords, setTrendKeywords] = useState<TrendKeyword[]>([])
     const [trendsLoading, setTrendsLoading] = useState(false)
+    const [vtoLoadingId, setVtoLoadingId] = useState<string | null>(null)
 
     // Revenue state
     const [revenueData, setRevenueData] = useState<any[]>([])
@@ -896,16 +897,49 @@ export default function StudioPage() {
                                                 </div>
                                                 <div className="grid grid-cols-1 gap-2">
                                                     <Button
-                                                        onClick={() => {
-                                                            setGarmentImageUrl(item.imageUrl)
-                                                            setGarmentPreview(item.imageUrl)
-                                                            setActiveTab('try-on')
+                                                        onClick={async () => {
+                                                            setVtoLoadingId(item.id)
+                                                            try {
+                                                                const res = await fetch('/api/marketplace-vto', {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({
+                                                                        image_url: item.imageUrl,
+                                                                        product_url: item.affiliateUrl,
+                                                                        title: item.title,
+                                                                        brand: item.brand,
+                                                                        price: item.price,
+                                                                        currency: item.currency,
+                                                                        category: item.category,
+                                                                        trend_keyword: item.trendKeyword,
+                                                                        is_trending: item.isTrending,
+                                                                    }),
+                                                                })
+                                                                const data = await res.json()
+                                                                if (data.primary_url) {
+                                                                    setGarmentImageUrl(data.primary_url)
+                                                                    setGarmentPreview(data.primary_url)
+                                                                } else {
+                                                                    setGarmentImageUrl(item.imageUrl)
+                                                                    setGarmentPreview(item.imageUrl)
+                                                                }
+                                                                setActiveTab('try-on')
+                                                            } catch {
+                                                                setGarmentImageUrl(item.imageUrl)
+                                                                setGarmentPreview(item.imageUrl)
+                                                                setActiveTab('try-on')
+                                                            } finally {
+                                                                setVtoLoadingId(null)
+                                                            }
                                                         }}
+                                                        disabled={vtoLoadingId === item.id}
                                                         variant="outline"
                                                         size="sm"
                                                         className="w-full rounded-none text-[10px] uppercase tracking-widest h-8"
                                                     >
-                                                        Select for Try-On
+                                                        {vtoLoadingId === item.id ? (
+                                                            <><Loader2 className="w-3 h-3 animate-spin mr-2" /> Generating VTO...</>
+                                                        ) : 'Select for Try-On'}
                                                     </Button>
                                                     <a href={item.affiliateUrl} target="_blank" rel="noopener noreferrer" className="w-full">
                                                         <Button variant="ghost" size="sm" className="w-full rounded-none text-[10px] uppercase tracking-widest h-8 border border-nimbus hover:bg-nimbus/20">

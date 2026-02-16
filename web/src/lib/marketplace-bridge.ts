@@ -1,10 +1,10 @@
 /**
- * MarketplaceBridge v3 — Oxylabs + Google Trends Pipeline
+ * MarketplaceBridge v4 — Dedup Guardrail + Asset Laundering
  * 
  * Architecture:
- * 1. Library Lookup: Check asset_library for cached VTO renders
- * 2. Oxylabs Google Shopping: Universal product search across all merchants
- * 3. Vertex AI VTO: Generate Universal Model try-on renders (on-demand)
+ * 1. Dedup Guardrail: SHA-256 hash check against asset_library
+ * 2. Oxylabs Google Shopping: Transient sourcing (no raw persistence)
+ * 3. Vertex AI VTO: Identity-locked 4K renders → GCS → asset_library
  * 4. SynthID + IPTC: Compliance watermarking
  * 5. Skimlinks Link API: Wrap merchant URLs at click time only
  * 6. eBay Browse API: Secondary source
@@ -12,9 +12,8 @@
  */
 
 import axios from 'axios';
+import { createHash } from 'crypto';
 import { oxylabsIngestor, OxylabsProduct } from './oxylabs-ingestor';
-import { vertexVTO } from './vertex-vto';
-import { complianceTagger } from './compliance-tagger';
 
 export interface UnifiedGarment {
     id: string;
@@ -23,7 +22,7 @@ export interface UnifiedGarment {
     price: string;
     currency: string;
     imageUrl: string;            // Product image OR VTO render
-    originalImageUrl?: string;   // Raw product image
+    originalImageUrl?: string;   // Raw product image (transient, not stored)
     vtoImageUrl?: string;        // VTO render (if generated)
     affiliateUrl: string;        // Skimlinks-wrapped at serve time
     merchantLink?: string;       // Raw merchant URL
@@ -31,6 +30,7 @@ export interface UnifiedGarment {
     category?: string;
     merchant?: string;
     merchantOfferId?: string;
+    productUrlHash?: string;     // SHA-256 for dedup
     authenticityGuaranteed?: boolean;
     synthidApplied?: boolean;
     isTrending?: boolean;
@@ -54,7 +54,72 @@ export class MarketplaceBridge {
     }
 
     // ============================================================
-    // 1. LIBRARY LOOKUP (The Cost-Saver)
+    // 0. DEDUP HASH UTILITY
+    // ============================================================
+
+    /** Compute SHA-256 hash of a product image URL for deterministic dedup. */
+    static computeUrlHash(url: string): string {
+        return createHash('sha256').update(url).digest('hex');
+    }
+
+    // ============================================================
+    // 1. DEDUP GUARDRAIL (The Cost-Saver)
+    // ============================================================
+
+    /** Check asset_library for an existing VTO render using product_url_hash. */
+    async dedup(imageUrl: string): Promise<UnifiedGarment | null> {
+        if (!this.supabaseUrl || !this.supabaseKey) return null;
+
+        const urlHash = MarketplaceBridge.computeUrlHash(imageUrl);
+
+        try {
+            const resp = await fetch(
+                `${this.supabaseUrl}/rest/v1/asset_library?product_url_hash=eq.${urlHash}&limit=1`,
+                {
+                    headers: {
+                        'apikey': this.supabaseKey,
+                        'Authorization': `Bearer ${this.supabaseKey}`,
+                    },
+                }
+            );
+
+            if (!resp.ok) return null;
+            const items = await resp.json();
+            if (!items || items.length === 0) return null;
+
+            const item = items[0];
+            if (!item.universal_vto_url) return null;
+
+            console.log(`[Marketplace] DEDUP HIT: ${urlHash.slice(0, 12)}… → cached VTO render`);
+
+            return {
+                id: `lib-${item.id}`,
+                source: (item.is_trending ? 'trending' : 'library') as any,
+                title: item.title,
+                price: item.price || '0.00',
+                currency: item.currency || 'USD',
+                imageUrl: item.universal_vto_url,
+                originalImageUrl: item.original_image_url,
+                vtoImageUrl: item.universal_vto_url,
+                affiliateUrl: this.wrapSkimlinks(item.merchant_link, ''),
+                merchantLink: item.merchant_link,
+                brand: item.brand,
+                category: item.category,
+                merchant: item.merchant_name,
+                merchantOfferId: item.merchant_offer_id,
+                productUrlHash: urlHash,
+                synthidApplied: item.synthid_applied,
+                isTrending: item.is_trending,
+                trendKeyword: item.trend_keyword,
+            };
+        } catch (error: any) {
+            console.log('[Marketplace] Dedup lookup error:', error.message);
+            return null;
+        }
+    }
+
+    // ============================================================
+    // 2. LIBRARY LOOKUP (Tag-based search)
     // ============================================================
 
     private async libraryLookup(query: string, category?: string): Promise<UnifiedGarment[]> {
@@ -75,11 +140,7 @@ export class MarketplaceBridge {
                 }
             );
 
-            if (!resp.ok) {
-                console.log('[Marketplace] Library lookup failed, proceeding to API.');
-                return [];
-            }
-
+            if (!resp.ok) return [];
             const items = await resp.json();
             if (!items || items.length === 0) return [];
 
@@ -100,6 +161,7 @@ export class MarketplaceBridge {
                 category: item.category,
                 merchant: item.merchant_name,
                 merchantOfferId: item.merchant_offer_id,
+                productUrlHash: item.product_url_hash,
                 synthidApplied: item.synthid_applied,
                 isTrending: item.is_trending,
                 trendKeyword: item.trend_keyword,
@@ -111,7 +173,7 @@ export class MarketplaceBridge {
     }
 
     // ============================================================
-    // 2. OXYLABS GOOGLE SHOPPING (Primary Source)
+    // 3. OXYLABS GOOGLE SHOPPING (Transient Source — No Persistence)
     // ============================================================
 
     async fetchOxylabsItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
@@ -130,9 +192,9 @@ export class MarketplaceBridge {
                 return [];
             }
 
-            console.log(`[Marketplace] Oxylabs: ${products.length} products`);
+            console.log(`[Marketplace] Oxylabs: ${products.length} products (transient — not stored)`);
 
-            const garments: UnifiedGarment[] = products.map((p, idx) => ({
+            return products.map((p, idx) => ({
                 id: `oxy-${idx}-${Date.now()}`,
                 source: 'oxylabs' as const,
                 title: p.title,
@@ -146,61 +208,20 @@ export class MarketplaceBridge {
                 category: category || undefined,
                 merchant: p.merchant,
                 merchantOfferId: `oxy-${p.position}`,
+                productUrlHash: MarketplaceBridge.computeUrlHash(p.imageUrl),
             }));
 
-            // Background: index in asset_library
-            this.indexOxylabsProducts(products, category).catch(err =>
-                console.log('[Marketplace] Background indexing error:', err.message)
-            );
-
-            return garments;
+            // NOTE: No indexOxylabsProducts() call.
+            // Raw Oxylabs data is TRANSIENT — never stored in asset_library.
+            // Only VTO-rendered assets get indexed via /api/marketplace-vto.
         } catch (error: any) {
             console.error('[Marketplace] Oxylabs Error:', error.message);
             return [];
         }
     }
 
-    /** Index Oxylabs products in asset_library for future cache hits. */
-    private async indexOxylabsProducts(products: OxylabsProduct[], category?: string): Promise<void> {
-        if (!this.supabaseUrl || !this.supabaseKey) return;
-
-        for (const p of products) {
-            try {
-                await fetch(`${this.supabaseUrl}/rest/v1/asset_library`, {
-                    method: 'POST',
-                    headers: {
-                        'apikey': this.supabaseKey,
-                        'Authorization': `Bearer ${this.supabaseKey}`,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'resolution=ignore-duplicates',
-                    },
-                    body: JSON.stringify({
-                        merchant_offer_id: `oxy-${p.position}-${p.title.slice(0, 20)}`,
-                        title: p.title,
-                        brand: p.brand,
-                        category: category,
-                        category_id: category?.toLowerCase(),
-                        original_image_url: p.imageUrl,
-                        merchant_link: p.productUrl,
-                        merchant_name: p.merchant,
-                        price: p.price,
-                        currency: p.currency,
-                        tags: [
-                            p.brand?.toLowerCase(),
-                            category?.toLowerCase(),
-                            p.merchant?.toLowerCase(),
-                            ...p.title.toLowerCase().split(/\s+/).slice(0, 5),
-                        ].filter(Boolean),
-                    }),
-                });
-            } catch {
-                // Silently continue
-            }
-        }
-    }
-
     // ============================================================
-    // 3. SKIMLINKS LINK API (Commission-Only Bridge)
+    // 4. SKIMLINKS LINK API (Commission-Only Bridge)
     // ============================================================
 
     wrapSkimlinks(merchantUrl: string, userId: string): string {
@@ -213,7 +234,7 @@ export class MarketplaceBridge {
     }
 
     // ============================================================
-    // 4. EBAY (Secondary Source)
+    // 5. EBAY (Secondary Source)
     // ============================================================
 
     private async getEbayToken(): Promise<string | null> {
@@ -288,7 +309,7 @@ export class MarketplaceBridge {
     }
 
     // ============================================================
-    // 5. FALLBACKS (Premium Staff Picks)
+    // 6. FALLBACKS (Premium Staff Picks)
     // ============================================================
 
     private getFallbackItems(): UnifiedGarment[] {
@@ -319,7 +340,7 @@ export class MarketplaceBridge {
     }
 
     // ============================================================
-    // 6. UNIFIED SEARCH (Entry Point)
+    // 7. UNIFIED SEARCH (Entry Point)
     // ============================================================
 
     async searchAll(query: string, userId: string, category?: string, brand?: string): Promise<UnifiedGarment[]> {
@@ -333,7 +354,7 @@ export class MarketplaceBridge {
             return libraryItems;
         }
 
-        // Step 2: Fresh ingestion from Oxylabs + eBay
+        // Step 2: Fresh ingestion from Oxylabs + eBay (transient)
         const [oxylabs, ebay] = await Promise.all([
             this.fetchOxylabsItems(query, userId, category),
             this.fetchEbayItems(query, userId, category)
@@ -341,10 +362,10 @@ export class MarketplaceBridge {
 
         let combined = [...libraryItems, ...oxylabs, ...ebay];
 
-        // Deduplicate by title similarity
+        // Deduplicate by productUrlHash or title similarity
         const seen = new Set<string>();
         combined = combined.filter(item => {
-            const key = item.merchantOfferId || item.title.toLowerCase().slice(0, 40);
+            const key = item.productUrlHash || item.merchantOfferId || item.title.toLowerCase().slice(0, 40);
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
