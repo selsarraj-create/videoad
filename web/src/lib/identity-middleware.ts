@@ -4,7 +4,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
  * Identity Selection Middleware
  *
  * Server-side utilities for resolving the active identity and fetching
- * the associated 4K anchor images before calling downstream APIs (Claid, Veo).
+ * the associated 4K anchor images before calling downstream APIs (Fashn, Veo).
  */
 
 export interface IdentityAnchors {

@@ -8,7 +8,8 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "**.supabase.co" },
       { protocol: "https", hostname: "**.kie.ai" },
-      { protocol: "https", hostname: "**.claid.ai" },
+      { protocol: "https", hostname: "**.fal.ai" },
+      { protocol: "https", hostname: "cdn.fashn.ai" },
     ],
   },
 

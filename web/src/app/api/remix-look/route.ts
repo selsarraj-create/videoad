@@ -23,7 +23,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Showcase item not found' }, { status: 404 })
         }
 
-        // Return the metadata ready for the Claid engine
+        // Return the metadata ready for the Fashn engine
         return NextResponse.json({
             success: true,
             remixData: {

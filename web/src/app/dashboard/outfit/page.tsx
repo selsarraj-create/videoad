@@ -61,7 +61,7 @@ export default function OutfitBuilderPage() {
     const [lookName, setLookName] = useState("Untitled Look")
     const [masterIdentityUrl, setMasterIdentityUrl] = useState<string | null>(null)
     const [identityId, setIdentityId] = useState<string | null>(null)
-    const [claidResult, setClaidResult] = useState<string | null>(null)
+    const [vtoResult, setVtoResult] = useState<string | null>(null)
     const [rendering, setRendering] = useState(false)
     const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null)
 
@@ -91,7 +91,7 @@ export default function OutfitBuilderPage() {
         const interval = setInterval(async () => {
             const { data } = await supabase.from('current_looks').select('*').eq('id', lookId).single()
             if (data?.status === 'ready' && data.claid_result_url) {
-                setClaidResult(data.claid_result_url)
+                setVtoResult(data.claid_result_url)
                 setRendering(false)
                 clearInterval(interval)
             }
@@ -116,12 +116,12 @@ export default function OutfitBuilderPage() {
             price: item.price,
             affiliate_url: item.affiliate_url || ''
         }])
-        setClaidResult(null)
+        setVtoResult(null)
     }
 
     const removeFromLook = (category: Category) => {
         setCurrentLook(currentLook.filter(g => g.category !== category))
-        setClaidResult(null)
+        setVtoResult(null)
     }
 
     const totalCost = currentLook.reduce((sum, g) => sum + (g.price || 0), 0)
@@ -129,7 +129,7 @@ export default function OutfitBuilderPage() {
     const handleTryLook = async () => {
         if (!identityId || currentLook.length === 0) return
         setRendering(true)
-        setClaidResult(null)
+        setVtoResult(null)
 
         try {
             // Save look to DB
@@ -156,9 +156,9 @@ export default function OutfitBuilderPage() {
     }
 
     const handleGenerateVideo = async () => {
-        if (!claidResult || !selectedPreset) return
+        if (!vtoResult || !selectedPreset) return
         // Redirect to dashboard with look data for video generation
-        window.location.href = `/dashboard?lookImage=${encodeURIComponent(claidResult)}&preset=${selectedPreset.id}`
+        window.location.href = `/dashboard?lookImage=${encodeURIComponent(vtoResult)}&preset=${selectedPreset.id}`
     }
 
     const isInLook = (itemId: string) => currentLook.some(g => g.item_id === itemId)
@@ -298,9 +298,9 @@ export default function OutfitBuilderPage() {
                     <div className="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
                         {/* Identity + Result Preview */}
                         <div className="relative w-full max-w-[340px]">
-                            {claidResult ? (
+                            {vtoResult ? (
                                 <div className="rounded-none overflow-hidden border border-nimbus shadow-2xl bg-white p-2 rotate-1 hover:rotate-0 transition-transform duration-500">
-                                    <img src={claidResult} alt="Outfit Result" className="w-full object-contain" />
+                                    <img src={vtoResult} alt="Outfit Result" className="w-full object-contain" />
                                     <div className="absolute bottom-4 left-4">
                                         <Badge className="bg-white/80 text-foreground border-nimbus text-[10px] backdrop-blur shadow-sm rounded-none uppercase tracking-widest">
                                             ✓ Outfit Ready
@@ -393,7 +393,7 @@ export default function OutfitBuilderPage() {
                         <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] font-serif">Style Presets & Render</h2>
                     </div>
                     <div className="flex-1 overflow-y-auto p-6">
-                        {claidResult ? (
+                        {vtoResult ? (
                             <div className="space-y-8">
                                 <div className="space-y-4">
                                     <p className="text-[10px] text-foreground uppercase tracking-[0.2em] font-bold">Choose Video Style</p>
@@ -428,8 +428,8 @@ export default function OutfitBuilderPage() {
             <div className="md:hidden flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
                 {/* Identity Preview */}
                 <div className="flex-1 relative overflow-hidden bg-white/50">
-                    {claidResult ? (
-                        <img src={claidResult} alt="Outfit" className="w-full h-full object-contain p-8" />
+                    {vtoResult ? (
+                        <img src={vtoResult} alt="Outfit" className="w-full h-full object-contain p-8" />
                     ) : masterIdentityUrl ? (
                         <div className="w-full h-full relative">
                             <img src={masterIdentityUrl} alt="Identity" className="w-full h-full object-contain opacity-50 grayscale-[20%]" />
@@ -533,16 +533,16 @@ export default function OutfitBuilderPage() {
                     {/* Try Look CTA */}
                     <div className="p-4 bg-white border-t border-nimbus/50">
                         <Button
-                            onClick={claidResult && !rendering ? handleGenerateVideo : handleTryLook}
+                            onClick={vtoResult && !rendering ? handleGenerateVideo : handleTryLook}
                             disabled={!masterIdentityUrl || currentLook.length === 0 || rendering}
                             className={`w-full h-12 rounded-none font-bold text-xs uppercase tracking-[0.2em] shadow-xl ${!masterIdentityUrl || currentLook.length === 0 || rendering
-                                    ? 'bg-nimbus/20 text-muted-foreground'
-                                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                                ? 'bg-nimbus/20 text-muted-foreground'
+                                : 'bg-primary text-primary-foreground hover:bg-primary/90'
                                 }`}
                         >
                             {rendering ? (
                                 " PROCESSING..."
-                            ) : claidResult ? (
+                            ) : vtoResult ? (
                                 <><Video className="w-4 h-4 mr-2" /> GENERATE VIDEO</>
                             ) : (
                                 <><Sparkles className="w-4 h-4 mr-2" /> TRY THIS LOOK ({currentLook.length})</>

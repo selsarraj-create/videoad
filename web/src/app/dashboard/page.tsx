@@ -37,7 +37,7 @@ import { Label } from "@/components/ui/label"
 import {
     Upload, Loader2, Sparkles, Image as ImageIcon,
     FastForward, Library, ExternalLink, Camera,
-    Video, User, Shirt, Check, Plus, ArrowRight, Trash2, X
+    Video, User, Shirt, Check, Plus, ArrowRight, Trash2, X, LogOut
 } from "lucide-react"
 import { PresetGrid } from "@/components/preset-grid"
 import { getOrCreateDefaultProject } from "@/app/actions"
@@ -592,6 +592,15 @@ export default function StudioPage() {
                         className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                         <Library className="w-3.5 h-3.5" /> Content Vault
                     </Link>
+                    <button
+                        onClick={async () => {
+                            await supabase.auth.signOut()
+                            window.location.href = '/login'
+                        }}
+                        className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground hover:text-red-500 transition-colors flex items-center gap-2"
+                    >
+                        <LogOut className="w-3.5 h-3.5" /> Sign Out
+                    </button>
                 </div>
             </header>
 

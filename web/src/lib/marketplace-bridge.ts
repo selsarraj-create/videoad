@@ -4,7 +4,7 @@
  * Architecture:
  * 1. Dedup Guardrail: SHA-256 hash check against asset_library
  * 2. Oxylabs Google Shopping: Transient sourcing (no raw persistence)
- * 3. Vertex AI VTO: Identity-locked 4K renders → GCS → asset_library
+ * 3. Fashn VTO: High-quality VTO renders → CDN → asset_library
  * 4. SynthID + IPTC: Compliance watermarking
  * 5. Skimlinks Link API: Wrap merchant URLs at click time only
  * 6. eBay Browse API: Secondary source

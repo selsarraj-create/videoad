@@ -3,8 +3,8 @@
  *
  * Layer 1: DEDUP GUARDRAIL — SHA-256(image_url) → asset_library lookup
  * Layer 2: TRANSIENT SOURCING — image URL passed directly (never stored raw)
- * Layer 3: TRANSFORMATION — Vertex VTO → GCS upload → asset_library upsert
- * Layer 4: COMPLIANCE — SynthID + IPTC tagging
+ * Layer 3: TRANSFORMATION — Fashn VTO → CDN-hosted output → asset_library upsert
+ * Layer 4: COMPLIANCE — IPTC tagging
  *
  * POST /api/marketplace-vto
  * Body: { image_url, product_url?, title?, brand?, price?, currency?,
@@ -15,7 +15,7 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
-import { vertexVTO } from '@/lib/vertex-vto';
+import { fashnVTO } from '@/lib/fashn-vto';
 import { complianceTagger } from '@/lib/compliance-tagger';
 
 /** Compute SHA-256 hash for deterministic dedup. */
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         // =============================================================
         // LAYER 1: DEDUP GUARDRAIL
         // Check if we already have a VTO render for this exact image.
-        // If yes → serve immediately. Zero Vertex AI cost.
+        // If yes → serve immediately. Zero Fashn cost.
         // =============================================================
 
         const { data: cached } = await supabase
@@ -70,11 +70,8 @@ export async function POST(request: Request) {
         if (cached?.universal_vto_url) {
             console.log(`[MarketplaceVTO] DEDUP HIT: ${productUrlHash.slice(0, 12)}… → serving cached render`);
 
-            const publicUrls = await Promise.all(
-                (cached.universal_vto_urls || [cached.universal_vto_url]).map(
-                    (uri: string) => vertexVTO.getPublicUrl(uri)
-                )
-            );
+            // Fashn/fal.ai URLs are already public CDN URLs — no conversion needed
+            const publicUrls = cached.universal_vto_urls || [cached.universal_vto_url];
 
             return NextResponse.json({
                 vto_urls: publicUrls,
@@ -93,14 +90,14 @@ export async function POST(request: Request) {
         console.log(`[MarketplaceVTO] DEDUP MISS: ${productUrlHash.slice(0, 12)}… — generating VTO`);
 
         // =============================================================
-        // LAYER 3: TRANSFORMATION (Asset Laundering)
-        // Vertex VTO generates identity-locked 4K renders.
-        // Output is saved to GCS (videoad-vto-renders) — permanent storage.
+        // LAYER 3: TRANSFORMATION
+        // Fashn VTO generates high-quality try-on renders.
+        // Output is hosted on fal.ai CDN — no GCS upload needed.
         // =============================================================
 
-        const vtoResult = await vertexVTO.generateVTO(image_url);
+        const vtoResult = await fashnVTO.generateVTO(image_url);
 
-        if (!vtoResult || vtoResult.gcsUris.length === 0) {
+        if (!vtoResult || vtoResult.imageUrls.length === 0) {
             return NextResponse.json(
                 { error: 'VTO generation failed', fallback_image: image_url },
                 { status: 422 }
@@ -109,16 +106,14 @@ export async function POST(request: Request) {
 
         // =============================================================
         // LAYER 4: COMPLIANCE
-        // SynthID watermark (applied during generation) + IPTC metadata.
+        // IPTC metadata tagging for AI transparency.
         // =============================================================
 
         const compliance = complianceTagger.generateComplianceTags(productUrlHash);
 
-        // Generate public URLs for frontend
-        const publicUrls = await Promise.all(
-            vtoResult.gcsUris.map(uri => vertexVTO.getPublicUrl(uri))
-        );
-        const primaryPublicUrl = publicUrls[0];
+        // fal.ai CDN URLs are already public — no URL conversion needed
+        const publicUrls = vtoResult.imageUrls;
+        const primaryPublicUrl = vtoResult.primaryUrl;
 
         // =============================================================
         // INDEX: Upsert into asset_library for future dedup hits.
@@ -137,8 +132,8 @@ export async function POST(request: Request) {
             category_id: category?.toLowerCase() || null,
             original_image_url: image_url,   // kept for reference only
             merchant_link: product_url || null,
-            universal_vto_urls: vtoResult.gcsUris,
-            universal_vto_url: vtoResult.primaryUri,
+            universal_vto_urls: publicUrls,
+            universal_vto_url: primaryPublicUrl,
             synthid_applied: compliance.synthidApplied,
             iptc_tagged: compliance.iptcTagged,
             is_trending: is_trending || false,
@@ -160,7 +155,7 @@ export async function POST(request: Request) {
             console.error('[MarketplaceVTO] Upsert error:', upsertError.message);
             // Non-fatal — the VTO still succeeded, just couldn't cache it
         } else {
-            console.log(`[MarketplaceVTO] Indexed: ${productUrlHash.slice(0, 12)}… (${vtoResult.gcsUris.length} renders)`);
+            console.log(`[MarketplaceVTO] Indexed: ${productUrlHash.slice(0, 12)}… (${publicUrls.length} renders)`);
         }
 
         return NextResponse.json({
@@ -168,7 +163,6 @@ export async function POST(request: Request) {
             primary_url: primaryPublicUrl,
             source: 'generated',
             product_url_hash: productUrlHash,
-            synthid: true,
             iptc: compliance.iptcMetadata,
         });
     } catch (err: any) {

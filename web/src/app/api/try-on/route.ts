@@ -64,7 +64,7 @@ export async function POST(request: Request) {
                     garment_image_url,
                     pipeline: 'try_on'
                 },
-                model: 'claid',
+                model: 'fashn',
                 tier: 'try_on',
                 created_at: new Date().toISOString()
             })

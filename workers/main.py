@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from .kie import generate_video, get_task_status
-from . import claid
+from . import fashn
 from . import gemini
 from .upscale import upscale_image, upscale_batch
 from .presets import get_prompt, get_preset
@@ -534,7 +534,7 @@ async def handle_extend_webhook(request: ExtendRequest, background_tasks: Backgr
     return {"message": "Extend job received", "job_id": request.job_id}
 
 # =========================================================================
-# Try-On Only: Claid generates on-model image (no video)
+# Try-On Only: Fashn generates on-model image (no video)
 # =========================================================================
 
 class TryOnRequest(BaseModel):
@@ -544,7 +544,7 @@ class TryOnRequest(BaseModel):
     marketplace_source: str = None # amazon or ebay
 
 def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: str, marketplace_source: str = None):
-    """Claid-only: person + garment → on-model image. No video generation."""
+    """Fashn tryon: person + garment → on-model image. No video generation."""
     print(f"Try-on job {job_id}: person={person_image_url[:50]}, garment={garment_image_url[:50]}, source={marketplace_source}")
 
     try:
@@ -560,11 +560,11 @@ def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: st
                 final_garment_url = refine_result["url"]
                 print(f"Refined garment ready: {final_garment_url[:80]}")
 
-        claid_result = claid.generate_on_model(
-            garment_image_url=final_garment_url,
-            person_image_url=person_image_url
+        fashn_result = fashn.tryon_quality(
+            model_image_url=person_image_url,
+            garment_image_url=final_garment_url
         )
-        on_model_image_url = claid_result["image_url"]
+        on_model_image_url = fashn_result["image_url"]
         print(f"Try-on done: {on_model_image_url[:80]}")
 
         supabase.table("jobs").update({
@@ -899,7 +899,7 @@ async def handle_save_identity_view(request: SaveIdentityViewRequest):
         return {"success": False, "error": str(e)[:100]}
 
 # =========================================================================
-# Outfit Try-On: Multi-layer Claid draping
+# Outfit Try-On: Multi-layer Fashn draping
 # =========================================================================
 
 class OutfitTryOnRequest(BaseModel):
@@ -908,12 +908,12 @@ class OutfitTryOnRequest(BaseModel):
     garment_urls: list[str]
 
 def process_outfit_tryon(look_id: str, identity_url: str, garment_urls: list[str]):
-    """Multi-layer Claid: drape each garment sequentially onto the identity."""
+    """Multi-layer Fashn: drape each garment sequentially onto the identity."""
     print(f"Outfit try-on for look {look_id}: {len(garment_urls)} garments")
     try:
         supabase.table("current_looks").update({"status": "rendering"}).eq("id", look_id).execute()
 
-        result = claid.generate_multi_layer(identity_url, garment_urls)
+        result = fashn.generate_multi_layer(identity_url, garment_urls)
         composite_url = result["image_url"]
         print(f"Outfit composite ready: {composite_url[:80]}")
 
@@ -935,7 +935,7 @@ async def handle_outfit_tryon(request: OutfitTryOnRequest, background_tasks: Bac
 
 
 # =========================================================================
-# Two-Stage Fashion Pipeline: Claid (on-model image) → Kie (video)
+# Two-Stage Fashion Pipeline: Fashn (Golden Masters + Identity Lock) → Kie (video)
 # =========================================================================
 
 class FashionJobRequest(BaseModel):
@@ -943,15 +943,15 @@ class FashionJobRequest(BaseModel):
     garment_image_url: str
     preset_id: str
     aspect_ratio: str = "9:16"
-    model_options: dict = {}  # gender, ethnicity for Claid
+    model_options: dict = {}  # gender, ethnicity options
     identity_id: str = ""  # If set, use all 3 master angle views
 
 def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, aspect_ratio: str, model_options: dict, identity_id: str = ""):
     """
-    Multi-angle fashion pipeline:
-    1. Fetch 3 master identity images (front, profile, 3/4) from identity_views
-    2. Claid.ai: each master + garment → 3 on-model fashion images
-    3. Kie.ai: all 3 images as ingredients → REFERENCE_2_VIDEO → fashion video
+    Two-step Fashn fashion pipeline:
+    1. Fashn tryon/v1.6 (quality): garment + mannequin angles → Golden Masters
+    2. Fashn model-swap: Golden Masters + user selfie → identity-locked VTO images
+    3. Kie.ai: triptych of VTO images → REFERENCE_2_VIDEO → fashion video
     """
     print(f"Fashion job {job_id}: preset={preset_id}, garment={garment_image_url[:60]}...")
 
@@ -959,10 +959,11 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
         # Stage 0: Update status
         supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
 
-        # Collect master identity URLs (all 3 angles)
+        # Collect master identity URLs (all 3 angles) for model-swap
         master_urls = []
+        user_selfie_url = None
         if identity_id:
-            views_resp = supabase.table("identity_views").select("angle, master_url").eq(
+            views_resp = supabase.table("identity_views").select("angle, master_url, image_url").eq(
                 "identity_id", identity_id
             ).execute()
             if views_resp.data:
@@ -971,48 +972,56 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
                         master_urls.append(v["master_url"])
                         print(f"  Found master for {v.get('angle')}: {v['master_url'][:60]}")
 
-        # Fallback: if no identity_id or no masters, check identities table
-        if not master_urls and identity_id:
-            ident_resp = supabase.table("identities").select("master_identity_url").eq("id", identity_id).single().execute()
-            if ident_resp.data and ident_resp.data.get("master_identity_url"):
-                master_urls = [ident_resp.data["master_identity_url"]]
-                print(f"  Fallback to single master: {master_urls[0][:60]}")
+            # Get user selfie for identity lock
+            ident_resp = supabase.table("identities").select("master_identity_url, selfie_url").eq("id", identity_id).single().execute()
+            if ident_resp.data:
+                user_selfie_url = ident_resp.data.get("selfie_url") or ident_resp.data.get("master_identity_url")
+                if not master_urls and ident_resp.data.get("master_identity_url"):
+                    master_urls = [ident_resp.data["master_identity_url"]]
+                    print(f"  Fallback to single master: {master_urls[0][:60]}")
 
-        # Stage 1: Claid.ai — generate on-model images (one per master angle)
+        # Stage 1: Fashn tryon (quality) — generate Golden Masters
+        # Bake garment onto each mannequin/master angle
         on_model_urls = []
 
         if master_urls:
-            print(f"Stage 1: Running Claid for {len(master_urls)} master angle(s) + garment...")
+            print(f"Stage 1: Fashn tryon (quality) for {len(master_urls)} master angle(s) + garment...")
             for i, person_url in enumerate(master_urls):
-                print(f"  Claid call {i+1}/{len(master_urls)}: person={person_url[:50]}")
+                print(f"  Fashn tryon {i+1}/{len(master_urls)}: person={person_url[:50]}")
                 try:
-                    claid_result = claid.generate_on_model(
-                        garment_image_url=garment_image_url,
-                        person_image_url=person_url
+                    fashn_result = fashn.tryon_quality(
+                        model_image_url=person_url,
+                        garment_image_url=garment_image_url
                     )
-                    url = claid_result["image_url"]
-
-                    # 4K Upscale: fabric mode preserves garment texture
-                    upscale_path = f"jobs/{job_id}/on_model_{i}_4k.png"
-                    url = upscale_image(
-                        url, mode="fabric",
-                        supabase_client=supabase, storage_path=upscale_path
-                    )
-                    print(f"  4K upscale (on-model {i+1}): {url[:60]}")
-
+                    url = fashn_result["image_url"]
                     on_model_urls.append(url)
-                    print(f"  Claid {i+1} done: {url[:80]}")
-                except Exception as claid_err:
-                    print(f"  Claid {i+1} failed (continuing): {str(claid_err)[:100]}")
+                    print(f"  Fashn tryon {i+1} done (Golden Master): {url[:80]}")
+                except Exception as fashn_err:
+                    print(f"  Fashn tryon {i+1} failed (continuing): {str(fashn_err)[:100]}")
         else:
-            # No identity — use Claid with just the garment (AI model)
-            print(f"Stage 1: No identity — Claid with garment only + AI model...")
-            claid_result = claid.generate_on_model(garment_image_url, options=model_options)
-            on_model_urls = [claid_result["image_url"]]
+            # No identity — use Fashn tryon with just the garment (default mannequin)
+            print(f"Stage 1: No identity — Fashn tryon with garment only...")
+            fashn_result = fashn.tryon_quality(
+                model_image_url=garment_image_url,
+                garment_image_url=garment_image_url
+            )
+            on_model_urls = [fashn_result["image_url"]]
             print(f"Stage 1 done: {on_model_urls[0][:80]}")
 
         if not on_model_urls:
-            raise Exception("No on-model images generated by Claid")
+            raise Exception("No Golden Master images generated by Fashn")
+
+        # Stage 1.5: Identity Lock Transfer (if user selfie available)
+        # Swap mannequin face → user face while preserving garment pixels
+        if user_selfie_url and len(on_model_urls) > 0:
+            print(f"Stage 1.5: Fashn model-swap — locking identity onto {len(on_model_urls)} Golden Master(s)...")
+            try:
+                locked_urls = fashn.identity_lock_transfer(on_model_urls, user_selfie_url)
+                if locked_urls:
+                    on_model_urls = locked_urls
+                    print(f"  Identity lock complete: {len(on_model_urls)} images")
+            except Exception as swap_err:
+                print(f"  Identity lock failed (using Golden Masters): {str(swap_err)[:100]}")
 
         # Update job with intermediate results
         supabase.table("jobs").update({
@@ -1024,15 +1033,15 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
             }
         }).eq("id", job_id).execute()
 
-        # Stage 2: Build Veo 3.1 ingredients
-        # 1. Create collage from on-model Claid images
+        # Stage 2: Build Veo 3.1 ingredients (Triptych)
+        # 1. Stitch on-model images into a horizontal triptych
         # 2. Face front close-up
         # 3. Face side close-up
         veo_ingredients = []
 
-        # 1. Generate collage from on-model Claid images using Sharp (3x1 Vertical)
+        # 1. Generate triptych from Fashn VTO images using Sharp
         try:
-            print(f"Stitching {len(on_model_urls)} on-model image(s) via Sharp (3x1 Vertical)...")
+            print(f"Stitching {len(on_model_urls)} VTO image(s) via Sharp (3x1 Vertical)...")
             stitch_result = stitch_collage_via_sharp(
                 on_model_urls, 
                 layout="3x1_vertical", 
@@ -1041,16 +1050,9 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
             
             if stitch_result and stitch_result.get("url"):
                 collage_url = stitch_result["url"]
-                
-                # 4K Upscale: final Master Ingredient for Veo
-                collage_url = upscale_image(
-                    collage_url, mode="gentle",
-                    supabase_client=supabase,
-                    storage_path=f"jobs/{job_id}/on_model_collage_4k.png"
-                )
-                print(f"  4K Master Ingredient (Sharp) upscaled: {collage_url[:60]}")
+                print(f"  Triptych (Sharp): {collage_url[:60]}")
 
-                # Record compute savings in job metadata
+                # Record metadata
                 current_metadata = {}
                 try:
                     job_resp = supabase.table("jobs").select("provider_metadata").eq("id", job_id).single().execute()
@@ -1058,9 +1060,9 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
                 except: pass
                 
                 current_metadata.update({
-                    "compute_savings": "1.5 Gemini tokens",
                     "stitching_mode": "sharp",
-                    "collage_url": collage_url
+                    "collage_url": collage_url,
+                    "pipeline": "fashn_two_step"
                 })
                 
                 supabase.table("jobs").update({
@@ -1068,7 +1070,7 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
                 }).eq("id", job_id).execute()
 
                 veo_ingredients.append(collage_url)
-                print(f"  Ingredient 1 (on-model collage): {collage_url[:60]}")
+                print(f"  Ingredient 1 (VTO triptych): {collage_url[:60]}")
             else:
                 raise Exception("Sharp stitcher returned no URL")
                 
@@ -1086,7 +1088,6 @@ def process_fashion_job(job_id: str, garment_image_url: str, preset_id: str, asp
                     file_options={"content-type": collage_mime, "upsert": "true"}
                 )
                 collage_url = supabase.storage.from_("raw_assets").get_public_url(collage_path)
-                collage_url = upscale_image(collage_url, mode="gentle", supabase_client=supabase, storage_path=f"jobs/{job_id}/on_model_collage_4k.png")
                 veo_ingredients.append(collage_url)
             except Exception as gem_err:
                 print(f"  Gemini fallback also failed: {str(gem_err)}")
