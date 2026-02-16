@@ -8,14 +8,18 @@
  * Starter users get upgrade nudge instead of automation.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { sendInstagramDM } from '@/lib/meta-client'
 import { canAccess, getEffectiveTier, type SubscriptionTier } from '@/lib/tier-config'
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+function getSupabase() {
+    if (!_supabase) {
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+        _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!)
+    }
+    return _supabase
+}
 
 // ── Constants ──────────────────────────────────────────────────
 
@@ -66,7 +70,7 @@ async function checkAndIncrementRateLimit(igAccountId: string): Promise<boolean>
     const now = new Date()
 
     // Fetch current window
-    const { data: limit } = await supabase
+    const { data: limit } = await getSupabase()
         .from('dm_rate_limits')
         .select('*')
         .eq('ig_account_id', igAccountId)
@@ -74,7 +78,7 @@ async function checkAndIncrementRateLimit(igAccountId: string): Promise<boolean>
 
     if (!limit) {
         // First message — create window
-        await supabase.from('dm_rate_limits').insert({
+        await getSupabase().from('dm_rate_limits').insert({
             ig_account_id: igAccountId,
             window_start: now.toISOString(),
             message_count: 1,
@@ -87,7 +91,7 @@ async function checkAndIncrementRateLimit(igAccountId: string): Promise<boolean>
 
     if (elapsed >= RATE_LIMIT_WINDOW_MS) {
         // Window expired — reset
-        await supabase
+        await getSupabase()
             .from('dm_rate_limits')
             .update({ window_start: now.toISOString(), message_count: 1 })
             .eq('ig_account_id', igAccountId)
@@ -99,7 +103,7 @@ async function checkAndIncrementRateLimit(igAccountId: string): Promise<boolean>
     }
 
     // Increment
-    await supabase
+    await getSupabase()
         .from('dm_rate_limits')
         .update({ message_count: limit.message_count + 1 })
         .eq('ig_account_id', igAccountId)
@@ -136,7 +140,7 @@ export async function handleCommentTrigger(event: CommentEvent): Promise<{
     reason?: string
 }> {
     // 1. Find the post owner's connection
-    const { data: conn } = await supabase
+    const { data: conn } = await getSupabase()
         .from('instagram_connections')
         .select('*')
         .eq('ig_user_id', event.mediaOwnerId)
@@ -146,7 +150,7 @@ export async function handleCommentTrigger(event: CommentEvent): Promise<{
     if (!conn) return { success: false, reason: 'no_connection' }
 
     // 2. Tier gating — check automation access
-    const { data: profile } = await supabase
+    const { data: profile } = await getSupabase()
         .from('profiles')
         .select('subscription_status, trial_ends_at')
         .eq('id', conn.user_id)
@@ -158,7 +162,7 @@ export async function handleCommentTrigger(event: CommentEvent): Promise<{
     if (!canAccess(effectiveTier, 'automation')) {
         // Starter users: send upgrade notification instead
         if (baseTier === 'starter') {
-            await supabase.from('dm_log').insert({
+            await getSupabase().from('dm_log').insert({
                 user_id: conn.user_id,
                 ig_recipient_id: event.commenterId,
                 ig_recipient_username: event.commenterUsername || '',
@@ -182,7 +186,7 @@ export async function handleCommentTrigger(event: CommentEvent): Promise<{
     const allowed = await checkAndIncrementRateLimit(conn.ig_user_id)
     if (!allowed) {
         // Log rate-limited attempt
-        await supabase.from('dm_log').insert({
+        await getSupabase().from('dm_log').insert({
             user_id: conn.user_id,
             ig_recipient_id: event.commenterId,
             ig_recipient_username: event.commenterUsername || '',
@@ -196,7 +200,7 @@ export async function handleCommentTrigger(event: CommentEvent): Promise<{
     }
 
     // 5. Find the Rakuten link for this post
-    const { data: linkRow } = await supabase
+    const { data: linkRow } = await getSupabase()
         .from('post_affiliate_links')
         .select('*')
         .eq('user_id', conn.user_id)
@@ -228,7 +232,7 @@ export async function handleCommentTrigger(event: CommentEvent): Promise<{
     })
 
     // 9. Log the DM
-    await supabase.from('dm_log').insert({
+    await getSupabase().from('dm_log').insert({
         user_id: conn.user_id,
         ig_recipient_id: event.commenterId,
         ig_recipient_username: event.commenterUsername || '',
@@ -266,7 +270,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
     reason?: string
 }> {
     // 1. Find the account owner's connection
-    const { data: conn } = await supabase
+    const { data: conn } = await getSupabase()
         .from('instagram_connections')
         .select('*')
         .eq('ig_user_id', event.recipientId)
@@ -276,7 +280,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
     if (!conn) return { success: false, reason: 'no_connection' }
 
     // 2. Tier gating — sizing bot requires Pro
-    const { data: profile } = await supabase
+    const { data: profile } = await getSupabase()
         .from('profiles')
         .select('subscription_status, trial_ends_at')
         .eq('id', conn.user_id)
@@ -299,7 +303,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
     if (!allowed) return { success: false, reason: 'rate_limited' }
 
     // 5. Find the most recent DM we sent to this user to get the product context
-    const { data: recentDM } = await supabase
+    const { data: recentDM } = await getSupabase()
         .from('dm_log')
         .select('*')
         .eq('user_id', conn.user_id)
@@ -315,7 +319,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
     let productName = 'this item'
     let productBrand = ''
     if (mediaId) {
-        const { data: linkRow } = await supabase
+        const { data: linkRow } = await getSupabase()
             .from('post_affiliate_links')
             .select('product_name, product_brand')
             .eq('user_id', conn.user_id)
@@ -328,7 +332,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
     }
 
     // 7. Find the user's identity (for body measurements / VTO)
-    const { data: identity } = await supabase
+    const { data: identity } = await getSupabase()
         .from('identities')
         .select('id, master_identity_url')
         .eq('user_id', conn.user_id)
@@ -339,7 +343,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
     // 8. If we have a VTO render for this product, send it
     if (identity?.master_identity_url && mediaId) {
         // Look for existing VTO in media_library
-        const { data: vtoRender } = await supabase
+        const { data: vtoRender } = await getSupabase()
             .from('media_library')
             .select('image_url')
             .eq('user_id', conn.user_id)
@@ -356,7 +360,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
             })
 
             // Log image DM
-            await supabase.from('dm_log').insert({
+            await getSupabase().from('dm_log').insert({
                 user_id: conn.user_id,
                 ig_recipient_id: event.senderId,
                 ig_recipient_username: event.senderUsername || '',
@@ -379,7 +383,7 @@ export async function handleSizingIntent(event: SizingMessageEvent): Promise<{
     })
 
     // Log sizing DM
-    await supabase.from('dm_log').insert({
+    await getSupabase().from('dm_log').insert({
         user_id: conn.user_id,
         ig_recipient_id: event.senderId,
         ig_recipient_username: event.senderUsername || '',

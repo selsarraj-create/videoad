@@ -13,12 +13,16 @@
  *   if (apiRejected) await recordViolation(userId, 'safety_filter', 'kie', jobId, details)
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+function getSupabase() {
+    if (!_supabase) {
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+        _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!)
+    }
+    return _supabase
+}
 
 export type AccountStatus = 'active' | 'cooldown' | 'suspended'
 
@@ -39,7 +43,7 @@ export interface ModerationGate {
 // ── Check if user is allowed to generate ─────────────────────────
 
 export async function checkModeration(userId: string): Promise<ModerationGate> {
-    const { data: profile } = await supabase
+    const { data: profile } = await getSupabase()
         .from('profiles')
         .select('account_status, cooldown_until')
         .eq('id', userId)
@@ -84,7 +88,7 @@ export async function checkModeration(userId: string): Promise<ModerationGate> {
         }
 
         // Cooldown expired — reactivate
-        await supabase
+        await getSupabase()
             .from('profiles')
             .update({ account_status: 'active', cooldown_until: null })
             .eq('id', userId)
@@ -119,7 +123,7 @@ export async function recordViolation(
     message: string
 }> {
     // 1. Log the violation
-    await supabase.from('content_violations').insert({
+    await getSupabase().from('content_violations').insert({
         user_id: userId,
         violation_type: violationType,
         source_api: sourceApi,
@@ -132,7 +136,7 @@ export async function recordViolation(
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)
 
-    const { count } = await supabase
+    const { count } = await getSupabase()
         .from('content_violations')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
@@ -141,7 +145,7 @@ export async function recordViolation(
     const strikeCount = count ?? 0
 
     // 3. Count cooldowns this month (how many times we've put them in cooldown)
-    const { count: cooldownCount } = await supabase
+    const { count: cooldownCount } = await getSupabase()
         .from('content_violations')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
@@ -163,13 +167,13 @@ export async function recordViolation(
     if (strikeCount === 3 && priorCooldowns === 0) {
         const cooldownUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-        await supabase
+        await getSupabase()
             .from('profiles')
             .update({ account_status: 'cooldown', cooldown_until: cooldownUntil })
             .eq('id', userId)
 
         // Log the cooldown event itself
-        await supabase.from('content_violations').insert({
+        await getSupabase().from('content_violations').insert({
             user_id: userId,
             violation_type: 'cooldown_applied',
             source_api: 'internal',
@@ -186,7 +190,7 @@ export async function recordViolation(
     // ── 2nd ban (already had a cooldown this month): Permanent suspension ──
     if (priorCooldowns >= 1) {
         // Suspend account
-        await supabase
+        await getSupabase()
             .from('profiles')
             .update({
                 account_status: 'suspended',
@@ -195,7 +199,7 @@ export async function recordViolation(
             .eq('id', userId)
 
         // Refund remaining credits
-        const { data: profile } = await supabase
+        const { data: profile } = await getSupabase()
             .from('profiles')
             .select('credit_balance')
             .eq('id', userId)
@@ -203,14 +207,14 @@ export async function recordViolation(
 
         if (profile?.credit_balance && profile.credit_balance > 0) {
             // Log refund as a credit transaction
-            await supabase.from('credit_transactions').insert({
+            await getSupabase().from('credit_transactions').insert({
                 user_id: userId,
                 amount: profile.credit_balance,
                 type: 'refund',
                 description: `Credit refund on account suspension (${profile.credit_balance} credits)`,
             })
 
-            await supabase
+            await getSupabase()
                 .from('profiles')
                 .update({ credit_balance: 0 })
                 .eq('id', userId)
@@ -225,12 +229,12 @@ export async function recordViolation(
 
     // Fallback: apply cooldown for further strikes
     const cooldownUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-    await supabase
+    await getSupabase()
         .from('profiles')
         .update({ account_status: 'cooldown', cooldown_until: cooldownUntil })
         .eq('id', userId)
 
-    await supabase.from('content_violations').insert({
+    await getSupabase().from('content_violations').insert({
         user_id: userId,
         violation_type: 'cooldown_applied',
         source_api: 'internal',
@@ -257,7 +261,7 @@ export async function getModerationStatus(userId: string): Promise<{
         created_at: string
     }>
 }> {
-    const { data: profile } = await supabase
+    const { data: profile } = await getSupabase()
         .from('profiles')
         .select('account_status, cooldown_until')
         .eq('id', userId)
@@ -267,14 +271,14 @@ export async function getModerationStatus(userId: string): Promise<{
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)
 
-    const { count } = await supabase
+    const { count } = await getSupabase()
         .from('content_violations')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
         .gte('created_at', monthStart.toISOString())
         .neq('violation_type', 'cooldown_applied')
 
-    const { data: violations } = await supabase
+    const { data: violations } = await getSupabase()
         .from('content_violations')
         .select('id, violation_type, source_api, created_at')
         .eq('user_id', userId)

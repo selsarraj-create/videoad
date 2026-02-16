@@ -8,12 +8,16 @@
  * User credits are the billing unit; Kie.ai credits are the cost unit.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+function getSupabase() {
+    if (!_supabase) {
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+        _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!)
+    }
+    return _supabase
+}
 
 // ── Credit Cost Map ────────────────────────────────────────────
 
@@ -33,7 +37,7 @@ export function getCreditCost(engineId: string): number {
 // ── Balance Queries ────────────────────────────────────────────
 
 export async function getUserBalance(userId: string): Promise<number> {
-    const { data } = await supabase
+    const { data } = await getSupabase()
         .from('profiles')
         .select('credit_balance')
         .eq('id', userId)
@@ -71,7 +75,7 @@ export async function deductCredits(
     }
 
     // Fetch current balance
-    const { data: profile, error: fetchErr } = await supabase
+    const { data: profile, error: fetchErr } = await getSupabase()
         .from('profiles')
         .select('credit_balance')
         .eq('id', userId)
@@ -94,7 +98,7 @@ export async function deductCredits(
 
     // Deduct atomically
     const newBalance = currentBalance - required
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await getSupabase()
         .from('profiles')
         .update({ credit_balance: newBalance })
         .eq('id', userId)
@@ -105,7 +109,7 @@ export async function deductCredits(
     }
 
     // Log the transaction
-    await supabase.from('credit_transactions').insert({
+    await getSupabase().from('credit_transactions').insert({
         user_id: userId,
         amount: -required,
         balance_after: newBalance,
@@ -126,7 +130,7 @@ export async function grantMonthlyCredits(
     userId: string,
     amount: number
 ): Promise<void> {
-    const { data: profile } = await supabase
+    const { data: profile } = await getSupabase()
         .from('profiles')
         .select('credit_balance')
         .eq('id', userId)
@@ -136,12 +140,12 @@ export async function grantMonthlyCredits(
 
     const newBalance = (profile.credit_balance ?? 0) + amount
 
-    await supabase
+    await getSupabase()
         .from('profiles')
         .update({ credit_balance: newBalance })
         .eq('id', userId)
 
-    await supabase.from('credit_transactions').insert({
+    await getSupabase().from('credit_transactions').insert({
         user_id: userId,
         amount,
         balance_after: newBalance,
@@ -165,7 +169,7 @@ export async function addPurchasedCredits(
     credits: number,
     packId: string
 ): Promise<number> {
-    const { data: profile } = await supabase
+    const { data: profile } = await getSupabase()
         .from('profiles')
         .select('credit_balance')
         .eq('id', userId)
@@ -175,12 +179,12 @@ export async function addPurchasedCredits(
 
     const newBalance = (profile.credit_balance ?? 0) + credits
 
-    await supabase
+    await getSupabase()
         .from('profiles')
         .update({ credit_balance: newBalance })
         .eq('id', userId)
 
-    await supabase.from('credit_transactions').insert({
+    await getSupabase().from('credit_transactions').insert({
         user_id: userId,
         amount: credits,
         balance_after: newBalance,

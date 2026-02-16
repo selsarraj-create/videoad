@@ -1,10 +1,14 @@
 import axios from 'axios';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+let _supabase: SupabaseClient | null = null;
+function getSupabase() {
+    if (!_supabase) {
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
+        _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!);
+    }
+    return _supabase;
+}
 
 const SKIMLINKS_PUBLISHER_ID = process.env.SKIMLINKS_PUBLISHER_ID;
 const SKIMLINKS_CLIENT_ID = process.env.SKIMLINKS_CLIENT_ID;
@@ -57,7 +61,7 @@ export class SkimlinksIngestor {
                 const userShare = rawCommission * 0.5;
                 const platformFee = rawCommission * 0.5;
 
-                const { error: ledgerError } = await supabase
+                const { error: ledgerError } = await getSupabase()
                     .from('revenue_ledger')
                     .upsert({
                         user_id: userId,

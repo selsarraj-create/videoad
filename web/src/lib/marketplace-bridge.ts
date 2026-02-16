@@ -50,7 +50,7 @@ export class MarketplaceBridge {
         this.ebayClientId = process.env.EBAY_CLIENT_ID || '';
         this.ebayClientSecret = process.env.EBAY_CLIENT_SECRET || '';
         this.supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-        this.supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+        this.supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY || '';
     }
 
     // ============================================================
