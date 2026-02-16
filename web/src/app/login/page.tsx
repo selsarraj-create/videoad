@@ -5,10 +5,9 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Loader2, Sparkles, Mail, Lock, ArrowRight, Zap, Check, Crown, Rocket } from "lucide-react"
+import { Loader2, Sparkles, Mail, Lock, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-import type { SubscriptionTier } from "@/lib/tier-config"
 
 /* ── SVG brand icons ── */
 function GoogleIcon({ className }: { className?: string }) {
@@ -30,65 +29,8 @@ function GitHubIcon({ className }: { className?: string }) {
     )
 }
 
-const TIERS: {
-    id: SubscriptionTier
-    name: string
-    price: string
-    period: string
-    icon: React.ReactNode
-    features: string[]
-    popular?: boolean
-    accent: string
-}[] = [
-        {
-            id: 'starter',
-            name: 'Starter',
-            price: '$0',
-            period: 'forever free',
-            icon: <Sparkles className="w-5 h-5" />,
-            features: [
-                'Virtual Try-On (3-pose)',
-                '100% affiliate commission',
-                'Bring your own links',
-                'Basic video generation',
-            ],
-            accent: 'border-nimbus/40 hover:border-foreground/30',
-        },
-        {
-            id: 'pro',
-            name: 'Pro Creator',
-            price: '$10',
-            period: '/month',
-            icon: <Zap className="w-5 h-5" />,
-            features: [
-                'Everything in Starter',
-                'Instagram DM automation',
-                'AI Sizing Bot',
-                '7-day free trial',
-            ],
-            popular: true,
-            accent: 'border-primary/40 hover:border-primary',
-        },
-        {
-            id: 'high_octane',
-            name: 'High-Octane',
-            price: '$49',
-            period: '/month',
-            icon: <Crown className="w-5 h-5" />,
-            features: [
-                'Everything in Pro',
-                '20 credits/month',
-                'Priority rendering',
-                'Kling 3.0 Omni engine',
-            ],
-            accent: 'border-amber-400/40 hover:border-amber-400',
-        },
-    ]
-
 function LoginContent() {
     const [mode, setMode] = useState<'login' | 'signup'>('login')
-    const [signupStep, setSignupStep] = useState<'tier' | 'credentials'>('tier')
-    const [selectedTier, setSelectedTier] = useState<SubscriptionTier>('starter')
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [loading, setLoading] = useState(false)
@@ -121,7 +63,7 @@ function LoginContent() {
             const res = await fetch('/api/signup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, selected_tier: selectedTier })
+                body: JSON.stringify({ email, password, selected_tier: 'starter' })
             })
             const data = await res.json()
             if (!res.ok) {
@@ -196,21 +138,18 @@ function LoginContent() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.15 }}
-                className={`w-full relative z-10 transition-all duration-500 ${mode === 'signup' && signupStep === 'tier' ? 'max-w-3xl' : 'max-w-md'}`}
+                className="w-full max-w-md relative z-10"
             >
                 <div className="frosted-touch p-10 shadow-xl space-y-8">
                     {/* Header */}
                     <div className="text-center space-y-2">
                         <h2 className="font-serif text-3xl tracking-tight text-foreground">
-                            {mode === 'login' ? 'Welcome Back' :
-                                signupStep === 'tier' ? 'Choose Your Plan' : 'Create Your Account'}
+                            {mode === 'login' ? 'Welcome Back' : 'Create Your Account'}
                         </h2>
                         <p className="text-xs text-muted-foreground uppercase tracking-[0.2em]">
                             {mode === 'login'
                                 ? 'Sign in to your creative space'
-                                : signupStep === 'tier'
-                                    ? 'Select the tier that fits your workflow'
-                                    : `${TIERS.find(t => t.id === selectedTier)?.name} plan selected`
+                                : 'Start free — upgrade anytime from your dashboard'
                             }
                         </p>
                     </div>
@@ -227,7 +166,7 @@ function LoginContent() {
                             Sign In
                         </button>
                         <button
-                            onClick={() => { setMode('signup'); setSignupStep('tier'); setError(null); setSuccess(null) }}
+                            onClick={() => { setMode('signup'); setError(null); setSuccess(null) }}
                             className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 border-l border-nimbus ${mode === 'signup'
                                 ? 'bg-foreground text-background'
                                 : 'bg-transparent text-muted-foreground hover:text-foreground'
@@ -238,100 +177,8 @@ function LoginContent() {
                     </div>
 
                     <AnimatePresence mode="wait">
-                        {mode === 'signup' && signupStep === 'tier' ? (
-                            /* ── TIER SELECTION STEP ── */
-                            <motion.div
-                                key="tier-select"
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -20 }}
-                                transition={{ duration: 0.3 }}
-                                className="space-y-6"
-                            >
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    {TIERS.map((tier) => (
-                                        <button
-                                            key={tier.id}
-                                            onClick={() => setSelectedTier(tier.id)}
-                                            className={`relative p-6 border-2 transition-all duration-300 text-left space-y-4 group
-                                                ${selectedTier === tier.id
-                                                    ? tier.id === 'high_octane'
-                                                        ? 'border-amber-400 bg-amber-400/5 shadow-lg'
-                                                        : tier.id === 'pro'
-                                                            ? 'border-primary bg-primary/5 shadow-lg'
-                                                            : 'border-foreground bg-foreground/5 shadow-lg'
-                                                    : tier.accent
-                                                }`}
-                                        >
-                                            {tier.popular && (
-                                                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                                                    <span className="bg-primary text-primary-foreground px-3 py-1 text-[8px] font-bold uppercase tracking-[0.2em]">
-                                                        Most Popular
-                                                    </span>
-                                                </div>
-                                            )}
-
-                                            {/* Selection indicator */}
-                                            <div className={`absolute top-4 right-4 w-5 h-5 border-2 flex items-center justify-center transition-all
-                                                ${selectedTier === tier.id
-                                                    ? tier.id === 'high_octane'
-                                                        ? 'border-amber-400 bg-amber-400'
-                                                        : tier.id === 'pro'
-                                                            ? 'border-primary bg-primary'
-                                                            : 'border-foreground bg-foreground'
-                                                    : 'border-nimbus'
-                                                }`}>
-                                                {selectedTier === tier.id && <Check className="w-3 h-3 text-white" />}
-                                            </div>
-
-                                            <div className={`w-10 h-10 flex items-center justify-center transition-colors
-                                                ${selectedTier === tier.id
-                                                    ? tier.id === 'high_octane'
-                                                        ? 'text-amber-500'
-                                                        : tier.id === 'pro'
-                                                            ? 'text-primary'
-                                                            : 'text-foreground'
-                                                    : 'text-muted-foreground'
-                                                }`}>
-                                                {tier.icon}
-                                            </div>
-
-                                            <div>
-                                                <p className="text-sm font-bold uppercase tracking-widest">{tier.name}</p>
-                                                <div className="flex items-baseline gap-1 mt-1">
-                                                    <span className="text-2xl font-serif">{tier.price}</span>
-                                                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{tier.period}</span>
-                                                </div>
-                                            </div>
-
-                                            <ul className="space-y-2">
-                                                {tier.features.map((feat, i) => (
-                                                    <li key={i} className="flex items-start gap-2">
-                                                        <Check className={`w-3 h-3 mt-0.5 flex-shrink-0
-                                                            ${selectedTier === tier.id
-                                                                ? tier.id === 'high_octane' ? 'text-amber-500'
-                                                                    : tier.id === 'pro' ? 'text-primary'
-                                                                        : 'text-foreground'
-                                                                : 'text-nimbus'
-                                                            }`} />
-                                                        <span className="text-[11px] text-muted-foreground leading-tight">{feat}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <Button
-                                    onClick={() => setSignupStep('credentials')}
-                                    className="w-full h-14 bg-foreground text-background hover:bg-primary text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 rounded-none shadow-xl hover:shadow-2xl"
-                                >
-                                    Continue with {TIERS.find(t => t.id === selectedTier)?.name}
-                                    <ArrowRight className="w-4 h-4 ml-2" />
-                                </Button>
-                            </motion.div>
-                        ) : (
-                            /* ── CREDENTIALS STEP (login or signup step 2) ── */
+                        {(
+                            /* ── CREDENTIALS (login or signup) ── */
                             <motion.div
                                 key="credentials"
                                 initial={{ opacity: 0, x: 20 }}
@@ -384,15 +231,7 @@ function LoginContent() {
                                     </div>
                                 </div>
 
-                                {/* Back to tier selection in signup */}
-                                {mode === 'signup' && (
-                                    <button
-                                        onClick={() => setSignupStep('tier')}
-                                        className="text-[10px] text-muted-foreground hover:text-primary font-bold uppercase tracking-widest transition-colors flex items-center gap-1"
-                                    >
-                                        ← Change plan
-                                    </button>
-                                )}
+
 
                                 {/* Email/Password Form */}
                                 <form onSubmit={handleSubmit} className="space-y-5">
@@ -476,7 +315,7 @@ function LoginContent() {
                     <div className="text-center pt-2">
                         <p className="text-xs text-muted-foreground">
                             {mode === 'login'
-                                ? <>Don&apos;t have an account?{' '}<button onClick={() => { setMode('signup'); setSignupStep('tier') }} className="text-primary hover:text-foreground font-bold uppercase tracking-widest text-[10px] transition-colors">Create one</button></>
+                                ? <>Don&apos;t have an account?{' '}<button onClick={() => { setMode('signup'); setError(null); setSuccess(null) }} className="text-primary hover:text-foreground font-bold uppercase tracking-widest text-[10px] transition-colors">Create one</button></>
                                 : <>Already have an account?{' '}<button onClick={() => setMode('login')} className="text-primary hover:text-foreground font-bold uppercase tracking-widest text-[10px] transition-colors">Sign in</button></>
                             }
                         </p>
