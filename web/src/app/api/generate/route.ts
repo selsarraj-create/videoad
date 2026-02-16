@@ -4,6 +4,12 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
     const supabase = await createClient()
 
+    // Auth check
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     try {
         const body = await request.json()
         const { shots, prompt, model, tier, provider_metadata, workspace_id, is4k, anchorStyle } = body
@@ -24,6 +30,7 @@ export async function POST(request: Request) {
                 .from('jobs')
                 .insert({
                     project_id: workspace_id,
+                    user_id: user.id,
                     status: 'pending',
                     input_params: {
                         prompt: item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt,

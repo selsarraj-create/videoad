@@ -183,17 +183,20 @@ export default function StudioPage() {
         fetchPersonas()
     }, [])
 
-    // Poll jobs + media library
+    // Poll jobs + media library (filtered by user_id)
     useEffect(() => {
+        if (!user?.id) return
+        const uid = user.id
+
         const fetchData = async () => {
-            const { data: jobData } = await supabase.from('jobs').select('*').order('created_at', { ascending: false }).limit(30)
+            const { data: jobData } = await supabase.from('jobs').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(30)
             if (jobData) setJobs(jobData as Job[])
 
-            const { data: mediaData } = await supabase.from('media_library').select('*').order('created_at', { ascending: false })
+            const { data: mediaData } = await supabase.from('media_library').select('*').eq('user_id', uid).order('created_at', { ascending: false })
             if (mediaData) setMediaLibrary(mediaData as MediaItem[])
 
             // Fetch Revenue Ledger
-            const { data: ledgerData } = await supabase.from('revenue_ledger').select('*').order('created_at', { ascending: false })
+            const { data: ledgerData } = await supabase.from('revenue_ledger').select('*').eq('user_id', uid).order('created_at', { ascending: false })
             if (ledgerData) {
                 setLedger(ledgerData)
                 const total = ledgerData.reduce((sum, item) => sum + Number(item.user_share), 0)
@@ -215,11 +218,9 @@ export default function StudioPage() {
 
                 // Fetch Adoption Metrics (wrapped in try/catch in case migration not yet applied)
                 try {
-                    if (user?.id) {
-                        const { count: remixes } = await supabase.from('public_showcase').select('*', { count: 'exact', head: true }).eq('original_creator_id', user.id)
-                        const bonusTotal = ledgerData.filter(l => l.metadata?.role === 'original_creator').reduce((sum, item) => sum + Number(item.user_share), 0)
-                        setAdoptionMetrics({ remixCount: remixes || 0, bonusEarned: bonusTotal })
-                    }
+                    const { count: remixes } = await supabase.from('public_showcase').select('*', { count: 'exact', head: true }).eq('original_creator_id', uid)
+                    const bonusTotal = ledgerData.filter(l => l.metadata?.role === 'original_creator').reduce((sum, item) => sum + Number(item.user_share), 0)
+                    setAdoptionMetrics({ remixCount: remixes || 0, bonusEarned: bonusTotal })
                 } catch (adoptionErr) {
                     console.log('[Dashboard] Adoption metrics not available yet:', adoptionErr)
                 }
@@ -233,7 +234,7 @@ export default function StudioPage() {
         fetchData()
         const interval = setInterval(fetchData, 4000)
         return () => clearInterval(interval)
-    }, [])
+    }, [user?.id])
 
     // Check for completed try-on jobs and auto-save to media library
     const savingJobIds = useRef(new Set<string>())
@@ -245,6 +246,7 @@ export default function StudioPage() {
                 savingJobIds.current.add(job.id)
                 supabase.from('media_library').upsert({
                     job_id: job.id,
+                    user_id: user?.id,
                     image_url: job.output_url,
                     person_image_url: (job.input_params as Record<string, string>)?.person_image_url || null,
                     garment_image_url: (job.input_params as Record<string, string>)?.garment_image_url || null,

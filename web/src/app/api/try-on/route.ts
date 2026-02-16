@@ -58,6 +58,7 @@ export async function POST(request: Request) {
             .from('jobs')
             .insert({
                 project_id: project.id,
+                user_id: user.id,
                 status: 'pending',
                 input_params: {
                     person_image_url,
