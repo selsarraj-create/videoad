@@ -1,37 +1,40 @@
 /**
- * MarketplaceBridge v2 — Fashion Asset Pipeline
+ * MarketplaceBridge v3 — Oxylabs + Google Trends Pipeline
  * 
  * Architecture:
  * 1. Library Lookup: Check asset_library for cached VTO renders
- * 2. Google Merchant API: Ingest product data with real product images
- * 3. Vertex AI VTO: Generate Universal Model try-on renders
+ * 2. Oxylabs Google Shopping: Universal product search across all merchants
+ * 3. Vertex AI VTO: Generate Universal Model try-on renders (on-demand)
  * 4. SynthID + IPTC: Compliance watermarking
  * 5. Skimlinks Link API: Wrap merchant URLs at click time only
- * 6. eBay Browse API: Secondary source (unchanged)
- * 7. Premium Fallbacks: Staff Pick items when APIs are offline
+ * 6. eBay Browse API: Secondary source
+ * 7. Premium Fallbacks: Staff Pick items when all APIs are offline
  */
 
 import axios from 'axios';
-import { merchantIngestor, MerchantProduct } from './merchant-ingestor';
+import { oxylabsIngestor, OxylabsProduct } from './oxylabs-ingestor';
 import { vertexVTO } from './vertex-vto';
 import { complianceTagger } from './compliance-tagger';
 
 export interface UnifiedGarment {
     id: string;
-    source: 'merchant' | 'ebay' | 'library';
+    source: 'oxylabs' | 'ebay' | 'library' | 'trending';
     title: string;
     price: string;
     currency: string;
     imageUrl: string;            // Product image OR VTO render
-    originalImageUrl?: string;   // Raw merchant product image
+    originalImageUrl?: string;   // Raw product image
     vtoImageUrl?: string;        // VTO render (if generated)
     affiliateUrl: string;        // Skimlinks-wrapped at serve time
-    merchantLink?: string;       // Raw merchant URL (for Skimlinks wrapping)
+    merchantLink?: string;       // Raw merchant URL
     brand?: string;
     category?: string;
+    merchant?: string;
     merchantOfferId?: string;
     authenticityGuaranteed?: boolean;
     synthidApplied?: boolean;
+    isTrending?: boolean;
+    trendKeyword?: string;
 }
 
 export class MarketplaceBridge {
@@ -54,22 +57,16 @@ export class MarketplaceBridge {
     // 1. LIBRARY LOOKUP (The Cost-Saver)
     // ============================================================
 
-    /**
-     * Check asset_library for cached VTO renders matching the query.
-     * Returns immediately if found, saving Merchant API + Vertex AI costs.
-     */
     private async libraryLookup(query: string, category?: string): Promise<UnifiedGarment[]> {
         if (!this.supabaseUrl || !this.supabaseKey) return [];
 
         try {
-            // Build search tags
             const tags = [query.toLowerCase()];
             if (category && category !== 'All') tags.push(category.toLowerCase());
 
-            // Use full-text search on title + tag matching
             const searchParam = encodeURIComponent(query);
             const resp = await fetch(
-                `${this.supabaseUrl}/rest/v1/asset_library?or=(title.ilike.*${searchParam}*,tags.cs.{${tags.join(',')}})&limit=20`,
+                `${this.supabaseUrl}/rest/v1/asset_library?or=(title.ilike.*${searchParam}*,tags.cs.{${tags.join(',')}})\&limit=20`,
                 {
                     headers: {
                         'apikey': this.supabaseKey,
@@ -90,7 +87,7 @@ export class MarketplaceBridge {
 
             return items.map((item: any) => ({
                 id: `lib-${item.id}`,
-                source: 'library' as const,
+                source: (item.is_trending ? 'trending' : 'library') as any,
                 title: item.title,
                 price: item.price || '0.00',
                 currency: item.currency || 'USD',
@@ -101,8 +98,11 @@ export class MarketplaceBridge {
                 merchantLink: item.merchant_link,
                 brand: item.brand,
                 category: item.category,
+                merchant: item.merchant_name,
                 merchantOfferId: item.merchant_offer_id,
                 synthidApplied: item.synthid_applied,
+                isTrending: item.is_trending,
+                trendKeyword: item.trend_keyword,
             }));
         } catch (error: any) {
             console.log('[Marketplace] Library lookup error:', error.message);
@@ -111,59 +111,57 @@ export class MarketplaceBridge {
     }
 
     // ============================================================
-    // 2. GOOGLE MERCHANT API INGESTION
+    // 2. OXYLABS GOOGLE SHOPPING (Primary Source)
     // ============================================================
 
-    /**
-     * Fetch products from Google Merchant API and optionally run VTO.
-     * Results are indexed in asset_library for future cache hits.
-     */
-    async fetchMerchantItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
-        const searchTerm = query || (category && category !== 'All' ? category : 'luxury fashion');
-
+    async fetchOxylabsItems(query: string, userId: string, category?: string): Promise<UnifiedGarment[]> {
         try {
-            const products = await merchantIngestor.searchProducts(searchTerm, 20);
+            let products: OxylabsProduct[];
+
+            if (category && category !== 'All' && !query) {
+                products = await oxylabsIngestor.searchByCategory(category, 20);
+            } else {
+                const searchTerm = query || (category && category !== 'All' ? category : 'luxury fashion');
+                products = await oxylabsIngestor.searchProducts(searchTerm, 20);
+            }
+
             if (products.length === 0) {
-                console.log('[Marketplace] Merchant API returned no results.');
+                console.log('[Marketplace] Oxylabs returned no results.');
                 return [];
             }
 
-            console.log(`[Marketplace] Merchant API: ${products.length} products for "${searchTerm}"`);
+            console.log(`[Marketplace] Oxylabs: ${products.length} products`);
 
-            // Map products to garments — use original product images
-            // VTO generation happens on-demand via /api/marketplace-vto
-            const garments: UnifiedGarment[] = products.map((p: MerchantProduct) => ({
-                id: `merchant-${p.offerId}`,
-                source: 'merchant' as const,
+            const garments: UnifiedGarment[] = products.map((p, idx) => ({
+                id: `oxy-${idx}-${Date.now()}`,
+                source: 'oxylabs' as const,
                 title: p.title,
                 price: p.price,
                 currency: p.currency,
-                imageUrl: p.imageLink,               // High-res product image
-                originalImageUrl: p.imageLink,
-                affiliateUrl: this.wrapSkimlinks(p.link, userId),
-                merchantLink: p.link,
+                imageUrl: p.imageUrl,
+                originalImageUrl: p.imageUrl,
+                affiliateUrl: this.wrapSkimlinks(p.productUrl, userId),
+                merchantLink: p.productUrl,
                 brand: p.brand,
-                category: p.category || category,
-                merchantOfferId: p.offerId,
+                category: category || undefined,
+                merchant: p.merchant,
+                merchantOfferId: `oxy-${p.position}`,
             }));
 
-            // Background: index new products in asset_library for future lookups
-            this.indexProducts(products).catch(err =>
+            // Background: index in asset_library
+            this.indexOxylabsProducts(products, category).catch(err =>
                 console.log('[Marketplace] Background indexing error:', err.message)
             );
 
             return garments;
         } catch (error: any) {
-            console.error('[Marketplace] Merchant API Error:', error.message);
+            console.error('[Marketplace] Oxylabs Error:', error.message);
             return [];
         }
     }
 
-    /**
-     * Index products in asset_library for future cache hits.
-     * Called in background — doesn't block the response.
-     */
-    private async indexProducts(products: MerchantProduct[]): Promise<void> {
+    /** Index Oxylabs products in asset_library for future cache hits. */
+    private async indexOxylabsProducts(products: OxylabsProduct[], category?: string): Promise<void> {
         if (!this.supabaseUrl || !this.supabaseKey) return;
 
         for (const p of products) {
@@ -177,23 +175,26 @@ export class MarketplaceBridge {
                         'Prefer': 'resolution=ignore-duplicates',
                     },
                     body: JSON.stringify({
-                        merchant_offer_id: p.offerId,
+                        merchant_offer_id: `oxy-${p.position}-${p.title.slice(0, 20)}`,
                         title: p.title,
                         brand: p.brand,
-                        category: p.category,
-                        original_image_url: p.imageLink,
-                        merchant_link: p.link,
+                        category: category,
+                        category_id: category?.toLowerCase(),
+                        original_image_url: p.imageUrl,
+                        merchant_link: p.productUrl,
+                        merchant_name: p.merchant,
                         price: p.price,
                         currency: p.currency,
                         tags: [
                             p.brand?.toLowerCase(),
-                            p.category?.toLowerCase(),
+                            category?.toLowerCase(),
+                            p.merchant?.toLowerCase(),
                             ...p.title.toLowerCase().split(/\s+/).slice(0, 5),
                         ].filter(Boolean),
                     }),
                 });
-            } catch (err) {
-                // Silently continue — indexing is best-effort
+            } catch {
+                // Silently continue
             }
         }
     }
@@ -202,10 +203,6 @@ export class MarketplaceBridge {
     // 3. SKIMLINKS LINK API (Commission-Only Bridge)
     // ============================================================
 
-    /**
-     * Wrap a merchant URL with Skimlinks for affiliate commission tracking.
-     * Called at serve time — never at ingestion.
-     */
     wrapSkimlinks(merchantUrl: string, userId: string): string {
         if (!this.skimlinksPublisherId || !merchantUrl || merchantUrl === '#') {
             return merchantUrl || '#';
@@ -216,7 +213,7 @@ export class MarketplaceBridge {
     }
 
     // ============================================================
-    // 4. EBAY (Secondary Source — Unchanged)
+    // 4. EBAY (Secondary Source)
     // ============================================================
 
     private async getEbayToken(): Promise<string | null> {
@@ -246,11 +243,8 @@ export class MarketplaceBridge {
 
     private getEbayCategoryId(category?: string): string | null {
         const mapping: Record<string, string> = {
-            'Outerwear': '15724',
-            'Shirts': '15724',
-            'Bags': '169291',
-            'Accessories': '4251',
-            'Shoes': '3034'
+            'Outerwear': '15724', 'Shirts': '15724', 'Bags': '169291',
+            'Accessories': '4251', 'Shoes': '3034', 'Dresses': '63861',
         };
         return category ? mapping[category] || null : null;
     }
@@ -285,7 +279,7 @@ export class MarketplaceBridge {
                 imageUrl: item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl,
                 affiliateUrl: `${item.itemAffiliateWebUrl || item.itemWebUrl}${item.itemWebUrl.includes('?') ? '&' : '?'}customid=${userId}`,
                 brand: item.brand,
-                authenticityGuaranteed: item.topRatedListing || false
+                authenticityGuaranteed: item.topRatedListing || false,
             }));
         } catch (error: any) {
             console.error('[Marketplace] eBay Search Error:', error.response?.status, error.response?.data || error.message);
@@ -300,38 +294,26 @@ export class MarketplaceBridge {
     private getFallbackItems(): UnifiedGarment[] {
         return [
             {
-                id: 'fallback-1',
-                source: 'merchant',
+                id: 'fallback-1', source: 'oxylabs',
                 title: 'Loro Piana - Open Walk Suede Boots',
-                price: '950.00',
-                currency: 'USD',
+                price: '950.00', currency: 'USD',
                 imageUrl: '/placeholders/loropiana-boots.png',
-                affiliateUrl: '#',
-                brand: 'Loro Piana',
-                category: 'Shoes'
+                affiliateUrl: '#', brand: 'Loro Piana', category: 'Shoes'
             },
             {
-                id: 'fallback-2',
-                source: 'ebay',
+                id: 'fallback-2', source: 'ebay',
                 title: 'Vintage Hermès Birkin 35 - Gold Hardware',
-                price: '12500.00',
-                currency: 'USD',
+                price: '12500.00', currency: 'USD',
                 imageUrl: '/placeholders/hermes-birkin.png',
-                affiliateUrl: '#',
-                brand: 'Hermès',
-                category: 'Bags',
+                affiliateUrl: '#', brand: 'Hermès', category: 'Bags',
                 authenticityGuaranteed: true
             },
             {
-                id: 'fallback-3',
-                source: 'merchant',
+                id: 'fallback-3', source: 'oxylabs',
                 title: 'Brunello Cucinelli - Double-Breasted Cashmere Coat',
-                price: '4800.00',
-                currency: 'USD',
+                price: '4800.00', currency: 'USD',
                 imageUrl: '/placeholders/cucinelli-coat.png',
-                affiliateUrl: '#',
-                brand: 'Brunello Cucinelli',
-                category: 'Outerwear'
+                affiliateUrl: '#', brand: 'Brunello Cucinelli', category: 'Outerwear'
             }
         ];
     }
@@ -340,13 +322,6 @@ export class MarketplaceBridge {
     // 6. UNIFIED SEARCH (Entry Point)
     // ============================================================
 
-    /**
-     * Primary search entry point with full pipeline:
-     * 1. Library cache check
-     * 2. Google Merchant API (on miss)
-     * 3. eBay secondary source
-     * 4. Premium fallbacks (last resort)
-     */
     async searchAll(query: string, userId: string, category?: string, brand?: string): Promise<UnifiedGarment[]> {
         // Step 1: Library Lookup (cost-saver)
         let libraryItems = await this.libraryLookup(query || category || 'luxury', category);
@@ -358,18 +333,18 @@ export class MarketplaceBridge {
             return libraryItems;
         }
 
-        // Step 2: Fresh ingestion from Merchant API + eBay
-        const [merchant, ebay] = await Promise.all([
-            this.fetchMerchantItems(query, userId, category),
+        // Step 2: Fresh ingestion from Oxylabs + eBay
+        const [oxylabs, ebay] = await Promise.all([
+            this.fetchOxylabsItems(query, userId, category),
             this.fetchEbayItems(query, userId, category)
         ]);
 
-        let combined = [...libraryItems, ...merchant, ...ebay];
+        let combined = [...libraryItems, ...oxylabs, ...ebay];
 
-        // Deduplicate by merchantOfferId
+        // Deduplicate by title similarity
         const seen = new Set<string>();
         combined = combined.filter(item => {
-            const key = item.merchantOfferId || item.id;
+            const key = item.merchantOfferId || item.title.toLowerCase().slice(0, 40);
             if (seen.has(key)) return false;
             seen.add(key);
             return true;

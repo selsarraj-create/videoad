@@ -55,7 +55,7 @@ type Tab = 'try-on' | 'video' | 'marketplace' | 'revenue' | 'showcase'
 
 interface MarketplaceItem {
     id: string;
-    source: 'skimlinks' | 'ebay';
+    source: 'oxylabs' | 'ebay' | 'library' | 'trending';
     title: string;
     price: string;
     currency: string;
@@ -63,7 +63,16 @@ interface MarketplaceItem {
     affiliateUrl: string;
     brand?: string;
     category?: string;
+    merchant?: string;
     authenticityGuaranteed?: boolean;
+    isTrending?: boolean;
+    trendKeyword?: string;
+}
+
+interface TrendKeyword {
+    keyword: string;
+    trafficVolume: string;
+    isRising: boolean;
 }
 
 interface PersonaSlot {
@@ -107,6 +116,8 @@ export default function StudioPage() {
     const [marketplaceLoading, setMarketplaceLoading] = useState(false)
     const [marketplaceCategory, setMarketplaceCategory] = useState("All")
     const [marketplaceBrand, setMarketplaceBrand] = useState("All")
+    const [trendKeywords, setTrendKeywords] = useState<TrendKeyword[]>([])
+    const [trendsLoading, setTrendsLoading] = useState(false)
 
     // Revenue state
     const [revenueData, setRevenueData] = useState<any[]>([])
@@ -381,7 +392,6 @@ export default function StudioPage() {
     // Marketplace Search
     const handleMarketplaceSearch = async (e?: React.FormEvent) => {
         if (e) e.preventDefault()
-        // If everything is empty, don't search unless it's an initial reload or category change
         if (!marketplaceQuery && marketplaceCategory === 'All' && marketplaceBrand === 'All') return
 
         setMarketplaceLoading(true)
@@ -401,12 +411,50 @@ export default function StudioPage() {
         }
     }
 
+    // Load trends
+    const loadTrends = async () => {
+        setTrendsLoading(true)
+        try {
+            const res = await fetch('/api/trends')
+            const data = await res.json()
+            if (data.keywords) setTrendKeywords(data.keywords)
+        } catch (err) {
+            console.error('Trends load failed:', err)
+        } finally {
+            setTrendsLoading(false)
+        }
+    }
+
+    // Search by trend keyword
+    const searchByTrend = (keyword: string) => {
+        setMarketplaceQuery(keyword)
+        setMarketplaceCategory('All')
+        setMarketplaceBrand('All')
+        setTimeout(() => handleMarketplaceSearch(), 100)
+    }
+
+    // Category click → trigger search
+    const handleCategoryClick = (cat: string) => {
+        setMarketplaceCategory(cat)
+        if (cat !== 'All') {
+            setMarketplaceQuery('')
+            setMarketplaceBrand('All')
+        }
+    }
+
     // Auto-search on filter change
     useEffect(() => {
         if (activeTab === 'marketplace') {
             handleMarketplaceSearch()
         }
     }, [marketplaceCategory, marketplaceBrand])
+
+    // Load trends when marketplace tab opens
+    useEffect(() => {
+        if (activeTab === 'marketplace' && trendKeywords.length === 0) {
+            loadTrends()
+        }
+    }, [activeTab])
 
     // Revenue Payouts
     const handlePayoutAction = async (action: 'onboard' | 'payout') => {
@@ -714,9 +762,11 @@ export default function StudioPage() {
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
                                 <div className="space-y-6">
                                     <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
-                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">01 / Luxury Search</Label>
-                                        <span className="text-[10px] text-muted-foreground italic font-serif">Skimlinks & eBay</span>
+                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">01 / Shopping</Label>
+                                        <span className="text-[10px] text-muted-foreground italic font-serif">Powered by Oxylabs</span>
                                     </div>
+
+                                    {/* Search Bar */}
                                     <form onSubmit={handleMarketplaceSearch} className="flex gap-2">
                                         <BespokeInput
                                             value={marketplaceQuery}
@@ -729,23 +779,64 @@ export default function StudioPage() {
                                         </Button>
                                     </form>
 
-                                    {/* Category Chips */}
-                                    <div className="flex flex-wrap gap-2">
-                                        {['All', 'Outerwear', 'Shirts', 'Bags', 'Accessories', 'Shoes'].map((cat) => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => setMarketplaceCategory(cat)}
-                                                className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-bold border transition-all
-                                                    ${marketplaceCategory === cat
-                                                        ? 'bg-primary text-primary-foreground border-primary'
-                                                        : 'bg-transparent text-muted-foreground border-nimbus hover:border-foreground'}`}
-                                            >
-                                                {cat}
-                                            </button>
-                                        ))}
+                                    {/* Wardrobe Categories Grid */}
+                                    <div>
+                                        <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground mb-3 font-bold">Wardrobe Categories</p>
+                                        <div className="grid grid-cols-5 gap-2">
+                                            {[
+                                                { slug: 'Shirts', icon: '👔' },
+                                                { slug: 'Outerwear', icon: '🧥' },
+                                                { slug: 'Dresses', icon: '👗' },
+                                                { slug: 'Activewear', icon: '🏃' },
+                                                { slug: 'Bags', icon: '👜' },
+                                                { slug: 'Shoes', icon: '👟' },
+                                                { slug: 'Accessories', icon: '⌚' },
+                                                { slug: 'Swimwear', icon: '🩱' },
+                                                { slug: 'Suits', icon: '🤵' },
+                                                { slug: 'Knitwear', icon: '🧶' },
+                                            ].map((cat) => (
+                                                <button
+                                                    key={cat.slug}
+                                                    onClick={() => handleCategoryClick(cat.slug)}
+                                                    className={`flex flex-col items-center gap-1.5 p-3 border transition-all hover:shadow-md
+                                                        ${marketplaceCategory === cat.slug
+                                                            ? 'bg-foreground text-background border-foreground shadow-lg'
+                                                            : 'bg-white text-foreground border-nimbus hover:border-foreground'}`}
+                                                >
+                                                    <span className="text-lg">{cat.icon}</span>
+                                                    <span className="text-[8px] uppercase tracking-widest font-bold">{cat.slug}</span>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
 
-                                    {/* Brand Quick Links (Optional secondary filter) */}
+                                    {/* Trending Now Pills */}
+                                    <div className="border-t border-nimbus/20 pt-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-bold">🔥 Trending Now</span>
+                                            {trendsLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {trendKeywords.map((trend) => (
+                                                <button
+                                                    key={trend.keyword}
+                                                    onClick={() => searchByTrend(trend.keyword)}
+                                                    className="group flex items-center gap-1.5 px-3 py-1.5 bg-white border border-nimbus hover:border-foreground hover:shadow-sm transition-all"
+                                                >
+                                                    {trend.isRising && <span className="text-[10px]">📈</span>}
+                                                    <span className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground group-hover:text-foreground">
+                                                        {trend.keyword}
+                                                    </span>
+                                                    <span className="text-[8px] text-muted-foreground/60 font-mono">{trend.trafficVolume}</span>
+                                                </button>
+                                            ))}
+                                            {trendKeywords.length === 0 && !trendsLoading && (
+                                                <span className="text-[9px] text-muted-foreground italic font-serif">Loading trend data...</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Brand Quick Links */}
                                     <div className="flex items-center gap-4 border-t border-nimbus/20 pt-4 overflow-x-auto no-scrollbar">
                                         <span className="text-[9px] uppercase tracking-tighter text-muted-foreground whitespace-nowrap">Top Brands:</span>
                                         {['All', 'Hermès', 'Theory', 'Vince', 'Prada', 'Gucci'].map((brand) => (
@@ -761,11 +852,19 @@ export default function StudioPage() {
                                     </div>
                                 </div>
 
+                                {/* Product Results Grid */}
                                 <div className="space-y-6 overflow-y-auto max-h-[600px] pr-2 scrollbar-thin">
                                     {marketplaceItems.length === 0 && !marketplaceLoading && (
                                         <div className="py-20 text-center border border-dashed border-nimbus">
                                             <Shirt className="w-6 h-6 text-nimbus mx-auto mb-4" />
-                                            <p className="text-xs text-muted-foreground font-serif italic">Search for luxury items to begin.</p>
+                                            <p className="text-xs text-muted-foreground font-serif italic">Select a category or search to discover products.</p>
+                                        </div>
+                                    )}
+
+                                    {marketplaceLoading && (
+                                        <div className="py-20 text-center">
+                                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto mb-4" />
+                                            <p className="text-xs text-muted-foreground font-serif italic">Searching across retailers...</p>
                                         </div>
                                     )}
 
@@ -776,12 +875,19 @@ export default function StudioPage() {
                                                     <img src={item.imageUrl} alt={item.title} className="w-full h-full object-contain" />
                                                     {item.authenticityGuaranteed && (
                                                         <Badge className="absolute top-2 left-2 bg-blue-500 text-white border-0 text-[8px] uppercase tracking-tighter">
-                                                            <Check className="w-3 h-3 mr-1" /> Authenticity Guaranteed
+                                                            <Check className="w-3 h-3 mr-1" /> Verified
                                                         </Badge>
                                                     )}
-                                                    <Badge className="absolute top-2 right-2 bg-stretch-limo text-white border-0 text-[8px] uppercase tracking-tighter">
-                                                        {item.source}
-                                                    </Badge>
+                                                    <div className="absolute top-2 right-2 flex flex-col gap-1">
+                                                        <Badge className="bg-stretch-limo text-white border-0 text-[8px] uppercase tracking-tighter">
+                                                            {item.source === 'oxylabs' ? 'Shopping' : item.source}
+                                                        </Badge>
+                                                        {item.merchant && (
+                                                            <Badge className="bg-white/90 text-foreground border border-nimbus/30 text-[7px] uppercase tracking-tighter">
+                                                                {item.merchant}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="space-y-1 mb-4">
                                                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest truncate">{item.brand || 'Luxury Item'}</p>
