@@ -4,7 +4,7 @@ nixPkgs = ["python311", "nodejs"]
 
 [phases.install]
 cmds = [
-  "python3 -m ensurepip --upgrade",
-  "python3 -m pip install -r workers/requirements.txt",
+  "python3 -m venv /opt/venv",
+  "/opt/venv/bin/pip install -r workers/requirements.txt",
   "cd workers && npm install"
 ]
