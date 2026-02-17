@@ -118,38 +118,47 @@ export type Database = {
       }
       bounties: {
         Row: {
+          amount_captured: number | null
           brand_id: string
           budget_gbp: number
           created_at: string | null
           deadline: string | null
           description: string | null
+          escrow_status: Database["public"]["Enums"]["escrow_status"] | null
           id: string
           requirements: Json | null
           status: Database["public"]["Enums"]["bounty_status"] | null
+          stripe_payment_intent_id: string | null
           title: string
           updated_at: string | null
         }
         Insert: {
+          amount_captured?: number | null
           brand_id: string
           budget_gbp?: number
           created_at?: string | null
           deadline?: string | null
           description?: string | null
+          escrow_status?: Database["public"]["Enums"]["escrow_status"] | null
           id?: string
           requirements?: Json | null
           status?: Database["public"]["Enums"]["bounty_status"] | null
+          stripe_payment_intent_id?: string | null
           title: string
           updated_at?: string | null
         }
         Update: {
+          amount_captured?: number | null
           brand_id?: string
           budget_gbp?: number
           created_at?: string | null
           deadline?: string | null
           description?: string | null
+          escrow_status?: Database["public"]["Enums"]["escrow_status"] | null
           id?: string
           requirements?: Json | null
           status?: Database["public"]["Enums"]["bounty_status"] | null
+          stripe_payment_intent_id?: string | null
           title?: string
           updated_at?: string | null
         }
@@ -866,6 +875,7 @@ export type Database = {
           id: string
           is_verified: boolean | null
           monthly_credit_grant: number | null
+          payouts_enabled: boolean | null
           render_credits: number | null
           render_priority: number | null
           role: Database["public"]["Enums"]["user_role"] | null
@@ -884,6 +894,7 @@ export type Database = {
           id: string
           is_verified?: boolean | null
           monthly_credit_grant?: number | null
+          payouts_enabled?: boolean | null
           render_credits?: number | null
           render_priority?: number | null
           role?: Database["public"]["Enums"]["user_role"] | null
@@ -902,6 +913,7 @@ export type Database = {
           id?: string
           is_verified?: boolean | null
           monthly_credit_grant?: number | null
+          payouts_enabled?: boolean | null
           render_credits?: number | null
           render_priority?: number | null
           role?: Database["public"]["Enums"]["user_role"] | null
@@ -1202,6 +1214,7 @@ export type Database = {
     Enums: {
       bounty_status: "draft" | "active" | "closed"
       build_status: "pending" | "processing" | "ready" | "failed"
+      escrow_status: "unpaid" | "held" | "released" | "refunded"
       submission_status: "pending" | "accepted" | "rejected"
       user_role: "creator" | "brand" | "admin"
     }
@@ -1333,6 +1346,7 @@ export const Constants = {
     Enums: {
       bounty_status: ["draft", "active", "closed"],
       build_status: ["pending", "processing", "ready", "failed"],
+      escrow_status: ["unpaid", "held", "released", "refunded"],
       submission_status: ["pending", "accepted", "rejected"],
       user_role: ["creator", "brand", "admin"],
     },
