@@ -13,7 +13,6 @@ export async function GET() {
     }
 
     try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await supabase
             .from('wardrobe')
             .select('*')
@@ -49,7 +48,10 @@ export async function GET() {
     }
 }
 
-// ── POST — Add item to wardrobe (quota check + async Claid cleaning) ──
+// ── POST — Smart Import: cache-first wardrobe add ───────────────
+// 1. Hash the image URL
+// 2. Check garment_cache for existing clean version ($0 path)
+// 3. If miss, trigger Claid worker ($0.05 path)
 export async function POST(request: NextRequest) {
     const supabase = await createClient()
 
@@ -81,7 +83,6 @@ export async function POST(request: NextRequest) {
         const tier = (profile?.subscription_status || 'starter') as SubscriptionTier
         const limit = getWardrobeLimit(tier)
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { count, error: countError } = await supabase
             .from('wardrobe')
             .select('id', { count: 'exact', head: true })
@@ -107,8 +108,56 @@ export async function POST(request: NextRequest) {
             }, { status: 409 })
         }
 
-        // ── Insert wardrobe item (pending) ──────────────────────
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // ── Smart Import: Global Cache Check ─────────────────────
+        const sourceUrlHash = crypto
+            .createHash('sha256')
+            .update(image_url)
+            .digest('hex')
+
+        const { data: cached } = await supabase
+            .from('garment_cache')
+            .select('clean_url')
+            .eq('source_url_hash', sourceUrlHash)
+            .single()
+
+        if (cached?.clean_url) {
+            // ── Cache HIT — $0 path, instant ─────────────────────
+            console.log(`[Smart Import] Cache HIT for hash ${sourceUrlHash.slice(0, 12)}…`)
+
+            const { data: item, error: insertError } = await supabase
+                .from('wardrobe')
+                .insert({
+                    user_id: user.id,
+                    original_image_url: image_url,
+                    clean_image_url: cached.clean_url,
+                    title,
+                    source,
+                    affiliate_url,
+                    status: 'ready',
+                })
+                .select()
+                .single()
+
+            if (insertError || !item) {
+                console.error('Wardrobe insert error (cache hit):', insertError)
+                return NextResponse.json({ error: 'Failed to add to wardrobe' }, { status: 500 })
+            }
+
+            return NextResponse.json({
+                success: true,
+                item,
+                cached: true,
+                quota: {
+                    used: (count ?? 0) + 1,
+                    limit: limit === Infinity ? null : limit,
+                    tier,
+                },
+            })
+        }
+
+        // ── Cache MISS — $0.05 path, trigger Claid ───────────────
+        console.log(`[Smart Import] Cache MISS for hash ${sourceUrlHash.slice(0, 12)}… — triggering Claid`)
+
         const { data: item, error: insertError } = await supabase
             .from('wardrobe')
             .insert({
@@ -123,18 +172,13 @@ export async function POST(request: NextRequest) {
             .single()
 
         if (insertError || !item) {
-            console.error('Wardrobe insert error:', insertError)
+            console.error('Wardrobe insert error (cache miss):', insertError)
             return NextResponse.json({ error: 'Failed to add to wardrobe' }, { status: 500 })
         }
 
-        // ── Trigger async Claid cleaning via worker ─────────────
+        // Trigger async Claid cleaning via worker
         const workerUrl = process.env.RAILWAY_WORKER_URL
         if (workerUrl) {
-            const sourceUrlHash = crypto
-                .createHash('sha256')
-                .update(image_url)
-                .digest('hex')
-
             // Fire and forget — don't await
             fetch(`${workerUrl}/webhooks/clean-garment`, {
                 method: 'POST',
@@ -153,7 +197,6 @@ export async function POST(request: NextRequest) {
         } else {
             console.warn('RAILWAY_WORKER_URL not set — skipping Claid cleaning')
             // Mark as ready without cleaning (dev fallback)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await supabase
                 .from('wardrobe')
                 .update({ status: 'ready', clean_image_url: image_url })
@@ -163,6 +206,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             item,
+            cached: false,
             quota: {
                 used: (count ?? 0) + 1,
                 limit: limit === Infinity ? null : limit,
@@ -192,7 +236,6 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 })
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: deleteError } = await supabase
             .from('wardrobe')
             .delete()
