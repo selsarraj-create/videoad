@@ -159,6 +159,9 @@ export default function OnboardPage() {
     const [partnerAligned, setPartnerAligned] = useState(false)
     const [partnerPhase, setPartnerPhase] = useState<'center' | 'left' | 'right' | 'done'>('center')
 
+    // Stream version counter — triggers re-render after async stream acquisition
+    const [streamVersion, setStreamVersion] = useState(0)
+
 
     // Captures (shared between both modes)
     const [captures, setCaptures] = useState<Record<Angle, AngleCapture>>({
@@ -247,6 +250,8 @@ export default function OnboardPage() {
                 })
             }
             streamRef.current = stream
+            // Bump version to trigger the attachment effect after this async resolve
+            setStreamVersion(v => v + 1)
 
             // Attach to video element if available now
             if (videoRef.current) {
@@ -259,8 +264,8 @@ export default function OnboardPage() {
     }, [])
 
     // Attach stream to video element after DOM updates
-    // This fixes the race condition where startCamera fires before the
-    // conditional <video> element has mounted in the new step
+    // streamVersion changes after async getUserMedia resolves, ensuring
+    // this effect re-runs even though the stream acquisition was async
     useEffect(() => {
         const stream = streamRef.current
         const video = videoRef.current
@@ -268,17 +273,17 @@ export default function OnboardPage() {
             video.srcObject = stream
             video.play().catch(() => { })
         }
-        // Also handle delayed mount with a short retry
+        // Handle case where video element hasn't mounted yet
         if (stream && !video) {
             const retryTimer = setTimeout(() => {
                 if (videoRef.current && streamRef.current) {
                     videoRef.current.srcObject = streamRef.current
                     videoRef.current.play().catch(() => { })
                 }
-            }, 100)
+            }, 150)
             return () => clearTimeout(retryTimer)
         }
-    })
+    }, [streamVersion, step])
 
     const stopCamera = useCallback(() => {
         if (streamRef.current) {
@@ -296,12 +301,12 @@ export default function OnboardPage() {
     const face = useFaceDetector(videoRef, faceDetectorActive, 10)
 
     useEffect(() => {
-        if (step === 'ai_director' || step === 'partner_mode') {
+        if (step === 'ai_director') {
             startCamera(false)
             return () => stopCamera()
         }
-        if (step === 'solo_mode') {
-            startCamera(true)
+        if (step === 'solo_mode' || step === 'partner_mode') {
+            startCamera(true) // Both modes use rear camera
             return () => stopCamera()
         }
     }, [step, startCamera, stopCamera])
