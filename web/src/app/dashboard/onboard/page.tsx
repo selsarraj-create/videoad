@@ -494,6 +494,11 @@ export default function OnboardPage() {
                 })
             })
 
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({ error: res.statusText }))
+                throw new Error(errBody.error || `HTTP ${res.status}`)
+            }
+
             const result = await res.json()
             setCaptures(prev => ({
                 ...prev,
@@ -706,7 +711,7 @@ export default function OnboardPage() {
                 setSoloInstruction('Perfect! Hold still...')
                 if (vq) {
                     vq.speak('centered', () => {
-                        const frame = captureFrame(0.95, 2560)
+                        const frame = captureFrame(0.85, 1920)
                         if (frame) {
                             playShutterClick()
                             saveAngleCapture('front', frame, 'camera')
@@ -730,7 +735,7 @@ export default function OnboardPage() {
             }
             if (face.yaw > 30 && face.stable && !soloSnapPendingRef.current) {
                 soloSnapPendingRef.current = true
-                const frame = captureFrame(0.95, 2560)
+                const frame = captureFrame(0.85, 1920)
                 if (frame) {
                     playShutterClick()
                     saveAngleCapture('profile', frame, 'camera')
@@ -750,7 +755,7 @@ export default function OnboardPage() {
             }
             if (face.yaw < -30 && face.stable && !soloSnapPendingRef.current) {
                 soloSnapPendingRef.current = true
-                const frame = captureFrame(0.95, 2560)
+                const frame = captureFrame(0.85, 1920)
                 if (frame) {
                     playShutterClick()
                     saveAngleCapture('three_quarter', frame, 'camera')
@@ -785,7 +790,7 @@ export default function OnboardPage() {
 
     const handlePartnerSnap = useCallback(() => {
         if (!partnerAligned) return
-        const frame = captureFrame(0.95, 2560)
+        const frame = captureFrame(0.85, 1920)
         if (!frame) return
 
         playShutterClick()
