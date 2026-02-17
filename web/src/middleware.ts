@@ -30,28 +30,74 @@ export async function middleware(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser()
 
-    // Protected routes: redirect unauthenticated users to /login
-    const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/admin')
+    const pathname = request.nextUrl.pathname
+
+    // ── Auth gate: redirect unauthenticated users ──────────────────────
+    const isProtectedRoute =
+        pathname.startsWith('/dashboard') ||
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/brand')
 
     if (!user && isProtectedRoute) {
         const url = request.nextUrl.clone()
         url.pathname = '/login'
-        url.searchParams.set('redirect', request.nextUrl.pathname)
+        url.searchParams.set('redirect', pathname)
         return NextResponse.redirect(url)
     }
 
-    // If logged-in user visits /login, redirect to dashboard
-    if (user && request.nextUrl.pathname === '/login') {
+    // If logged-in user visits /login, redirect to their dashboard
+    if (user && pathname === '/login') {
+        const role = await getUserRole(supabase, user.id)
         const url = request.nextUrl.clone()
-        url.pathname = '/dashboard'
+        url.pathname = role === 'brand' ? '/brand/dashboard' : '/dashboard'
         return NextResponse.redirect(url)
+    }
+
+    // ── Role gate: enforce role-based access ───────────────────────────
+    if (user && isProtectedRoute) {
+        const role = await getUserRole(supabase, user.id)
+
+        // /brand/* requires brand or admin role
+        if (pathname.startsWith('/brand') && role !== 'brand' && role !== 'admin') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/403'
+            return NextResponse.redirect(url)
+        }
+
+        // /admin/* requires admin role
+        if (pathname.startsWith('/admin') && role !== 'admin') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/403'
+            return NextResponse.redirect(url)
+        }
+
+        // /dashboard/* is for creators (and admins)
+        if (pathname.startsWith('/dashboard') && role === 'brand') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/brand/dashboard'
+            return NextResponse.redirect(url)
+        }
     }
 
     return supabaseResponse
 }
 
+// ── Helper: fetch user role from profiles ─────────────────────────────
+async function getUserRole(
+    supabase: ReturnType<typeof createServerClient>,
+    userId: string
+): Promise<string> {
+    const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+    return data?.role ?? 'creator'
+}
+
 export const config = {
     matcher: [
-        '/((?!_next/static|_next/image|favicon.ico|api/ops-metrics|api/queue-status|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|mov|ico)$).*)',
+        '/((?!_next/static|_next/image|favicon.ico|api/ops-metrics|api/queue-status|api/credits/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|mov|ico)$).*)',
     ],
 }

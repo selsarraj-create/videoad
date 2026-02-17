@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 const VALID_TIERS = ['starter', 'pro', 'high_octane'] as const
+const VALID_ROLES = ['creator', 'brand'] as const
 
 export async function POST(request: Request) {
     try {
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
             )
         }
 
-        const { email, password, selected_tier } = await request.json()
+        const { email, password, selected_tier, role, company_name } = await request.json()
 
         if (!email || !password) {
             return NextResponse.json(
@@ -39,6 +40,9 @@ export async function POST(request: Request) {
 
         // Validate tier (default to 'starter' if invalid or missing)
         const tier = VALID_TIERS.includes(selected_tier) ? selected_tier : 'starter'
+
+        // Validate role (default to 'creator' if invalid or missing)
+        const userRole = VALID_ROLES.includes(role) ? role : 'creator'
 
         // Use service-role client to bypass email confirmation
         const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
@@ -84,6 +88,7 @@ export async function POST(request: Request) {
                 credit_balance: initialCredits,
                 monthly_credit_grant: monthlyGrant,
                 render_priority: tier === 'high_octane' ? 1 : tier === 'pro' ? 2 : 3,
+                role: userRole,
             })
             .eq('id', userId)
 
@@ -92,7 +97,21 @@ export async function POST(request: Request) {
             // Don't fail the signup, just log — the user was created
         }
 
-        return NextResponse.json({ success: true, userId, tier })
+        // If brand role, create a brands record
+        if (userRole === 'brand' && company_name?.trim()) {
+            const { error: brandError } = await supabaseAdmin
+                .from('brands')
+                .insert({
+                    profile_id: userId,
+                    company_name: company_name.trim(),
+                })
+
+            if (brandError) {
+                console.error('Brand record creation failed:', brandError)
+            }
+        }
+
+        return NextResponse.json({ success: true, userId, tier, role: userRole })
     } catch (err) {
         console.error('Signup route exception:', err)
         return NextResponse.json(

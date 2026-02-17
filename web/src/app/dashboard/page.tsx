@@ -51,11 +51,12 @@ import { RevenueChart } from "@/components/revenue-chart"
 import { LookOfTheDay } from "@/components/look-of-the-day"
 import { ShowcaseGrid } from "@/components/showcase-grid"
 import { CreditShop } from "@/components/credit-shop"
+import { BountyFeed } from "@/components/bounty-feed"
 import { DollarSign, TrendingUp, Clock, Award, Bell, Globe, Lock, Zap, CreditCard, Settings, ShieldAlert, AlertTriangle } from "lucide-react"
 import type { SubscriptionTier } from "@/lib/tier-config"
 import type { AccountStatus } from "@/lib/moderation"
 
-type Tab = 'identities' | 'try-on' | 'video' | 'marketplace' | 'revenue' | 'showcase' | 'instagram'
+type Tab = 'identities' | 'try-on' | 'video' | 'marketplace' | 'revenue' | 'showcase' | 'instagram' | 'bounties'
 
 interface MarketplaceItem {
     id: string;
@@ -692,6 +693,12 @@ export default function StudioPage() {
                             Instagram
                             {activeTab === 'instagram' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
+                        <button onClick={() => setActiveTab('bounties')}
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
+                                ${activeTab === 'bounties' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Bounties
+                            {activeTab === 'bounties' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
+                        </button>
                     </div>
                 </div>
 
@@ -734,9 +741,9 @@ export default function StudioPage() {
 
                 {/* ===== LEFT PANEL ===== */}
                 <section className={`flex flex-col overflow-y-auto glass-panel z-20 relative transition-all duration-500
-                    ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
+                    ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram' || activeTab === 'bounties') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
                     <div className={`flex-1 p-8 lg:p-12 w-full space-y-12 transition-all
-                        ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
+                        ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram' || activeTab === 'bounties') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
 
                         {activeTab === 'showcase' ? (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
@@ -1476,11 +1483,21 @@ export default function StudioPage() {
 
                             </motion.div>
                         )}
+
+                        {activeTab === 'bounties' && (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-8">
+                                <div className="space-y-2 border-b border-nimbus pb-8">
+                                    <h2 className="font-serif text-3xl tracking-tight">Browse Bounties</h2>
+                                    <p className="text-sm text-muted-foreground">Apply to brand campaigns and earn money creating content.</p>
+                                </div>
+                                <BountyFeed />
+                            </motion.div>
+                        )}
                     </div>
                 </section>
 
                 {/* ===== RIGHT: Archive (Gallery Masonry) ===== */}
-                {activeTab !== 'marketplace' && activeTab !== 'revenue' && activeTab !== 'showcase' && activeTab !== 'instagram' && (
+                {activeTab !== 'marketplace' && activeTab !== 'revenue' && activeTab !== 'showcase' && activeTab !== 'instagram' && activeTab !== 'bounties' && (
                     <aside className="col-span-12 lg:col-span-7 bg-[#FBFBFB] flex flex-col overflow-hidden relative">
                         {/* Background Detail */}
                         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
