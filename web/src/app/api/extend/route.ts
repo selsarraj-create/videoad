@@ -41,9 +41,9 @@ export async function POST(request: Request) {
         }
 
         // Get the task ID from provider_metadata (set by polling) or use empty
-        const originalTaskId = originalJob.provider_metadata?.extend_task_id ||
-            originalJob.provider_metadata?.task_id || ''
-        const aspectRatio = originalJob.provider_metadata?.aspect_ratio || '16:9'
+        const meta = originalJob.provider_metadata as Record<string, any> | null
+        const originalTaskId = meta?.extend_task_id || meta?.task_id || ''
+        const aspectRatio = meta?.aspect_ratio || '16:9'
 
         // 2. Create new job row for the extended video
         const { data: newJob, error: dbError } = await supabase
