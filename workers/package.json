@@ -8,9 +8,12 @@
         "build": "tsc"
     },
     "dependencies": {
+        "@aws-sdk/client-s3": "^3.992.0",
+        "@aws-sdk/lib-storage": "^3.992.0",
+        "@aws-sdk/s3-request-presigner": "^3.992.0",
         "@supabase/supabase-js": "^2.39.7",
         "@types/stripe": "^8.0.416",
-        "axios": "^1.6.7",
+        "axios": "^1.13.5",
         "dotenv": "^16.4.5",
         "fastify": "^4.26.1",
         "sharp": "^0.33.2",
