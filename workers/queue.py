@@ -88,10 +88,10 @@ def dequeue_task(redis_client, timeout: int = 5) -> Optional[str]:
         result = redis_client.blmove(
             QUEUE_KEY, PROCESSING_KEY,
             timeout=timeout,
-            wherefrom="RIGHT", whereto="LEFT",
+            src="RIGHT", dest="LEFT",
         )
-    except AttributeError:
-        # Fallback for older redis-py without blmove
+    except (AttributeError, TypeError):
+        # Fallback for older redis-py without blmove or different API
         result = redis_client.brpoplpush(QUEUE_KEY, PROCESSING_KEY, timeout=timeout)
 
     if result is None:
