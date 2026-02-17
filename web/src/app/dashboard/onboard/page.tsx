@@ -460,9 +460,10 @@ export default function OnboardPage() {
             // Create identity if first capture
             let identityId = identity?.id
             if (!identityId) {
-                const blob = await fetch(imageData).then(r => r.blob())
+                // For initial identity, upload a smaller version through Supabase client
+                const blob = dataUrlToBlob(imageData)
                 const fileName = `selfies/${Date.now()}.jpg`
-                await supabase.storage.from('raw_assets').upload(fileName, blob)
+                await supabase.storage.from('raw_assets').upload(fileName, blob, { contentType: 'image/jpeg' })
                 const { data: urlData } = supabase.storage.from('raw_assets').getPublicUrl(fileName)
 
                 const { data: newIdentity, error: dbErr } = await supabase
@@ -481,14 +482,37 @@ export default function OnboardPage() {
                 identityId = newIdentity.id
             }
 
-            // Save this angle view
+            // ── Direct-to-Storage Upload via Presigned URL ──────────────
+            // 1. Get a presigned upload URL from Vercel (tiny JSON request)
+            const storagePath = `identity_views/${identityId}/${angle}_${Date.now()}.jpg`
+            const presignRes = await fetch('/api/presign-upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: storagePath }),
+            })
+            if (!presignRes.ok) {
+                const err = await presignRes.json().catch(() => ({ error: presignRes.statusText }))
+                throw new Error(`Presign failed: ${err.error}`)
+            }
+            const { signedUrl, publicUrl } = await presignRes.json()
+
+            // 2. Upload binary blob DIRECTLY to Supabase Storage (bypasses Vercel)
+            const imageBlob = dataUrlToBlob(imageData)
+            const uploadRes = await fetch(signedUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'image/jpeg' },
+                body: imageBlob,
+            })
+            if (!uploadRes.ok) throw new Error(`Storage upload failed: ${uploadRes.status}`)
+
+            // 3. Save metadata via Vercel (tiny JSON, no image bytes)
             const res = await fetch('/api/save-identity-view', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     identity_id: identityId,
                     angle,
-                    image_data: imageData,
+                    image_url: publicUrl,
                     validation_result: validation || {},
                     source,
                 })
@@ -504,7 +528,7 @@ export default function OnboardPage() {
                 ...prev,
                 [angle]: {
                     preview: imageData,
-                    url: result.image_url || imageData,
+                    url: result.image_url || publicUrl,
                     validated: true,
                     validation,
                     uploading: false,
@@ -711,7 +735,7 @@ export default function OnboardPage() {
                 setSoloInstruction('Perfect! Hold still...')
                 if (vq) {
                     vq.speak('centered', () => {
-                        const frame = captureFrame(0.85, 1920)
+                        const frame = captureFrame(0.95, 2560)
                         if (frame) {
                             playShutterClick()
                             saveAngleCapture('front', frame, 'camera')
@@ -735,7 +759,7 @@ export default function OnboardPage() {
             }
             if (face.yaw > 30 && face.stable && !soloSnapPendingRef.current) {
                 soloSnapPendingRef.current = true
-                const frame = captureFrame(0.85, 1920)
+                const frame = captureFrame(0.95, 2560)
                 if (frame) {
                     playShutterClick()
                     saveAngleCapture('profile', frame, 'camera')
@@ -755,7 +779,7 @@ export default function OnboardPage() {
             }
             if (face.yaw < -30 && face.stable && !soloSnapPendingRef.current) {
                 soloSnapPendingRef.current = true
-                const frame = captureFrame(0.85, 1920)
+                const frame = captureFrame(0.95, 2560)
                 if (frame) {
                     playShutterClick()
                     saveAngleCapture('three_quarter', frame, 'camera')
@@ -790,7 +814,7 @@ export default function OnboardPage() {
 
     const handlePartnerSnap = useCallback(() => {
         if (!partnerAligned) return
-        const frame = captureFrame(0.85, 1920)
+        const frame = captureFrame(0.95, 2560)
         if (!frame) return
 
         playShutterClick()
@@ -1668,4 +1692,14 @@ function fileToBase64(file: File): Promise<string> {
         reader.onerror = reject
         reader.readAsDataURL(file)
     })
+}
+
+/** Convert a data:image URL to a binary Blob (no 33% base64 bloat) */
+function dataUrlToBlob(dataUrl: string): Blob {
+    const [header, b64] = dataUrl.split(',')
+    const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg'
+    const binary = atob(b64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return new Blob([bytes], { type: mime })
 }
