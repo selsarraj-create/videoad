@@ -73,7 +73,7 @@ export async function saveProjectState(projectId: string, data: ProjectData) {
     const { error } = await supabase
         .from('projects')
         .update({
-            data: data,
+            data: data as any,
             updated_at: new Date().toISOString()
         })
         .eq('id', projectId)
@@ -96,5 +96,5 @@ export async function loadProjectState(projectId: string) {
         .single()
 
     if (error) return { error: error.message }
-    return { data: data.data as ProjectData }
+    return { data: data.data as unknown as ProjectData }
 }
