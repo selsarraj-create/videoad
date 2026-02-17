@@ -126,6 +126,8 @@ export default function StudioPage() {
     const [trendKeywords, setTrendKeywords] = useState<TrendKeyword[]>([])
     const [trendsLoading, setTrendsLoading] = useState(false)
     const [vtoLoadingId, setVtoLoadingId] = useState<string | null>(null)
+    const [wardrobeAddingId, setWardrobeAddingId] = useState<string | null>(null)
+    const [wardrobeAddedIds, setWardrobeAddedIds] = useState<Set<string>>(new Set())
 
     // Revenue state
     const [revenueData, setRevenueData] = useState<any[]>([])
@@ -1114,7 +1116,7 @@ export default function StudioPage() {
                                                     <p className="text-xs font-serif italic truncate">{item.title}</p>
                                                     <p className="text-xs font-bold font-mono">{item.currency} {item.price}</p>
                                                 </div>
-                                                <div className="grid grid-cols-1 gap-2">
+                                                <div className="grid grid-cols-2 gap-2">
                                                     <Button
                                                         onClick={async () => {
                                                             setVtoLoadingId(item.id)
@@ -1157,15 +1159,56 @@ export default function StudioPage() {
                                                         className="w-full rounded-none text-[10px] uppercase tracking-widest h-8"
                                                     >
                                                         {vtoLoadingId === item.id ? (
-                                                            <><Loader2 className="w-3 h-3 animate-spin mr-2" /> Generating VTO...</>
-                                                        ) : 'Select for Try-On'}
+                                                            <><Loader2 className="w-3 h-3 animate-spin mr-1" /> VTO...</>
+                                                        ) : <><Shirt className="w-3 h-3 mr-1" /> Try On</>}
                                                     </Button>
-                                                    <a href={item.affiliateUrl} target="_blank" rel="noopener noreferrer" className="w-full">
-                                                        <Button variant="ghost" size="sm" className="w-full rounded-none text-[10px] uppercase tracking-widest h-8 border border-nimbus hover:bg-nimbus/20">
-                                                            View Original <ExternalLink className="w-3 h-3 ml-2" />
-                                                        </Button>
-                                                    </a>
+                                                    <Button
+                                                        onClick={async () => {
+                                                            if (wardrobeAddedIds.has(item.id)) return
+                                                            setWardrobeAddingId(item.id)
+                                                            try {
+                                                                const res = await fetch('/api/wardrobe', {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({
+                                                                        image_url: item.imageUrl,
+                                                                        title: item.title,
+                                                                        source: 'marketplace',
+                                                                        affiliate_url: item.affiliateUrl,
+                                                                    }),
+                                                                })
+                                                                if (res.ok) {
+                                                                    setWardrobeAddedIds(prev => new Set(prev).add(item.id))
+                                                                } else {
+                                                                    const err = await res.json()
+                                                                    alert(err.error || 'Failed to add to wardrobe')
+                                                                }
+                                                            } catch {
+                                                                alert('Failed to add to wardrobe')
+                                                            } finally {
+                                                                setWardrobeAddingId(null)
+                                                            }
+                                                        }}
+                                                        disabled={wardrobeAddingId === item.id || wardrobeAddedIds.has(item.id)}
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className={`w-full rounded-none text-[10px] uppercase tracking-widest h-8 ${wardrobeAddedIds.has(item.id)
+                                                            ? 'bg-green-50 border-green-200 text-green-700'
+                                                            : ''
+                                                            }`}
+                                                    >
+                                                        {wardrobeAddedIds.has(item.id) ? (
+                                                            <><Check className="w-3 h-3 mr-1" /> Saved</>
+                                                        ) : wardrobeAddingId === item.id ? (
+                                                            <><Loader2 className="w-3 h-3 animate-spin mr-1" /> Adding...</>
+                                                        ) : <><Plus className="w-3 h-3 mr-1" /> Wardrobe</>}
+                                                    </Button>
                                                 </div>
+                                                <a href={item.affiliateUrl} target="_blank" rel="noopener noreferrer" className="w-full">
+                                                    <Button variant="ghost" size="sm" className="w-full rounded-none text-[10px] uppercase tracking-widest h-8 border border-nimbus hover:bg-nimbus/20">
+                                                        View Original <ExternalLink className="w-3 h-3 ml-2" />
+                                                    </Button>
+                                                </a>
                                             </div>
                                         ))}
                                     </div>
@@ -1760,70 +1803,74 @@ export default function StudioPage() {
             </Dialog>
 
             {/* ── Cooldown Overlay (Strike 3 — 24h Ban) ── */}
-            {accountStatus === 'cooldown' && cooldownUntil && new Date(cooldownUntil) > new Date() && (
-                <div className="fixed inset-0 z-[100] bg-paper/95 backdrop-blur-xl flex items-center justify-center p-8">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="max-w-md w-full text-center space-y-6"
-                    >
-                        <div className="w-16 h-16 bg-orange-100 border-2 border-orange-300 flex items-center justify-center mx-auto">
-                            <ShieldAlert className="w-8 h-8 text-orange-600" />
-                        </div>
-                        <h2 className="font-serif text-3xl tracking-tight">Cool-Down Mode</h2>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                            Your account has entered a 24-hour Cool-Down period due to repeated safety filter triggers.
-                            All generation features are temporarily disabled.
-                        </p>
-                        <div className="p-5 bg-orange-50 border border-orange-200 space-y-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-orange-700 block">Generates re-enabled</span>
-                            <span className="text-2xl font-serif text-orange-700">
-                                {new Date(cooldownUntil).toLocaleString(undefined, {
-                                    month: 'short', day: 'numeric',
-                                    hour: '2-digit', minute: '2-digit'
-                                })}
-                            </span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
-                            If you believe this was an error, contact support
-                        </p>
-                    </motion.div>
-                </div>
-            )}
+            {
+                accountStatus === 'cooldown' && cooldownUntil && new Date(cooldownUntil) > new Date() && (
+                    <div className="fixed inset-0 z-[100] bg-paper/95 backdrop-blur-xl flex items-center justify-center p-8">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="max-w-md w-full text-center space-y-6"
+                        >
+                            <div className="w-16 h-16 bg-orange-100 border-2 border-orange-300 flex items-center justify-center mx-auto">
+                                <ShieldAlert className="w-8 h-8 text-orange-600" />
+                            </div>
+                            <h2 className="font-serif text-3xl tracking-tight">Cool-Down Mode</h2>
+                            <p className="text-sm text-muted-foreground leading-relaxed">
+                                Your account has entered a 24-hour Cool-Down period due to repeated safety filter triggers.
+                                All generation features are temporarily disabled.
+                            </p>
+                            <div className="p-5 bg-orange-50 border border-orange-200 space-y-2">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-orange-700 block">Generates re-enabled</span>
+                                <span className="text-2xl font-serif text-orange-700">
+                                    {new Date(cooldownUntil).toLocaleString(undefined, {
+                                        month: 'short', day: 'numeric',
+                                        hour: '2-digit', minute: '2-digit'
+                                    })}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                                If you believe this was an error, contact support
+                            </p>
+                        </motion.div>
+                    </div>
+                )
+            }
 
             {/* ── Suspension Screen (Permanent Lock) ── */}
-            {accountStatus === 'suspended' && (
-                <div className="fixed inset-0 z-[100] bg-paper/98 backdrop-blur-xl flex items-center justify-center p-8">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="max-w-md w-full text-center space-y-6"
-                    >
-                        <div className="w-16 h-16 bg-red-100 border-2 border-red-300 flex items-center justify-center mx-auto">
-                            <ShieldAlert className="w-8 h-8 text-red-600" />
-                        </div>
-                        <h2 className="font-serif text-3xl tracking-tight text-red-800">Account Suspended</h2>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                            Your account has been permanently suspended due to repeated safety violations.
-                            Any remaining credits have been refunded to your payment method.
-                        </p>
-                        <div className="p-4 bg-red-50 border border-red-200">
-                            <p className="text-xs text-red-700">
-                                If you believe this was a mistake, please contact our support team for review.
-                            </p>
-                        </div>
-                        <Button
-                            onClick={async () => {
-                                await supabase.auth.signOut()
-                                window.location.href = '/login'
-                            }}
-                            className="h-10 bg-foreground text-background hover:bg-red-600 text-[10px] uppercase tracking-widest font-bold rounded-none"
+            {
+                accountStatus === 'suspended' && (
+                    <div className="fixed inset-0 z-[100] bg-paper/98 backdrop-blur-xl flex items-center justify-center p-8">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="max-w-md w-full text-center space-y-6"
                         >
-                            Sign Out
-                        </Button>
-                    </motion.div>
-                </div>
-            )}
+                            <div className="w-16 h-16 bg-red-100 border-2 border-red-300 flex items-center justify-center mx-auto">
+                                <ShieldAlert className="w-8 h-8 text-red-600" />
+                            </div>
+                            <h2 className="font-serif text-3xl tracking-tight text-red-800">Account Suspended</h2>
+                            <p className="text-sm text-muted-foreground leading-relaxed">
+                                Your account has been permanently suspended due to repeated safety violations.
+                                Any remaining credits have been refunded to your payment method.
+                            </p>
+                            <div className="p-4 bg-red-50 border border-red-200">
+                                <p className="text-xs text-red-700">
+                                    If you believe this was a mistake, please contact our support team for review.
+                                </p>
+                            </div>
+                            <Button
+                                onClick={async () => {
+                                    await supabase.auth.signOut()
+                                    window.location.href = '/login'
+                                }}
+                                className="h-10 bg-foreground text-background hover:bg-red-600 text-[10px] uppercase tracking-widest font-bold rounded-none"
+                            >
+                                Sign Out
+                            </Button>
+                        </motion.div>
+                    </div>
+                )
+            }
         </div >
     )
 }
