@@ -1148,8 +1148,7 @@ export default function OnboardPage() {
                             {/* Audio-Only Dark Panel */}
                             <div className="max-w-xl mx-auto">
                                 <div className="relative aspect-[3/4] bg-gradient-to-b from-neutral-900 to-neutral-950 border border-nimbus overflow-hidden shadow-2xl">
-                                    {/* Hidden video for detection */}
-                                    <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-0" />
+                                    <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
 
                                     {/* Large instruction text */}
                                     <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
@@ -1246,7 +1245,7 @@ export default function OnboardPage() {
                                 <div className="md:col-span-2 relative shadow-2xl">
                                     <div className="relative aspect-[3/4] bg-black overflow-hidden border border-nimbus">
                                         <video ref={videoRef} autoPlay playsInline muted
-                                            className="w-full h-full object-cover transform scale-x-[-1]" />
+                                            className="w-full h-full object-cover" />
 
                                         {/* Green Alignment Box */}
                                         <div className={`absolute border-2 transition-all duration-500 pointer-events-none ${partnerAligned
