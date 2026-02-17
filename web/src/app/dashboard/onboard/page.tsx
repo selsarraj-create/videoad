@@ -223,6 +223,12 @@ export default function OnboardPage() {
 
     const startCamera = useCallback(async (useRear: boolean = false) => {
         try {
+            // Stop any existing stream first
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop())
+                streamRef.current = null
+            }
+
             let stream: MediaStream
             if (useRear) {
                 try {
@@ -241,14 +247,38 @@ export default function OnboardPage() {
                 })
             }
             streamRef.current = stream
+
+            // Attach to video element if available now
             if (videoRef.current) {
                 videoRef.current.srcObject = stream
-                videoRef.current.play()
+                videoRef.current.play().catch(() => { })
             }
         } catch {
             setError('Camera access required. Please allow camera permissions.')
         }
     }, [])
+
+    // Attach stream to video element after DOM updates
+    // This fixes the race condition where startCamera fires before the
+    // conditional <video> element has mounted in the new step
+    useEffect(() => {
+        const stream = streamRef.current
+        const video = videoRef.current
+        if (stream && video && video.srcObject !== stream) {
+            video.srcObject = stream
+            video.play().catch(() => { })
+        }
+        // Also handle delayed mount with a short retry
+        if (stream && !video) {
+            const retryTimer = setTimeout(() => {
+                if (videoRef.current && streamRef.current) {
+                    videoRef.current.srcObject = streamRef.current
+                    videoRef.current.play().catch(() => { })
+                }
+            }, 100)
+            return () => clearTimeout(retryTimer)
+        }
+    })
 
     const stopCamera = useCallback(() => {
         if (streamRef.current) {
@@ -1215,8 +1245,8 @@ export default function OnboardPage() {
 
                                         {/* Green Alignment Box */}
                                         <div className={`absolute border-2 transition-all duration-500 pointer-events-none ${partnerAligned
-                                                ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]'
-                                                : 'border-white/40'
+                                            ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]'
+                                            : 'border-white/40'
                                             }`}
                                             style={{
                                                 top: '15%',
@@ -1254,13 +1284,13 @@ export default function OnboardPage() {
                                             onClick={handlePartnerSnap}
                                             disabled={!partnerAligned || partnerPhase === 'done'}
                                             className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${partnerAligned && partnerPhase !== 'done'
-                                                    ? 'border-green-500 bg-green-500 hover:bg-green-400 hover:border-green-400 shadow-[0_0_30px_rgba(34,197,94,0.4)] active:scale-90'
-                                                    : 'border-nimbus bg-nimbus/20 cursor-not-allowed opacity-50'
+                                                ? 'border-green-500 bg-green-500 hover:bg-green-400 hover:border-green-400 shadow-[0_0_30px_rgba(34,197,94,0.4)] active:scale-90'
+                                                : 'border-nimbus bg-nimbus/20 cursor-not-allowed opacity-50'
                                                 }`}
                                         >
                                             <div className={`w-14 h-14 rounded-full ${partnerAligned && partnerPhase !== 'done'
-                                                    ? 'bg-white'
-                                                    : 'bg-nimbus/30'
+                                                ? 'bg-white'
+                                                : 'bg-nimbus/30'
                                                 }`} />
                                         </button>
                                     </div>
