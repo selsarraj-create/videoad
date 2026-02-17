@@ -98,6 +98,6 @@ async function getUserRole(
 
 export const config = {
     matcher: [
-        '/((?!_next/static|_next/image|favicon.ico|api/ops-metrics|api/queue-status|api/credits/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|mov|ico)$).*)',
+        '/((?!_next/static|_next/image|favicon.ico|api/ops-metrics|api/queue-status|api/credits/webhook|api/webhooks/stripe|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|mov|ico)$).*)',
     ],
 }
