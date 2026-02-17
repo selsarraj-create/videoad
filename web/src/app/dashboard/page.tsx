@@ -50,6 +50,7 @@ import { StatusPill } from "@/components/ui/status-pill"
 import { RevenueChart } from "@/components/revenue-chart"
 import { LookOfTheDay } from "@/components/look-of-the-day"
 import { ShowcaseGrid } from "@/components/showcase-grid"
+import { CreditShop } from "@/components/credit-shop"
 import { DollarSign, TrendingUp, Clock, Award, Bell, Globe, Lock, Zap, CreditCard, Settings, ShieldAlert, AlertTriangle } from "lucide-react"
 import type { SubscriptionTier } from "@/lib/tier-config"
 import type { AccountStatus } from "@/lib/moderation"
@@ -162,6 +163,7 @@ export default function StudioPage() {
     const [trialActive, setTrialActive] = useState(false)
     const [creditModalOpen, setCreditModalOpen] = useState(false)
     const [creditModalContext, setCreditModalContext] = useState<{ required: number; balance: number } | null>(null)
+    const [creditShopOpen, setCreditShopOpen] = useState(false)
     const [upgradeNudge, setUpgradeNudge] = useState<string | null>(null)
 
     // Moderation state
@@ -714,10 +716,10 @@ export default function StudioPage() {
 
                     {/* Credit Balance Badge */}
                     <div className="flex items-center gap-3 ml-2 pl-4 border-l border-nimbus/30">
-                        <div className="flex items-center gap-2 bg-foreground/5 border border-nimbus/20 px-3 py-1.5">
+                        <button onClick={() => setCreditShopOpen(true)} className="flex items-center gap-2 bg-foreground/5 border border-nimbus/20 px-3 py-1.5 hover:bg-primary/5 hover:border-primary/30 transition-colors cursor-pointer">
                             <Zap className="w-3 h-3 text-primary" />
                             <span className="text-[10px] font-bold uppercase tracking-widest">{creditBalance} CR</span>
-                        </div>
+                        </button>
                         <div className={`px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest
                             ${userTier === 'high_octane' ? 'bg-amber-500/10 text-amber-600 border border-amber-200'
                                 : userTier === 'pro' || trialActive ? 'bg-primary/10 text-primary border border-primary/20'
@@ -1711,7 +1713,7 @@ export default function StudioPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Credit Guardrail Modal */}
+            {/* Credit Guardrail Modal — opens CreditShop when insufficient */}
             <Dialog open={creditModalOpen} onOpenChange={setCreditModalOpen}>
                 <DialogContent className="bg-paper border-nimbus/30 rounded-none shadow-2xl max-w-md">
                     <DialogHeader>
@@ -1727,39 +1729,22 @@ export default function StudioPage() {
                             </div>
                             <CreditCard className="w-8 h-8 text-red-400 flex-shrink-0" />
                         </div>
-
-                        <div className="space-y-3">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Credit Packs</p>
-                            {[
-                                { id: 'pack-5', credits: 5, price: 5, label: '5 Credits' },
-                                { id: 'pack-15', credits: 15, price: 12, label: '15 Credits', popular: true },
-                                { id: 'pack-50', credits: 50, price: 35, label: '50 Credits' },
-                            ].map(pack => (
-                                <button key={pack.id}
-                                    className={`w-full flex items-center justify-between p-4 border transition-all hover:border-primary hover:bg-primary/5
-                                        ${pack.popular ? 'border-primary bg-primary/5' : 'border-nimbus/20'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <Zap className="w-4 h-4 text-primary" />
-                                        <span className="text-sm font-bold">{pack.label}</span>
-                                        {pack.popular && <span className="text-[8px] font-bold uppercase tracking-widest bg-primary text-primary-foreground px-1.5 py-0.5">Popular</span>}
-                                    </div>
-                                    <span className="text-sm font-serif">${pack.price}</span>
-                                </button>
-                            ))}
-                        </div>
-
-                        {userTier !== 'high_octane' && (
-                            <div className="p-4 bg-amber-50 border border-amber-200 space-y-2">
-                                <p className="text-xs font-bold uppercase tracking-widest text-amber-700">
-                                    <Zap className="w-3 h-3 inline mr-1" />
-                                    High-Octane Plan — $49/mo
-                                </p>
-                                <p className="text-xs text-muted-foreground">Get 20 credits/mo + priority rendering + access to Kling 3.0 Omni engine.</p>
-                            </div>
-                        )}
+                        <Button
+                            onClick={() => { setCreditModalOpen(false); setCreditShopOpen(true) }}
+                            className="w-full h-12 bg-primary text-white hover:bg-primary/90 rounded-none text-xs uppercase tracking-[0.2em] font-bold"
+                        >
+                            <Zap className="w-4 h-4 mr-2" /> Buy Credits
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Credit Shop (Stripe Checkout) */}
+            <CreditShop
+                open={creditShopOpen}
+                onClose={() => setCreditShopOpen(false)}
+                currentBalance={creditBalance}
+            />
 
             {/* ── Safety Warning Dialog (Strike 1-2) ── */}
             <Dialog open={safetyWarningOpen} onOpenChange={setSafetyWarningOpen}>

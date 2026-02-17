@@ -156,9 +156,10 @@ export async function grantMonthlyCredits(
 // ── Credit Pack Purchase ───────────────────────────────────────
 
 export const CREDIT_PACKS = [
-    { id: 'pack-5', credits: 5, price: 5, label: '5 Credits' },
-    { id: 'pack-15', credits: 15, price: 12, label: '15 Credits' },
-    { id: 'pack-50', credits: 50, price: 35, label: '50 Credits' },
+    { id: 'pack-10', credits: 10, priceGBP: 1000, label: '10 Credits', description: '£10 — Starter Pack' },
+    { id: 'pack-25', credits: 25, priceGBP: 2000, label: '25 Credits', description: '£20 — Popular' },
+    { id: 'pack-50', credits: 50, priceGBP: 4000, label: '50 Credits', description: '£40 — Pro Pack' },
+    { id: 'pack-100', credits: 100, priceGBP: 7500, label: '100 Credits', description: '£75 — Best Value' },
 ] as const
 
 /**
