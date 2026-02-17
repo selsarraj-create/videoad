@@ -116,6 +116,83 @@ export type Database = {
         }
         Relationships: []
       }
+      bounties: {
+        Row: {
+          brand_id: string
+          budget_gbp: number
+          created_at: string | null
+          deadline: string | null
+          description: string | null
+          id: string
+          requirements: Json | null
+          status: Database["public"]["Enums"]["bounty_status"] | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          brand_id: string
+          budget_gbp?: number
+          created_at?: string | null
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          requirements?: Json | null
+          status?: Database["public"]["Enums"]["bounty_status"] | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          brand_id?: string
+          budget_gbp?: number
+          created_at?: string | null
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          requirements?: Json | null
+          status?: Database["public"]["Enums"]["bounty_status"] | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bounties_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brands: {
+        Row: {
+          company_name: string
+          created_at: string | null
+          id: string
+          invoice_email: string | null
+          logo_url: string | null
+          profile_id: string
+          website: string | null
+        }
+        Insert: {
+          company_name: string
+          created_at?: string | null
+          id?: string
+          invoice_email?: string | null
+          logo_url?: string | null
+          profile_id: string
+          website?: string | null
+        }
+        Update: {
+          company_name?: string
+          created_at?: string | null
+          id?: string
+          invoice_email?: string | null
+          logo_url?: string | null
+          profile_id?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       click_events: {
         Row: {
           clicked_at: string | null
@@ -787,9 +864,11 @@ export type Database = {
           credit_balance: number | null
           full_name: string | null
           id: string
+          is_verified: boolean | null
           monthly_credit_grant: number | null
           render_credits: number | null
           render_priority: number | null
+          role: Database["public"]["Enums"]["user_role"] | null
           stripe_account_id: string | null
           subscription_status: string | null
           suspension_reason: string | null
@@ -803,9 +882,11 @@ export type Database = {
           credit_balance?: number | null
           full_name?: string | null
           id: string
+          is_verified?: boolean | null
           monthly_credit_grant?: number | null
           render_credits?: number | null
           render_priority?: number | null
+          role?: Database["public"]["Enums"]["user_role"] | null
           stripe_account_id?: string | null
           subscription_status?: string | null
           suspension_reason?: string | null
@@ -819,9 +900,11 @@ export type Database = {
           credit_balance?: number | null
           full_name?: string | null
           id?: string
+          is_verified?: boolean | null
           monthly_credit_grant?: number | null
           render_credits?: number | null
           render_priority?: number | null
+          role?: Database["public"]["Enums"]["user_role"] | null
           stripe_account_id?: string | null
           subscription_status?: string | null
           suspension_reason?: string | null
@@ -981,6 +1064,44 @@ export type Database = {
         }
         Relationships: []
       }
+      submissions: {
+        Row: {
+          bounty_id: string
+          created_at: string | null
+          creator_id: string
+          id: string
+          message: string | null
+          status: Database["public"]["Enums"]["submission_status"] | null
+          video_url: string | null
+        }
+        Insert: {
+          bounty_id: string
+          created_at?: string | null
+          creator_id: string
+          id?: string
+          message?: string | null
+          status?: Database["public"]["Enums"]["submission_status"] | null
+          video_url?: string | null
+        }
+        Update: {
+          bounty_id?: string
+          created_at?: string | null
+          creator_id?: string
+          id?: string
+          message?: string | null
+          status?: Database["public"]["Enums"]["submission_status"] | null
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submissions_bounty_id_fkey"
+            columns: ["bounty_id"]
+            isOneToOne: false
+            referencedRelation: "bounties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trends: {
         Row: {
           created_at: string | null
@@ -1079,7 +1200,10 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      bounty_status: "draft" | "active" | "closed"
       build_status: "pending" | "processing" | "ready" | "failed"
+      submission_status: "pending" | "accepted" | "rejected"
+      user_role: "creator" | "brand" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1207,7 +1331,10 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      bounty_status: ["draft", "active", "closed"],
       build_status: ["pending", "processing", "ready", "failed"],
+      submission_status: ["pending", "accepted", "rejected"],
+      user_role: ["creator", "brand", "admin"],
     },
   },
 } as const
