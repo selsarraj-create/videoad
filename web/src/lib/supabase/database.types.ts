@@ -48,51 +48,69 @@ export type Database = {
         Row: {
           brand: string | null
           category: string | null
+          category_id: string | null
           created_at: string | null
           currency: string | null
           id: string
           iptc_tagged: boolean | null
+          is_trending: boolean | null
+          last_trend_refresh: string | null
           merchant_link: string
+          merchant_name: string | null
           merchant_offer_id: string
           original_image_url: string
           price: string | null
+          product_url_hash: string | null
           synthid_applied: boolean | null
           tags: string[] | null
           title: string
+          trend_keyword: string | null
           universal_vto_url: string | null
           universal_vto_urls: string[] | null
         }
         Insert: {
           brand?: string | null
           category?: string | null
+          category_id?: string | null
           created_at?: string | null
           currency?: string | null
           id?: string
           iptc_tagged?: boolean | null
+          is_trending?: boolean | null
+          last_trend_refresh?: string | null
           merchant_link: string
+          merchant_name?: string | null
           merchant_offer_id: string
           original_image_url: string
           price?: string | null
+          product_url_hash?: string | null
           synthid_applied?: boolean | null
           tags?: string[] | null
           title: string
+          trend_keyword?: string | null
           universal_vto_url?: string | null
           universal_vto_urls?: string[] | null
         }
         Update: {
           brand?: string | null
           category?: string | null
+          category_id?: string | null
           created_at?: string | null
           currency?: string | null
           id?: string
           iptc_tagged?: boolean | null
+          is_trending?: boolean | null
+          last_trend_refresh?: string | null
           merchant_link?: string
+          merchant_name?: string | null
           merchant_offer_id?: string
           original_image_url?: string
           price?: string | null
+          product_url_hash?: string | null
           synthid_applied?: boolean | null
           tags?: string[] | null
           title?: string
+          trend_keyword?: string | null
           universal_vto_url?: string | null
           universal_vto_urls?: string[] | null
         }

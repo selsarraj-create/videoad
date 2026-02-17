@@ -90,7 +90,7 @@ export default function ContentVaultPage() {
                 .eq('status', 'ready')
                 .order('created_at', { ascending: false })
 
-            if (lookData) setLooks(lookData as LookData[])
+            if (lookData) setLooks(lookData as unknown as LookData[])
         }
         fetchData()
     }, [])

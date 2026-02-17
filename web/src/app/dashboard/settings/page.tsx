@@ -91,12 +91,12 @@ export default function SettingsPage() {
             // Profile
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('display_name, avatar_url, subscription_status, trial_ends_at')
+                .select('full_name, avatar_url, subscription_status, trial_ends_at')
                 .eq('id', user.id)
                 .single()
 
             if (profile) {
-                setDisplayName(profile.display_name || user.user_metadata?.full_name || '')
+                setDisplayName(profile.full_name || user.user_metadata?.full_name || '')
                 setAvatarUrl(profile.avatar_url || user.user_metadata?.avatar_url || null)
                 setCurrentTier((profile.subscription_status || 'starter') as SubscriptionTier)
             }
@@ -139,7 +139,7 @@ export default function SettingsPage() {
 
         const { error } = await supabase
             .from('profiles')
-            .update({ display_name: displayName })
+            .update({ full_name: displayName })
             .eq('id', user.id)
 
         if (error) {

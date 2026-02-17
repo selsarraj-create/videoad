@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     try {
         const { data: showcase, error } = await supabase
             .from('public_showcase')
-            .select('garment_metadata, person_image_url, persona_id')
+            .select('garment_metadata, persona_id')
             .eq('id', showcaseId)
             .single()
 

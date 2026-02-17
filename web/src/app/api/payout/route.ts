@@ -57,7 +57,13 @@ export async function POST(request: Request) {
         }
 
         if (action === 'payout') {
-            if (!profile?.stripe_account_id || !profile?.onboarding_complete) {
+            if (!profile?.stripe_account_id) {
+                return NextResponse.json({ error: 'Stripe onboarding incomplete' }, { status: 400 });
+            }
+
+            // Verify Stripe onboarding is complete via Stripe API
+            const account = await stripe.accounts.retrieve(profile.stripe_account_id);
+            if (!account.charges_enabled) {
                 return NextResponse.json({ error: 'Stripe onboarding incomplete' }, { status: 400 });
             }
 

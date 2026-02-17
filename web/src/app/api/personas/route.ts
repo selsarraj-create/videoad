@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
         let query = supabase
             .from('identities')
-            .select('id, name, master_identity_url, is_default, status, created_at')
+            .select('id, name, master_identity_url, status, created_at')
             .eq('user_id', user.id)
             .order('created_at', { ascending: true })
 
@@ -57,18 +57,16 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 })
         }
 
-        // Check ownership and default status
+        // Check ownership
         const { data: identity } = await supabase
             .from('identities')
-            .select('is_default, user_id')
+            .select('user_id')
             .eq('id', id)
             .single()
 
         if (!identity || identity.user_id !== user.id) {
             return NextResponse.json({ error: 'Identity not found' }, { status: 404 })
         }
-
-        const wasDefault = identity.is_default
 
         // Delete the identity (cascades to identity_views)
         const { error: deleteError } = await supabase
@@ -80,25 +78,6 @@ export async function DELETE(request: NextRequest) {
         if (deleteError) {
             console.error('Delete error:', deleteError)
             return NextResponse.json({ error: 'Failed to delete persona' }, { status: 500 })
-        }
-
-        // If deleted persona was default, promote the oldest remaining ready one
-        if (wasDefault) {
-            const { data: remaining } = await supabase
-                .from('identities')
-                .select('id')
-                .eq('user_id', user.id)
-                .eq('status', 'ready')
-                .order('created_at', { ascending: true })
-                .limit(1)
-                .single()
-
-            if (remaining) {
-                await supabase
-                    .from('identities')
-                    .update({ is_default: true })
-                    .eq('id', remaining.id)
-            }
         }
 
         return NextResponse.json({ success: true })
@@ -119,7 +98,7 @@ export async function PATCH(request: NextRequest) {
 
     try {
         const body = await request.json()
-        const { id, name, is_default } = body
+        const { id, name } = body
 
         if (!id) {
             return NextResponse.json({ error: 'Missing id' }, { status: 400 })
@@ -138,14 +117,6 @@ export async function PATCH(request: NextRequest) {
 
         const updates: Record<string, unknown> = {}
         if (name !== undefined) updates.name = name
-        if (is_default === true) {
-            // Clear other defaults first
-            await supabase
-                .from('identities')
-                .update({ is_default: false })
-                .eq('user_id', user.id)
-            updates.is_default = true
-        }
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
@@ -206,11 +177,9 @@ export async function POST(request: NextRequest) {
             .insert({
                 user_id: user.id,
                 raw_selfie_url: '',
-                name,
-                is_default: isDefault,
                 status: 'pending',
             })
-            .select('id, name, is_default, status')
+            .select('id, name, status')
             .single()
 
         if (insertError) {

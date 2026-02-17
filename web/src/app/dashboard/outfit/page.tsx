@@ -160,7 +160,7 @@ export default function OutfitBuilderPage() {
             .eq("status", "ready")
             .limit(1)
             .single()
-            .then(({ data }: { data: { id?: string; master_identity_url?: string } | null }) => {
+            .then(({ data }) => {
                 if (data?.master_identity_url) {
                     setMasterIdentityUrl(data.master_identity_url)
                     setIdentityId(data.id || null)
@@ -416,8 +416,8 @@ export default function OutfitBuilderPage() {
                                             key={cat.key}
                                             onClick={() => setActiveCategory(cat.key)}
                                             className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all border ${activeCategory === cat.key
-                                                    ? "bg-primary text-primary-foreground border-primary shadow-lg"
-                                                    : "bg-white/50 text-muted-foreground border-nimbus hover:border-primary hover:text-foreground"
+                                                ? "bg-primary text-primary-foreground border-primary shadow-lg"
+                                                : "bg-white/50 text-muted-foreground border-nimbus hover:border-primary hover:text-foreground"
                                                 }`}
                                         >
                                             <cat.icon className="w-3 h-3" /> {cat.label}
@@ -496,8 +496,8 @@ export default function OutfitBuilderPage() {
                                         onClick={handleTryLook}
                                         disabled={!masterIdentityUrl || placedGarments.length === 0}
                                         className={`w-full h-14 font-bold text-xs uppercase tracking-[0.2em] transition-all rounded-none ${masterIdentityUrl && placedGarments.length > 0
-                                                ? "bg-foreground text-background hover:bg-primary hover:text-white shadow-xl hover:shadow-2xl"
-                                                : "bg-nimbus/20 text-muted-foreground cursor-not-allowed"
+                                            ? "bg-foreground text-background hover:bg-primary hover:text-white shadow-xl hover:shadow-2xl"
+                                            : "bg-nimbus/20 text-muted-foreground cursor-not-allowed"
                                             }`}
                                     >
                                         <Sparkles className="w-4 h-4 mr-2" /> Try This Look
@@ -528,8 +528,8 @@ export default function OutfitBuilderPage() {
                                             <div
                                                 key={g.id}
                                                 className={`flex items-center gap-3 p-3 bg-white/50 border transition-all cursor-pointer ${selectedGarmentId === g.id
-                                                        ? "border-primary shadow-md"
-                                                        : "border-nimbus hover:border-primary/50"
+                                                    ? "border-primary shadow-md"
+                                                    : "border-nimbus hover:border-primary/50"
                                                     }`}
                                                 onClick={() => setSelectedGarmentId(g.id === selectedGarmentId ? null : g.id)}
                                             >
@@ -633,8 +633,8 @@ export default function OutfitBuilderPage() {
                             onClick={handleTryLook}
                             disabled={!masterIdentityUrl || placedGarments.length === 0 || rendering}
                             className={`w-full h-12 rounded-none font-bold text-xs uppercase tracking-[0.2em] shadow-xl ${!masterIdentityUrl || placedGarments.length === 0 || rendering
-                                    ? "bg-nimbus/20 text-muted-foreground"
-                                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                                ? "bg-nimbus/20 text-muted-foreground"
+                                : "bg-primary text-primary-foreground hover:bg-primary/90"
                                 }`}
                         >
                             {rendering ? (
@@ -674,8 +674,8 @@ export default function OutfitBuilderPage() {
                                                     key={item.id}
                                                     onClick={() => handleMobileSelect(item)}
                                                     className={`relative bg-white border transition-all ${placed
-                                                            ? "border-primary ring-1 ring-primary shadow-lg"
-                                                            : "border-nimbus hover:border-primary/50 active:scale-95"
+                                                        ? "border-primary ring-1 ring-primary shadow-lg"
+                                                        : "border-nimbus hover:border-primary/50 active:scale-95"
                                                         }`}
                                                 >
                                                     <div className="aspect-square relative overflow-hidden">

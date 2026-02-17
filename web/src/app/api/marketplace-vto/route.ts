@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         // If yes → serve immediately. Zero Fashn cost.
         // =============================================================
 
-        const { data: cached } = await (supabase as any)
+        const { data: cached } = await supabase
             .from('asset_library')
             .select('universal_vto_url, universal_vto_urls, product_url_hash')
             .eq('product_url_hash', productUrlHash)
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
             ].filter(Boolean),
         };
 
-        const { error: upsertError } = await (supabase as any)
+        const { error: upsertError } = await supabase
             .from('asset_library')
             .upsert(assetPayload, { onConflict: 'product_url_hash' });
 

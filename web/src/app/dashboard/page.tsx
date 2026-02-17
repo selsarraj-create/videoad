@@ -263,7 +263,7 @@ export default function StudioPage() {
                     date.setDate(date.getDate() - (6 - i))
                     const dateStr = date.toISOString().split('T')[0]
                     const dayTotal = ledgerData
-                        .filter(l => l.created_at.startsWith(dateStr))
+                        .filter(l => l.created_at?.startsWith(dateStr))
                         .reduce((sum, item) => sum + Number(item.user_share), 0)
                     return { date: dateStr, amount: dayTotal || Math.random() * 5 } // Random for demo if empty
                 })
@@ -272,7 +272,7 @@ export default function StudioPage() {
                 // Fetch Adoption Metrics (wrapped in try/catch in case migration not yet applied)
                 try {
                     const { count: remixes } = await supabase.from('public_showcase').select('*', { count: 'exact', head: true }).eq('original_creator_id', uid)
-                    const bonusTotal = ledgerData.filter(l => l.metadata?.role === 'original_creator').reduce((sum, item) => sum + Number(item.user_share), 0)
+                    const bonusTotal = ledgerData.filter(l => (l.metadata as Record<string, any>)?.role === 'original_creator').reduce((sum, item) => sum + Number(item.user_share), 0)
                     setAdoptionMetrics({ remixCount: remixes || 0, bonusEarned: bonusTotal })
                 } catch (adoptionErr) {
                     console.log('[Dashboard] Adoption metrics not available yet:', adoptionErr)
@@ -299,12 +299,12 @@ export default function StudioPage() {
                 savingJobIds.current.add(job.id)
                 supabase.from('media_library').upsert({
                     job_id: job.id,
-                    user_id: user?.id,
-                    image_url: job.output_url,
+                    user_id: user?.id || '',
+                    image_url: job.output_url || '',
                     person_image_url: (job.input_params as Record<string, string>)?.person_image_url || null,
                     garment_image_url: (job.input_params as Record<string, string>)?.garment_image_url || null,
                     label: ''
-                }, { onConflict: 'job_id' }).then(() => {
+                } as any, { onConflict: 'job_id' }).then(() => {
                     // Refresh media library
                     supabase.from('media_library').select('*').order('created_at', { ascending: false })
                         .then(({ data }) => {
@@ -1579,7 +1579,7 @@ export default function StudioPage() {
                                                                                 imageUrl: selectedMediaItem?.garment_image_url || selectedMediaItem?.image_url
                                                                             }],
                                                                             ai_labeled: true,
-                                                                        });
+                                                                        } as any);
                                                                         error = fallbackErr;
                                                                     }
                                                                     if (!error) alert("Published to Showcase!");

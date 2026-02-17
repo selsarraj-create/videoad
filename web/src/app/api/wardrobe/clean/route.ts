@@ -1,17 +1,9 @@
 import { NextResponse, NextRequest } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { Database } from '@/lib/supabase/database.types'
 
 // Internal webhook called by the Claid worker after cleaning completes.
 // Updates wardrobe item with clean URL and sets status to 'ready'.
-
-let _supabase: ReturnType<typeof createServiceClient> | null = null
-function getSupabase() {
-    if (!_supabase) {
-        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
-        _supabase = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!)
-    }
-    return _supabase
-}
 
 export async function POST(request: NextRequest) {
     // Verify worker secret
@@ -28,15 +20,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing wardrobe_id' }, { status: 400 })
         }
 
-        const supabase = getSupabase()
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+        const supabase = createServiceClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!)
 
-        const updateData: { status: string; clean_image_url?: string } = {
+        const updateData: Database['public']['Tables']['wardrobe']['Update'] = {
             status: error_message ? 'failed' : status,
         }
         if (clean_url) updateData.clean_image_url = clean_url
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- wardrobe table pending type generation
-        const { error: updateError } = await (supabase as any)
+        const { error: updateError } = await supabase
             .from('wardrobe')
             .update(updateData)
             .eq('id', wardrobe_id)

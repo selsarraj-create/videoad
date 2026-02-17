@@ -14,7 +14,7 @@ export async function GET() {
 
     try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any)
+        const { data, error } = await supabase
             .from('wardrobe')
             .select('*')
             .eq('user_id', user.id)
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         const limit = getWardrobeLimit(tier)
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { count, error: countError } = await (supabase as any)
+        const { count, error: countError } = await supabase
             .from('wardrobe')
             .select('id', { count: 'exact', head: true })
             .eq('user_id', user.id)
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
 
         // ── Insert wardrobe item (pending) ──────────────────────
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: item, error: insertError } = await (supabase as any)
+        const { data: item, error: insertError } = await supabase
             .from('wardrobe')
             .insert({
                 user_id: user.id,
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
             console.warn('RAILWAY_WORKER_URL not set — skipping Claid cleaning')
             // Mark as ready without cleaning (dev fallback)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase as any)
+            await supabase
                 .from('wardrobe')
                 .update({ status: 'ready', clean_image_url: image_url })
                 .eq('id', item.id)
@@ -193,7 +193,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: deleteError } = await (supabase as any)
+        const { error: deleteError } = await supabase
             .from('wardrobe')
             .delete()
             .eq('id', id)
