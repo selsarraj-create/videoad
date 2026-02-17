@@ -15,14 +15,14 @@ import { motion, AnimatePresence } from "framer-motion"
 interface ClothesItem {
     id: string
     name: string
-    category: string
+    category: string | null
     raw_image_url: string
     processed_3d_url: string | null
     glb_url: string | null
-    build_status: 'pending' | 'processing' | 'ready' | 'failed'
+    build_status: 'pending' | 'processing' | 'ready' | 'failed' | null
     error_message: string | null
-    created_at: string
-    updated_at: string
+    created_at: string | null
+    updated_at: string | null
 }
 
 type StatusFilter = 'all' | 'pending' | 'processing' | 'ready' | 'failed'
@@ -210,8 +210,8 @@ export default function AdminVaultPage() {
 
                     <div
                         className={`relative border-2 border-dashed rounded-none p-16 text-center transition-all duration-300 cursor-pointer ${dragOver
-                                ? 'border-primary bg-primary/5 scale-[1.01]'
-                                : 'border-nimbus hover:border-primary/50 bg-white'
+                            ? 'border-primary bg-primary/5 scale-[1.01]'
+                            : 'border-nimbus hover:border-primary/50 bg-white'
                             }`}
                         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                         onDragLeave={() => setDragOver(false)}
@@ -285,8 +285,8 @@ export default function AdminVaultPage() {
                                 key={f}
                                 onClick={() => setFilter(f)}
                                 className={`px-4 py-2 text-[10px] uppercase tracking-widest font-bold transition-all ${filter === f
-                                        ? 'bg-foreground text-background'
-                                        : 'bg-white text-muted-foreground hover:bg-nimbus/20 border border-nimbus'
+                                    ? 'bg-foreground text-background'
+                                    : 'bg-white text-muted-foreground hover:bg-nimbus/20 border border-nimbus'
                                     }`}
                             >
                                 {f} ({counts[f]})
@@ -320,7 +320,7 @@ export default function AdminVaultPage() {
                             {/* Table Body */}
                             <AnimatePresence>
                                 {items.map(item => {
-                                    const status = STATUS_CONFIG[item.build_status]
+                                    const status = STATUS_CONFIG[item.build_status || 'pending']
                                     const StatusIcon = status.icon
                                     return (
                                         <motion.div
@@ -363,7 +363,7 @@ export default function AdminVaultPage() {
                                             {/* Updated */}
                                             <div className="col-span-2">
                                                 <p className="text-[9px] text-muted-foreground font-mono">
-                                                    {new Date(item.updated_at).toLocaleDateString('en-GB', {
+                                                    {new Date(item.updated_at || '').toLocaleDateString('en-GB', {
                                                         day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
                                                     })}
                                                 </p>
