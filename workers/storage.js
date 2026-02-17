@@ -29,7 +29,7 @@ const axios = require("axios");
 // ── R2 Client ────────────────────────────────────────────────────────────────
 
 const ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
-const BUCKET = process.env.R2_BUCKET_NAME || "antigravity-assets";
+const BUCKET = process.env.R2_BUCKET_NAME || "assets";
 
 const r2 = new S3Client({
     region: "auto",
