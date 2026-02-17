@@ -5,7 +5,7 @@ import { SpeechQueue } from '@/lib/speech-utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Step = 'guide' | 'mode_select' | 'ai_director' | 'manual_import' | 'synthesis' | 'generating' | 'done'
+type Step = 'guide' | 'mode_select' | 'ai_director' | 'solo_mode' | 'partner_mode' | 'manual_import' | 'synthesis' | 'generating' | 'done'
 type Angle = 'front' | 'profile' | 'three_quarter' | 'face_front' | 'face_side'
 
 interface AngleCapture {

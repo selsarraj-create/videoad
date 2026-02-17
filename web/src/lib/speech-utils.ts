@@ -100,6 +100,50 @@ export const DIRECTOR_LINES: Record<string, string> = {
     coach_silhouette:
         'Arms away from the body. Clear the silhouette.',
 
+    // Solo Mode — Blind Guidance (rear camera)
+    solo_start:
+        'Solo mode activated. Point the rear camera at yourself. I will guide you by voice.',
+    move_further:
+        'Move the phone further away.',
+    move_closer:
+        'Move the phone closer.',
+    move_left:
+        'Move the phone to the left.',
+    move_right:
+        'Move the phone to the right.',
+    move_up:
+        'Move the phone up slightly.',
+    move_down:
+        'Move the phone down slightly.',
+    centered:
+        'Perfect. Hold still.',
+    turn_left:
+        'Now, turn your head slowly to the left.',
+    turn_right:
+        'Great. Now turn to the right.',
+    snap_center:
+        'Center captured.',
+    snap_left:
+        'Left profile captured.',
+    snap_right:
+        'Right profile captured.',
+    solo_complete:
+        'All angles captured. Excellent work.',
+
+    // Partner Mode
+    partner_start:
+        'Partner mode. Have someone hold the camera. Align the face in the green box.',
+    partner_aligned:
+        'Aligned. Tap the shutter button.',
+    partner_not_aligned:
+        'Adjust the framing. Center the face in the box.',
+    partner_turn_left:
+        'Great. Now have them turn to the left.',
+    partner_turn_right:
+        'Now have them turn to the right.',
+    partner_snap:
+        'Captured.',
+
     // Countdown (used before auto-capture)
     countdown:
         'Three. Two. One.',

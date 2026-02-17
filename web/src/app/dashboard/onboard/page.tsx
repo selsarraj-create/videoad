@@ -7,9 +7,10 @@ import {
     Sparkles, Camera, Upload, User, Sun, ArrowRight, ArrowLeft,
     CheckCircle2, XCircle, Loader2, RefreshCcw,
     Video as VideoIcon, Zap, Eye, RotateCcw, ImagePlus, Shield,
-    Volume2, VolumeX
+    Volume2, VolumeX, Mic, Users, CameraOff
 } from "lucide-react"
 import { useDirectorVoice } from "@/hooks/useDirectorVoice"
+import { useFaceDetector } from "@/hooks/useFaceDetector"
 import { SpeechQueue, playShutterClick } from "@/lib/speech-utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -18,8 +19,9 @@ import { motion, AnimatePresence } from "framer-motion"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Step = 'guide' | 'mode_select' | 'ai_director' | 'manual_import' | 'synthesis' | 'generating' | 'done'
+type Step = 'guide' | 'mode_select' | 'ai_director' | 'solo_mode' | 'partner_mode' | 'manual_import' | 'synthesis' | 'generating' | 'done'
 type Angle = 'front' | 'profile' | 'three_quarter' | 'face_front' | 'face_side'
+type CaptureMode = 'ai_director' | 'solo' | 'partner' | 'manual' | null
 
 interface Identity {
     id: string
@@ -130,7 +132,7 @@ const STEP_LABELS = ['guide', 'mode_select', 'capture', 'synthesis', 'done']
 
 export default function OnboardPage() {
     const [step, setStep] = useState<Step>('guide')
-    const [mode, setMode] = useState<'ai_director' | 'manual' | null>(null)
+    const [mode, setMode] = useState<CaptureMode>(null)
     const [identity, setIdentity] = useState<Identity | null>(null)
     const [error, setError] = useState<string | null>(null)
 
@@ -145,6 +147,18 @@ export default function OnboardPage() {
     const [poseDetection, setPoseDetection] = useState<PoseDetection | null>(null)
     const [detecting, setDetecting] = useState(false)
     const [autoCapturing, setAutoCapturing] = useState(false)
+
+    // Solo Mode state
+    type SoloPhase = 'centering' | 'snap_center' | 'turn_left' | 'snap_left' | 'turn_right' | 'snap_right' | 'done'
+    const [soloPhase, setSoloPhase] = useState<SoloPhase>('centering')
+    const [soloInstruction, setSoloInstruction] = useState('Point the rear camera at yourself')
+    const soloGuideThrottleRef = useRef<number>(0)
+    const soloSnapPendingRef = useRef(false)
+
+    // Partner Mode state
+    const [partnerAligned, setPartnerAligned] = useState(false)
+    const [partnerPhase, setPartnerPhase] = useState<'center' | 'left' | 'right' | 'done'>('center')
+
 
     // Captures (shared between both modes)
     const [captures, setCaptures] = useState<Record<Angle, AngleCapture>>({
@@ -207,11 +221,25 @@ export default function OnboardPage() {
 
     // ── Camera Management ─────────────────────────────────────────────────
 
-    const startCamera = useCallback(async () => {
+    const startCamera = useCallback(async (useRear: boolean = false) => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user', width: { ideal: 2560 }, height: { ideal: 1440 } }
-            })
+            let stream: MediaStream
+            if (useRear) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { exact: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } }
+                    })
+                } catch {
+                    // Fallback to front camera (e.g. laptops)
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'user', width: { ideal: 2560 }, height: { ideal: 1440 } }
+                    })
+                }
+            } else {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 2560 }, height: { ideal: 1440 } }
+                })
+            }
             streamRef.current = stream
             if (videoRef.current) {
                 videoRef.current.srcObject = stream
@@ -233,9 +261,17 @@ export default function OnboardPage() {
         }
     }, [])
 
+    // Face detector for Solo and Partner modes
+    const faceDetectorActive = step === 'solo_mode' || step === 'partner_mode'
+    const face = useFaceDetector(videoRef, faceDetectorActive, 10)
+
     useEffect(() => {
-        if (step === 'ai_director') {
-            startCamera()
+        if (step === 'ai_director' || step === 'partner_mode') {
+            startCamera(false)
+            return () => stopCamera()
+        }
+        if (step === 'solo_mode') {
+            startCamera(true)
             return () => stopCamera()
         }
     }, [step, startCamera, stopCamera])
@@ -583,6 +619,10 @@ export default function OnboardPage() {
         setError(null)
         setCurrentAngleIdx(0)
         setPoseDetection(null)
+        setSoloPhase('centering')
+        setSoloInstruction('Point the rear camera at yourself')
+        setPartnerAligned(false)
+        setPartnerPhase('center')
         setCaptures({
             front: { preview: null, url: null, validated: false },
             profile: { preview: null, url: null, validated: false },
@@ -592,12 +632,154 @@ export default function OnboardPage() {
         })
     }
 
+    // ── Solo Mode: Voice Guidance Logic ────────────────────────────────────
+
+    useEffect(() => {
+        if (step !== 'solo_mode' || !face.ready) return
+        const vq = voiceQueueRef.current
+        const now = Date.now()
+        if (now - soloGuideThrottleRef.current < 3000) return // Throttle to 3s
+
+        if (!face.detected) {
+            setSoloInstruction('No face detected. Adjust the camera.')
+            return
+        }
+
+        // Phase: Centering
+        if (soloPhase === 'centering') {
+            if (face.faceWidthFraction > 0.40) {
+                setSoloInstruction('Move the phone further away')
+                if (vq) { soloGuideThrottleRef.current = now; vq.speak('move_further') }
+            } else if (face.faceWidthFraction < 0.15) {
+                setSoloInstruction('Move the phone closer')
+                if (vq) { soloGuideThrottleRef.current = now; vq.speak('move_closer') }
+            } else if (face.center && face.center.x < 0.30) {
+                setSoloInstruction('Move phone to the left')
+                if (vq) { soloGuideThrottleRef.current = now; vq.speak('move_left') }
+            } else if (face.center && face.center.x > 0.70) {
+                setSoloInstruction('Move phone to the right')
+                if (vq) { soloGuideThrottleRef.current = now; vq.speak('move_right') }
+            } else if (face.center && face.center.y < 0.25) {
+                setSoloInstruction('Move phone down')
+                if (vq) { soloGuideThrottleRef.current = now; vq.speak('move_down') }
+            } else if (face.center && face.center.y > 0.75) {
+                setSoloInstruction('Move phone up')
+                if (vq) { soloGuideThrottleRef.current = now; vq.speak('move_up') }
+            } else if (face.stable && !soloSnapPendingRef.current) {
+                // Centered + stable → auto snap
+                soloSnapPendingRef.current = true
+                setSoloInstruction('Perfect! Hold still...')
+                if (vq) {
+                    vq.speak('centered', () => {
+                        const frame = captureFrame(0.95, 2560)
+                        if (frame) {
+                            playShutterClick()
+                            saveAngleCapture('front', frame, 'camera')
+                            if (vq) vq.speak('snap_center')
+                        }
+                        soloSnapPendingRef.current = false
+                        setSoloPhase('turn_left')
+                    })
+                }
+            } else {
+                setSoloInstruction('Almost there... hold steady')
+            }
+        }
+
+        // Phase: Turn Left
+        if (soloPhase === 'turn_left') {
+            setSoloInstruction('Turn your head slowly to the left')
+            if (now - soloGuideThrottleRef.current > 5000 && vq) {
+                soloGuideThrottleRef.current = now
+                vq.speak('turn_left')
+            }
+            if (face.yaw > 30 && face.stable && !soloSnapPendingRef.current) {
+                soloSnapPendingRef.current = true
+                const frame = captureFrame(0.95, 2560)
+                if (frame) {
+                    playShutterClick()
+                    saveAngleCapture('profile', frame, 'camera')
+                    if (vq) vq.speak('snap_left')
+                }
+                soloSnapPendingRef.current = false
+                setSoloPhase('turn_right')
+            }
+        }
+
+        // Phase: Turn Right
+        if (soloPhase === 'turn_right') {
+            setSoloInstruction('Now turn your head to the right')
+            if (now - soloGuideThrottleRef.current > 5000 && vq) {
+                soloGuideThrottleRef.current = now
+                vq.speak('turn_right')
+            }
+            if (face.yaw < -30 && face.stable && !soloSnapPendingRef.current) {
+                soloSnapPendingRef.current = true
+                const frame = captureFrame(0.95, 2560)
+                if (frame) {
+                    playShutterClick()
+                    saveAngleCapture('three_quarter', frame, 'camera')
+                    if (vq) vq.speak('snap_right')
+                }
+                soloSnapPendingRef.current = false
+                setSoloPhase('done')
+                if (vq) vq.speak('solo_complete')
+                setTimeout(() => setStep('synthesis'), 2000)
+            }
+        }
+    }, [step, face, soloPhase, captureFrame])
+
+    // ── Partner Mode: Alignment Logic ─────────────────────────────────────
+
+    useEffect(() => {
+        if (step !== 'partner_mode' || !face.ready) return
+
+        if (!face.detected || !face.center) {
+            setPartnerAligned(false)
+            return
+        }
+
+        // Check if face is within the alignment box (~30-70% range)
+        const inBox =
+            face.center.x > 0.30 && face.center.x < 0.70 &&
+            face.center.y > 0.20 && face.center.y < 0.80 &&
+            face.faceWidthFraction > 0.15 && face.faceWidthFraction < 0.50
+
+        setPartnerAligned(inBox)
+    }, [step, face])
+
+    const handlePartnerSnap = useCallback(() => {
+        if (!partnerAligned) return
+        const frame = captureFrame(0.95, 2560)
+        if (!frame) return
+
+        playShutterClick()
+        const vq = voiceQueueRef.current
+
+        if (partnerPhase === 'center') {
+            saveAngleCapture('front', frame, 'camera')
+            if (vq) vq.speak('partner_snap')
+            setPartnerPhase('left')
+            setTimeout(() => { if (vq) vq.speak('partner_turn_left') }, 1000)
+        } else if (partnerPhase === 'left') {
+            saveAngleCapture('profile', frame, 'camera')
+            if (vq) vq.speak('partner_snap')
+            setPartnerPhase('right')
+            setTimeout(() => { if (vq) vq.speak('partner_turn_right') }, 1000)
+        } else if (partnerPhase === 'right') {
+            saveAngleCapture('three_quarter', frame, 'camera')
+            if (vq) { vq.speak('partner_snap'); vq.speak('all_complete') }
+            setPartnerPhase('done')
+            setTimeout(() => setStep('synthesis'), 2000)
+        }
+    }, [partnerAligned, partnerPhase, captureFrame])
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     const getStepIndex = () => {
         if (step === 'guide') return 0
         if (step === 'mode_select') return 1
-        if (step === 'ai_director' || step === 'manual_import') return 2
+        if (step === 'ai_director' || step === 'solo_mode' || step === 'partner_mode' || step === 'manual_import') return 2
         if (step === 'synthesis' || step === 'generating') return 3
         return 4
     }
@@ -686,42 +868,62 @@ export default function OnboardPage() {
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-                                {/* AI Director Card */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                                {/* Solo Mode Card (Option A) */}
                                 <button
-                                    onClick={() => { setMode('ai_director'); setStep('ai_director') }}
-                                    className="group text-left p-10 bg-white border-2 border-nimbus hover:border-primary transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 space-y-6"
+                                    onClick={() => { setMode('solo'); setStep('solo_mode'); setSoloPhase('centering'); voiceQueueRef.current?.speak('solo_start') }}
+                                    className="group text-left p-8 bg-white border-2 border-nimbus hover:border-primary transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 space-y-5"
                                 >
-                                    <div className="w-16 h-16 bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary group-hover:border-primary transition-all">
-                                        <Camera className="w-7 h-7 text-primary group-hover:text-white transition-colors" />
+                                    <div className="w-14 h-14 bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary group-hover:border-primary transition-all">
+                                        <Mic className="w-6 h-6 text-primary group-hover:text-white transition-colors" />
                                     </div>
                                     <div className="space-y-2">
-                                        <h3 className="font-bold text-xl uppercase tracking-widest text-foreground">AI-Director</h3>
+                                        <h3 className="font-bold text-lg uppercase tracking-widest text-foreground">Solo Mode</h3>
                                         <p className="text-sm text-muted-foreground leading-relaxed">
-                                            Hands-free guided capture. The AI directs you through each pose and auto-captures when your angle is perfect.
+                                            Rear camera with voice guidance. The AI detects your face and tells you how to position yourself — completely hands-free.
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-4 pt-4 border-t border-nimbus/50">
-                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Live Camera</Badge>
-                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">~2 min</Badge>
+                                    <div className="flex items-center gap-3 pt-4 border-t border-nimbus/50">
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Rear Camera</Badge>
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Voice</Badge>
                                     </div>
                                 </button>
 
-                                {/* Manual Import Card */}
+                                {/* Partner Mode Card (Option B) */}
                                 <button
-                                    onClick={() => { setMode('manual'); setStep('manual_import') }}
-                                    className="group text-left p-10 bg-white border-2 border-nimbus hover:border-primary transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 space-y-6"
+                                    onClick={() => { setMode('partner'); setStep('partner_mode'); setPartnerPhase('center'); voiceQueueRef.current?.speak('partner_start') }}
+                                    className="group text-left p-8 bg-white border-2 border-nimbus hover:border-primary transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 space-y-5"
                                 >
-                                    <div className="w-16 h-16 bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary group-hover:border-primary transition-all">
-                                        <Upload className="w-7 h-7 text-primary group-hover:text-white transition-colors" />
+                                    <div className="w-14 h-14 bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary group-hover:border-primary transition-all">
+                                        <Users className="w-6 h-6 text-primary group-hover:text-white transition-colors" />
                                     </div>
                                     <div className="space-y-2">
-                                        <h3 className="font-bold text-xl uppercase tracking-widest text-foreground">Manual Import</h3>
+                                        <h3 className="font-bold text-lg uppercase tracking-widest text-foreground">Partner Mode</h3>
                                         <p className="text-sm text-muted-foreground leading-relaxed">
-                                            Upload up to 5 existing photos. Each is AI-analyzed for suitability, angle, and quality.
+                                            Have someone hold the camera. A green alignment box guides them — the shutter activates only when framing is perfect.
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-4 pt-4 border-t border-nimbus/50">
+                                    <div className="flex items-center gap-3 pt-4 border-t border-nimbus/50">
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Front Camera</Badge>
+                                        <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Guided</Badge>
+                                    </div>
+                                </button>
+
+                                {/* Manual Import Card (Option C) */}
+                                <button
+                                    onClick={() => { setMode('manual'); setStep('manual_import') }}
+                                    className="group text-left p-8 bg-white border-2 border-nimbus hover:border-primary transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 space-y-5"
+                                >
+                                    <div className="w-14 h-14 bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary group-hover:border-primary transition-all">
+                                        <Upload className="w-6 h-6 text-primary group-hover:text-white transition-colors" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h3 className="font-bold text-lg uppercase tracking-widest text-foreground">Manual Upload</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">
+                                            Upload existing photos. Each is AI-analyzed for suitability, angle, and quality.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3 pt-4 border-t border-nimbus/50">
                                         <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">File Upload</Badge>
                                         <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">Instant</Badge>
                                     </div>
@@ -873,6 +1075,225 @@ export default function OnboardPage() {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            </div>
+
+                            <div className="text-center pt-4">
+                                <button onClick={handleStartOver} className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors">
+                                    <ArrowLeft className="w-3 h-3 inline mr-1" /> Start over
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* ===== STEP: SOLO MODE ===== */}
+                    {step === 'solo_mode' && (
+                        <motion.div key="solo_mode" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
+                            <div className="text-center space-y-2">
+                                <div className="flex items-center justify-center gap-3 mb-4">
+                                    <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">
+                                        Solo Mode — Rear Camera
+                                    </Badge>
+                                    {isSpeaking && (
+                                        <Badge className="bg-green-500/10 text-green-600 border-0 rounded-none text-[9px] uppercase tracking-widest animate-pulse">
+                                            Speaking
+                                        </Badge>
+                                    )}
+                                    <button
+                                        onClick={() => setVoiceMuted(m => !m)}
+                                        className="p-2 rounded-full border border-nimbus hover:border-primary text-muted-foreground hover:text-primary transition-all"
+                                    >
+                                        {voiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                <h2 className="font-serif text-4xl text-primary">Voice Director</h2>
+                                <p className="text-muted-foreground text-sm max-w-md mx-auto">Listen to the voice instructions. The camera is pointed at you — I&apos;ll tell you when to move.</p>
+                            </div>
+
+                            {/* Audio-Only Dark Panel */}
+                            <div className="max-w-xl mx-auto">
+                                <div className="relative aspect-[3/4] bg-gradient-to-b from-neutral-900 to-neutral-950 border border-nimbus overflow-hidden shadow-2xl">
+                                    {/* Hidden video for detection */}
+                                    <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-0" />
+
+                                    {/* Large instruction text */}
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
+                                        <div className="w-20 h-20 rounded-full border-4 border-primary/30 flex items-center justify-center mb-8">
+                                            {face.detected
+                                                ? <div className="w-10 h-10 rounded-full bg-green-500 animate-pulse" />
+                                                : <CameraOff className="w-8 h-8 text-white/40" />
+                                            }
+                                        </div>
+                                        <motion.p
+                                            key={soloInstruction}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="text-white text-2xl font-serif text-center leading-relaxed max-w-sm"
+                                        >
+                                            {soloInstruction}
+                                        </motion.p>
+                                        <div className="mt-8 flex items-center gap-2">
+                                            <Badge className={`border-0 rounded-none text-[9px] font-bold uppercase tracking-widest ${face.detected ? 'bg-green-500/20 text-green-400' : 'bg-white/10 text-white/40'
+                                                }`}>
+                                                {face.detected ? '● Face Detected' : '○ Searching...'}
+                                            </Badge>
+                                            <Badge className="bg-white/10 text-white/60 border-0 rounded-none text-[9px] uppercase tracking-widest">
+                                                Phase: {soloPhase}
+                                            </Badge>
+                                        </div>
+                                    </div>
+
+                                    {/* Yaw indicator */}
+                                    {face.detected && (
+                                        <div className="absolute bottom-6 left-6 right-6">
+                                            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary transition-all duration-300"
+                                                    style={{
+                                                        width: '8px',
+                                                        marginLeft: `${Math.max(0, Math.min(100, 50 + face.yaw))}%`,
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="flex justify-between mt-1">
+                                                <span className="text-[9px] text-white/30">LEFT</span>
+                                                <span className="text-[9px] text-white/30">CENTER</span>
+                                                <span className="text-[9px] text-white/30">RIGHT</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="text-center pt-4">
+                                <button onClick={handleStartOver} className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors">
+                                    <ArrowLeft className="w-3 h-3 inline mr-1" /> Start over
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* ===== STEP: PARTNER MODE ===== */}
+                    {step === 'partner_mode' && (
+                        <motion.div key="partner_mode" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
+                            <div className="text-center space-y-2">
+                                <div className="flex items-center justify-center gap-3 mb-4">
+                                    <Badge className="bg-primary/10 text-primary border-0 rounded-none text-[9px] uppercase tracking-widest">
+                                        Partner Mode
+                                    </Badge>
+                                    <Badge className={`border-0 rounded-none text-[9px] font-bold uppercase tracking-widest ${partnerAligned ? 'bg-green-500 text-white' : 'bg-white/80 text-muted-foreground'
+                                        }`}>
+                                        {partnerAligned ? '● Aligned' : '○ Align Face'}
+                                    </Badge>
+                                    <button
+                                        onClick={() => setVoiceMuted(m => !m)}
+                                        className="p-2 rounded-full border border-nimbus hover:border-primary text-muted-foreground hover:text-primary transition-all"
+                                    >
+                                        {voiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                <h2 className="font-serif text-4xl text-primary">
+                                    {partnerPhase === 'center' ? 'Center View'
+                                        : partnerPhase === 'left' ? 'Turn Left'
+                                            : partnerPhase === 'right' ? 'Turn Right'
+                                                : '✓ Complete!'}
+                                </h2>
+                                <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                                    {partnerPhase === 'center' ? 'Align their face in the green box, then tap the shutter.'
+                                        : partnerPhase === 'left' ? 'Have them turn their head left. Align and tap.'
+                                            : partnerPhase === 'right' ? 'Have them turn right. Align and tap.'
+                                                : 'All angles captured!'}
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Camera Feed with Alignment Box */}
+                                <div className="md:col-span-2 relative shadow-2xl">
+                                    <div className="relative aspect-[3/4] bg-black overflow-hidden border border-nimbus">
+                                        <video ref={videoRef} autoPlay playsInline muted
+                                            className="w-full h-full object-cover transform scale-x-[-1]" />
+
+                                        {/* Green Alignment Box */}
+                                        <div className={`absolute border-2 transition-all duration-500 pointer-events-none ${partnerAligned
+                                                ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]'
+                                                : 'border-white/40'
+                                            }`}
+                                            style={{
+                                                top: '15%',
+                                                left: '25%',
+                                                width: '50%',
+                                                height: '70%',
+                                            }}
+                                        >
+                                            {/* Corner markers */}
+                                            {['top-0 left-0 border-t-4 border-l-4', 'top-0 right-0 border-t-4 border-r-4', 'bottom-0 left-0 border-b-4 border-l-4', 'bottom-0 right-0 border-b-4 border-r-4'].map((pos, i) => (
+                                                <div key={i} className={`absolute w-6 h-6 ${pos} ${partnerAligned ? 'border-green-500' : 'border-white/60'
+                                                    }`} />
+                                            ))}
+
+                                            {/* Center crosshair */}
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-30">
+                                                <div className="w-px h-8 bg-white" />
+                                                <div className="w-8 h-px bg-white absolute" />
+                                            </div>
+                                        </div>
+
+                                        {/* Instruction overlay */}
+                                        <div className="absolute bottom-4 left-4 right-4">
+                                            <div className="bg-black/60 backdrop-blur-md px-4 py-3 flex items-center justify-between">
+                                                <span className="text-[10px] text-white/80 uppercase tracking-widest font-bold">
+                                                    {partnerAligned ? 'Face aligned — tap the shutter!' : 'Align the face in the green box'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Shutter Button — disabled until aligned */}
+                                    <div className="flex justify-center mt-6">
+                                        <button
+                                            onClick={handlePartnerSnap}
+                                            disabled={!partnerAligned || partnerPhase === 'done'}
+                                            className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${partnerAligned && partnerPhase !== 'done'
+                                                    ? 'border-green-500 bg-green-500 hover:bg-green-400 hover:border-green-400 shadow-[0_0_30px_rgba(34,197,94,0.4)] active:scale-90'
+                                                    : 'border-nimbus bg-nimbus/20 cursor-not-allowed opacity-50'
+                                                }`}
+                                        >
+                                            <div className={`w-14 h-14 rounded-full ${partnerAligned && partnerPhase !== 'done'
+                                                    ? 'bg-white'
+                                                    : 'bg-nimbus/30'
+                                                }`} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Capture status */}
+                                <div className="space-y-4">
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold border-b border-nimbus pb-2">
+                                        Captured Angles
+                                    </p>
+                                    {(['center', 'left', 'right'] as const).map((phase) => {
+                                        const angleKey = phase === 'center' ? 'front' : phase === 'left' ? 'profile' : 'three_quarter'
+                                        const label = phase === 'center' ? 'Center' : phase === 'left' ? 'Profile Left' : 'Profile Right'
+                                        const done = captures[angleKey].validated
+                                        const isCurrent = partnerPhase === phase
+                                        return (
+                                            <div key={phase} className={`p-3 border transition-all ${done ? 'border-primary/50 bg-primary/5' : isCurrent ? 'border-primary/30 bg-primary/5 animate-pulse' : 'border-nimbus bg-white'
+                                                }`}>
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 flex items-center justify-center border ${done ? 'border-primary bg-primary/10' : 'border-nimbus bg-nimbus/10'
+                                                        }`}>
+                                                        {done ? <CheckCircle2 className="w-5 h-5 text-primary" /> : <Camera className="w-4 h-4 text-muted-foreground" />}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-bold uppercase tracking-wider">{label}</p>
+                                                        <p className="text-[9px] text-muted-foreground uppercase">
+                                                            {done ? '✓ Captured' : isCurrent ? 'Waiting...' : 'Pending'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
                                 </div>
                             </div>
 
