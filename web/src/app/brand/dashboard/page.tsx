@@ -74,7 +74,7 @@ export default function BrandDashboardPage() {
                 </div>
                 <Button
                     onClick={() => setShowCreateForm(true)}
-                    className="h-11 bg-primary text-white hover:bg-primary/90 rounded-none text-xs uppercase tracking-[0.15em] font-bold px-6"
+                    className="h-11 bg-foreground text-white hover:bg-foreground/90 rounded-none text-xs uppercase tracking-[0.15em] font-bold px-6"
                 >
                     <Plus className="w-4 h-4 mr-2" />
                     Create Campaign
@@ -113,7 +113,7 @@ export default function BrandDashboardPage() {
                 ) : bounties.length === 0 ? (
                     <div className="bg-white border border-nimbus/40 p-12 text-center">
                         <Megaphone className="w-12 h-12 text-primary/20 mx-auto mb-4" />
-                        <h3 className="font-serif text-xl mb-2">No campaigns yet</h3>
+                        <h3 className="font-serif text-xl mb-2">No campaigns yet — create your first one!</h3>
                         <p className="text-sm text-muted-foreground mb-6">Create your first bounty to start receiving creator submissions.</p>
                         <Button
                             onClick={() => setShowCreateForm(true)}
