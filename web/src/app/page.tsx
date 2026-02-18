@@ -179,6 +179,10 @@ export default function Home() {
                   Hire Creators →
                 </Link>
               </div>
+
+              <p className="mt-6 text-xs text-muted-foreground/70 italic font-serif tracking-wide">
+                The premier VTO engine optimized for assets from Revolve, SSENSE, and Farfetch.
+              </p>
             </motion.div>
           </div>
 
