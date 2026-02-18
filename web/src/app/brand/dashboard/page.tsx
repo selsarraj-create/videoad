@@ -77,7 +77,7 @@ export default function BrandDashboardPage() {
                     className="h-11 bg-primary text-white hover:bg-primary/90 rounded-none text-xs uppercase tracking-[0.15em] font-bold px-6"
                 >
                     <Plus className="w-4 h-4 mr-2" />
-                    Create Bounty
+                    Create Campaign
                 </Button>
             </div>
 
@@ -119,7 +119,7 @@ export default function BrandDashboardPage() {
                             onClick={() => setShowCreateForm(true)}
                             className="h-10 bg-foreground text-white rounded-none text-xs uppercase tracking-[0.15em] font-bold px-6"
                         >
-                            <Plus className="w-3.5 h-3.5 mr-2" /> Create First Bounty
+                            <Plus className="w-3.5 h-3.5 mr-2" /> Create First Campaign
                         </Button>
                     </div>
                 ) : (

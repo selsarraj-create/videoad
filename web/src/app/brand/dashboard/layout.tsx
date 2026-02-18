@@ -8,7 +8,7 @@ import Link from "next/link"
 
 const NAV_ITEMS = [
     { label: "Dashboard", href: "/brand/dashboard", icon: LayoutDashboard },
-    { label: "Campaigns", href: "/brand/dashboard?tab=campaigns", icon: Megaphone },
+    { label: "Campaigns", href: "/brand/dashboard", icon: Megaphone },
     { label: "Settings", href: "/brand/dashboard?tab=settings", icon: Settings },
 ]
 
