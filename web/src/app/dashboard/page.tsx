@@ -52,11 +52,12 @@ import { LookOfTheDay } from "@/components/look-of-the-day"
 import { ShowcaseGrid } from "@/components/showcase-grid"
 import { CreditShop } from "@/components/credit-shop"
 import { BountyFeed } from "@/components/bounty-feed"
+import { ProjectsGrid } from "@/components/projects-grid"
 import { DollarSign, TrendingUp, Clock, Award, Bell, Globe, Lock, Zap, CreditCard, Settings, ShieldAlert, AlertTriangle } from "lucide-react"
 import type { SubscriptionTier } from "@/lib/tier-config"
 import type { AccountStatus } from "@/lib/moderation"
 
-type Tab = 'identities' | 'try-on' | 'video' | 'marketplace' | 'revenue' | 'showcase' | 'instagram' | 'bounties'
+type Tab = 'identities' | 'try-on' | 'video' | 'marketplace' | 'showcase' | 'bounties' | 'projects'
 
 interface MarketplaceItem {
     id: string;
@@ -675,29 +676,23 @@ export default function StudioPage() {
                             Marketplace
                             {activeTab === 'marketplace' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
-                        <button onClick={() => setActiveTab('revenue')}
-                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
-                                ${activeTab === 'revenue' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
-                            Revenue
-                            {activeTab === 'revenue' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
-                        </button>
                         <button onClick={() => setActiveTab('showcase')}
                             className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
                                 ${activeTab === 'showcase' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
                             Showcase
                             {activeTab === 'showcase' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
-                        <button onClick={() => setActiveTab('instagram')}
-                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
-                                ${activeTab === 'instagram' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
-                            Instagram
-                            {activeTab === 'instagram' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
-                        </button>
                         <button onClick={() => setActiveTab('bounties')}
                             className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
                                 ${activeTab === 'bounties' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
                             Bounties
                             {activeTab === 'bounties' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
+                        </button>
+                        <button onClick={() => setActiveTab('projects')}
+                            className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2
+                                ${activeTab === 'projects' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
+                            Projects
+                            {activeTab === 'projects' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-[1px] bg-foreground" />}
                         </button>
                     </div>
                 </div>
@@ -741,9 +736,9 @@ export default function StudioPage() {
 
                 {/* ===== LEFT PANEL ===== */}
                 <section className={`flex flex-col overflow-y-auto glass-panel z-20 relative transition-all duration-500
-                    ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram' || activeTab === 'bounties') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
+                    ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'showcase' || activeTab === 'bounties' || activeTab === 'projects') ? 'col-span-12' : 'col-span-12 lg:col-span-5'}`}>
                     <div className={`flex-1 p-8 lg:p-12 w-full space-y-12 transition-all
-                        ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'revenue' || activeTab === 'showcase' || activeTab === 'instagram' || activeTab === 'bounties') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
+                        ${(activeTab === 'identities' || activeTab === 'marketplace' || activeTab === 'showcase' || activeTab === 'bounties' || activeTab === 'projects') ? 'max-w-6xl mx-auto' : 'max-w-xl mx-auto'}`}>
 
                         {activeTab === 'showcase' ? (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
@@ -1223,118 +1218,6 @@ export default function StudioPage() {
                                     </div>
                                 </div>
                             </motion.div>
-                        ) : activeTab === 'revenue' ? (
-                            /* ---- REVENUE TAB ---- */
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
-                                {/* Bento KPI Cards */}
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
-                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Total Payouts</span>
-                                        <span className="text-2xl font-serif">${stats.total.toFixed(2)}</span>
-                                    </div>
-                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
-                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Look Adoption</span>
-                                        <span className="text-2xl font-serif">{adoptionMetrics.remixCount} Remixes</span>
-                                    </div>
-                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
-                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Passive Bonus</span>
-                                        <span className="text-2xl font-serif">${adoptionMetrics.bonusEarned.toFixed(2)}</span>
-                                    </div>
-                                    <div className="p-6 bg-white border border-nimbus/20 shadow-sm">
-                                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Status</span>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <div className="w-2 h-2 bg-green-500 rounded-full" />
-                                            <span className="text-[10px] uppercase tracking-widest font-bold">Live</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Zero-Tax Ledger */}
-                                <div className="space-y-4">
-                                    <div className="flex items-baseline justify-between border-b border-nimbus pb-2">
-                                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Zero-Tax Ledger</Label>
-                                        <span className="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 uppercase tracking-widest border border-green-200">0% Commission</span>
-                                    </div>
-                                    <div className="overflow-hidden border border-nimbus/20">
-                                        <table className="w-full text-xs">
-                                            <thead>
-                                                <tr className="border-b border-nimbus/20 bg-foreground/[0.02]">
-                                                    <th className="text-left p-3 text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Period</th>
-                                                    <th className="text-right p-3 text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Revenue Generated</th>
-                                                    <th className="text-right p-3 text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Fees Paid</th>
-                                                    <th className="text-right p-3 text-[10px] uppercase tracking-widest text-muted-foreground font-bold">You Keep</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr className="border-b border-nimbus/10">
-                                                    <td className="p-3 font-serif">This Month</td>
-                                                    <td className="p-3 text-right font-serif">${stats.total.toFixed(2)}</td>
-                                                    <td className="p-3 text-right font-serif text-green-600">$0.00</td>
-                                                    <td className="p-3 text-right font-serif font-bold">${stats.total.toFixed(2)}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td className="p-3 font-serif">All Time</td>
-                                                    <td className="p-3 text-right font-serif">${stats.total.toFixed(2)}</td>
-                                                    <td className="p-3 text-right font-serif text-green-600">$0.00</td>
-                                                    <td className="p-3 text-right font-serif font-bold">${stats.total.toFixed(2)}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <p className="text-[10px] text-muted-foreground text-center italic font-serif">
-                                        Unlike LTK or ShopMy, we take zero commission on your affiliate revenue. 100% yours.
-                                    </p>
-                                </div>
-
-                                {/* Upgrade Nudge for Starter */}
-                                {userTier === 'starter' && !trialActive && (
-                                    <div className="p-6 bg-gradient-to-r from-primary/5 to-amber-500/5 border border-primary/20 space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <Zap className="w-4 h-4 text-primary" />
-                                            <span className="text-xs font-bold uppercase tracking-widest">Unlock Automation</span>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">
-                                            Upgrade to Pro ($10/mo) to automatically convert Instagram comments into sales with our DM engine.
-                                        </p>
-                                        <Button className="h-10 bg-primary text-primary-foreground text-[10px] uppercase tracking-widest font-bold rounded-none hover:bg-primary/90 transition-all">
-                                            Start 7-Day Free Trial
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {/* Payout Controls */}
-                                <div className="space-y-6 pt-4">
-                                    <div className="p-4 border border-primary/20 bg-primary/5 space-y-4">
-                                        <p className="text-[10px] uppercase font-bold text-primary tracking-widest flex items-center gap-2">
-                                            <Sparkles className="w-3 h-3" /> Payout Threshold: $20.00
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">Balances move to "Cleared" after the merchant return window closes (typical 30 days).</p>
-                                    </div>
-
-                                    {!selectedPersona?.status?.includes('stripe') && (
-                                        <Button
-                                            onClick={() => handlePayoutAction('onboard')}
-                                            disabled={payoutLoading}
-                                            className="w-full h-12 bg-foreground text-background rounded-none text-xs uppercase tracking-widest hover:bg-primary transition-all"
-                                        >
-                                            {payoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect Stripe Account'}
-                                        </Button>
-                                    )}
-
-                                    <Button
-                                        onClick={() => handlePayoutAction('payout')}
-                                        disabled={payoutLoading || stats.cleared < 20}
-                                        className={`w-full h-14 rounded-none text-xs font-bold uppercase tracking-[0.2em]
-                                            ${stats.cleared >= 20 ? 'bg-primary text-white shadow-xl' : 'bg-nimbus/20 text-muted-foreground cursor-not-allowed'}`}
-                                    >
-                                        {payoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : `Request Payout ($${stats.cleared.toFixed(2)})`}
-                                    </Button>
-
-                                    {payoutStatus && (
-                                        <p className="text-center text-[10px] uppercase tracking-widest font-bold text-primary animate-pulse">{payoutStatus}</p>
-                                    )}
-                                </div>
-                            </motion.div>
                         ) : (
                             /* ---- VIDEO TAB ---- */
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
@@ -1407,82 +1290,6 @@ export default function StudioPage() {
                             </motion.div>
                         )}
 
-                        {activeTab === 'instagram' && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
-
-                                {/* Connect Widget */}
-                                <div className="space-y-2 border-b border-nimbus pb-8">
-                                    <h2 className="font-serif text-3xl tracking-tight">Instagram Connection</h2>
-                                    <p className="text-sm text-muted-foreground">Link your Professional Instagram account to automate affiliate DMs.</p>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                    {/* Connection Card */}
-                                    <div className="p-8 bg-white border border-nimbus/20 shadow-sm space-y-6">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-gradient-to-tr from-amber-500 to-pink-500 rounded-full flex items-center justify-center">
-                                                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" /></svg>
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-sm uppercase tracking-widest">Connect Instagram</h3>
-                                                <p className="text-xs text-muted-foreground">Professional account required</p>
-                                            </div>
-                                        </div>
-                                        <a href="/api/meta/auth"
-                                            className="block w-full text-center py-4 bg-foreground text-background text-xs font-bold uppercase tracking-[0.2em] hover:bg-primary transition-all shadow-lg">
-                                            Connect with Meta
-                                        </a>
-                                        <p className="text-[10px] text-muted-foreground">
-                                            Requires a Creator/Business account linked to a Facebook Page.
-                                        </p>
-                                    </div>
-
-                                    {/* Savings Dashboard */}
-                                    <div className="p-8 bg-white border border-nimbus/20 shadow-sm space-y-6">
-                                        <div className="space-y-1">
-                                            <h3 className="font-bold text-sm uppercase tracking-widest">Platform Fee Savings</h3>
-                                            <p className="text-xs text-muted-foreground">What you saved vs LTK/ShopMy this month</p>
-                                        </div>
-                                        <div className="text-center py-8">
-                                            <span className="text-5xl font-serif text-green-600">$0.00</span>
-                                            <p className="text-xs text-muted-foreground mt-2">saved in platform fees this month</p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-4 bg-background/50">
-                                                <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Total Commission</span>
-                                                <span className="text-lg font-serif">$0.00</span>
-                                            </div>
-                                            <div className="p-4 bg-background/50">
-                                                <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">DMs Sent</span>
-                                                <span className="text-lg font-serif">0</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Post → Link Mapper */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="font-bold text-sm uppercase tracking-widest">Post → Affiliate Links</h3>
-                                        <button className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground hover:text-foreground transition-colors">
-                                            + Add Link
-                                        </button>
-                                    </div>
-                                    <div className="p-12 bg-white border border-nimbus/20 shadow-sm text-center">
-                                        <p className="text-sm text-muted-foreground">Connect your Instagram to start mapping Rakuten links to your posts.</p>
-                                    </div>
-                                </div>
-
-                                {/* DM Activity Log */}
-                                <div className="space-y-4">
-                                    <h3 className="font-bold text-sm uppercase tracking-widest">Recent DM Activity</h3>
-                                    <div className="p-12 bg-white border border-nimbus/20 shadow-sm text-center">
-                                        <p className="text-sm text-muted-foreground">No automated DMs sent yet. Link a post and comments with keywords like &quot;LINK&quot; or &quot;WANT&quot; will trigger DMs.</p>
-                                    </div>
-                                </div>
-
-                            </motion.div>
-                        )}
 
                         {activeTab === 'bounties' && (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-8">
@@ -1493,11 +1300,15 @@ export default function StudioPage() {
                                 <BountyFeed />
                             </motion.div>
                         )}
+
+                        {activeTab === 'projects' && (
+                            <ProjectsGrid />
+                        )}
                     </div>
                 </section>
 
                 {/* ===== RIGHT: Archive (Gallery Masonry) ===== */}
-                {activeTab !== 'marketplace' && activeTab !== 'revenue' && activeTab !== 'showcase' && activeTab !== 'instagram' && activeTab !== 'bounties' && (
+                {activeTab !== 'marketplace' && activeTab !== 'showcase' && activeTab !== 'bounties' && activeTab !== 'projects' && (
                     <aside className="col-span-12 lg:col-span-7 bg-[#FBFBFB] flex flex-col overflow-hidden relative">
                         {/* Background Detail */}
                         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">

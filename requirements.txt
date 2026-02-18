@@ -6,3 +6,7 @@ python-dotenv
 pydantic
 requests
 redis>=5.0
+pillow
+google-cloud-aiplatform
+httpx
+boto3

@@ -8,3 +8,6 @@ requests
 moviepy
 imageio[ffmpeg]
 redis>=5.0
+pillow
+google-cloud-aiplatform
+boto3

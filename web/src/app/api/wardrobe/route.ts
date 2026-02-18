@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse, NextRequest } from 'next/server'
 import { getWardrobeLimit, type SubscriptionTier } from '@/lib/tier-config'
+import { verifyUploadQuota } from '@/lib/upload-quota'
 import crypto from 'crypto'
 
 // ── GET — List wardrobe items for current user ──────────────────
@@ -73,7 +74,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing image_url' }, { status: 400 })
         }
 
-        // ── Quota Check ("Bouncer") ──────────────────────────────
+        // ── Daily Upload Rate Limit ──────────────────────────────
+        const quota = await verifyUploadQuota(supabase, user.id)
+        if (quota.error) return quota.error
+
+        // ── Wardrobe Slot Quota Check ("Bouncer") ────────────────
         const { data: profile } = await supabase
             .from('profiles')
             .select('subscription_status')

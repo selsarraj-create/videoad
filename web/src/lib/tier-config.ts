@@ -25,6 +25,7 @@ export interface TierConfig {
     render_priority: number          // 1 = highest
     engine_access: string[]          // Model IDs unlocked at this tier
     wardrobe_limit: number           // Max items in wardrobe (Infinity = unlimited)
+    daily_upload_limit: number       // Max Photoroom-processed uploads per 24h
 }
 
 // ── Tier Definitions ──────────────────────────────────────────
@@ -46,6 +47,7 @@ const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
         render_priority: 3,
         engine_access: ['veo-3.1-fast'],
         wardrobe_limit: 5,
+        daily_upload_limit: 5,
     },
     pro: {
         id: 'pro',
@@ -63,6 +65,7 @@ const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
         render_priority: 2,
         engine_access: ['veo-3.1-fast'],
         wardrobe_limit: 100,
+        daily_upload_limit: 50,
     },
     high_octane: {
         id: 'high_octane',
@@ -80,6 +83,7 @@ const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
         render_priority: 1,
         engine_access: ['veo-3.1-fast', 'kling-3.0-omni'],
         wardrobe_limit: Infinity,
+        daily_upload_limit: Infinity,
     },
 }
 
@@ -140,4 +144,12 @@ export const ALL_TIERS: TierConfig[] = Object.values(TIER_CONFIGS)
  */
 export function getWardrobeLimit(tier: SubscriptionTier): number {
     return getTierConfig(tier).wardrobe_limit
+}
+
+/**
+ * Get the daily upload limit for a given tier.
+ * Uploads that trigger Photoroom/Claid processing count toward this limit.
+ */
+export function getDailyUploadLimit(tier: SubscriptionTier): number {
+    return getTierConfig(tier).daily_upload_limit
 }
