@@ -77,10 +77,11 @@ export async function GET(
         return NextResponse.json({ error: 'Bounty not found or not owned by you' }, { status: 404 })
     }
 
-    // Fetch all submissions with creator profile info
+    // Fetch all submissions
+    // Note: thumbnail_url, notes, feedback, updated_at require migration to be run
     const { data: submissions, error } = await supabase
         .from('submissions')
-        .select('id, creator_id, video_url, thumbnail_url, notes, status, feedback, created_at, updated_at')
+        .select('id, creator_id, video_url, message, status, created_at')
         .eq('bounty_id', bountyId)
         .order('created_at', { ascending: false })
 
@@ -91,14 +92,21 @@ export async function GET(
 
     // Sign R2 URLs for secure viewing (parallel)
     const signedSubmissions = await Promise.all(
-        (submissions || []).map(async (sub) => ({
-            ...sub,
-            signed_video_url: await signIfNeeded(sub.video_url),
-            signed_thumbnail_url: await signIfNeeded(sub.thumbnail_url),
-            // Strip raw storage paths
-            video_url: undefined,
-            thumbnail_url: undefined,
-        }))
+        (submissions || []).map(async (sub) => {
+            const record = sub as Record<string, any>
+            return {
+                id: record.id,
+                creator_id: record.creator_id,
+                status: record.status,
+                message: record.message,
+                notes: record.notes || null,
+                feedback: record.feedback || null,
+                created_at: record.created_at,
+                updated_at: record.updated_at || null,
+                signed_video_url: await signIfNeeded(record.video_url),
+                signed_thumbnail_url: await signIfNeeded(record.thumbnail_url),
+            }
+        })
     )
 
     return NextResponse.json({

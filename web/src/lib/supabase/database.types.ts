@@ -1081,27 +1081,39 @@ export type Database = {
           bounty_id: string
           created_at: string | null
           creator_id: string
+          feedback: string | null
           id: string
           message: string | null
+          notes: string | null
           status: Database["public"]["Enums"]["submission_status"] | null
+          thumbnail_url: string | null
+          updated_at: string | null
           video_url: string | null
         }
         Insert: {
           bounty_id: string
           created_at?: string | null
           creator_id: string
+          feedback?: string | null
           id?: string
           message?: string | null
+          notes?: string | null
           status?: Database["public"]["Enums"]["submission_status"] | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
           video_url?: string | null
         }
         Update: {
           bounty_id?: string
           created_at?: string | null
           creator_id?: string
+          feedback?: string | null
           id?: string
           message?: string | null
+          notes?: string | null
           status?: Database["public"]["Enums"]["submission_status"] | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
           video_url?: string | null
         }
         Relationships: [
@@ -1215,7 +1227,11 @@ export type Database = {
       bounty_status: "draft" | "active" | "closed"
       build_status: "pending" | "processing" | "ready" | "failed"
       escrow_status: "unpaid" | "held" | "released" | "refunded"
-      submission_status: "pending" | "accepted" | "rejected"
+      submission_status:
+        | "pending"
+        | "accepted"
+        | "rejected"
+        | "changes_requested"
       user_role: "creator" | "brand" | "admin"
     }
     CompositeTypes: {
@@ -1347,7 +1363,12 @@ export const Constants = {
       bounty_status: ["draft", "active", "closed"],
       build_status: ["pending", "processing", "ready", "failed"],
       escrow_status: ["unpaid", "held", "released", "refunded"],
-      submission_status: ["pending", "accepted", "rejected"],
+      submission_status: [
+        "pending",
+        "accepted",
+        "rejected",
+        "changes_requested",
+      ],
       user_role: ["creator", "brand", "admin"],
     },
   },
