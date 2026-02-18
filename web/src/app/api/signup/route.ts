@@ -53,6 +53,7 @@ export async function POST(request: Request) {
             email,
             password,
             email_confirm: true,
+            app_metadata: { role: userRole },
         })
 
         if (error) {

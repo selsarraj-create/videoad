@@ -43,7 +43,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: `User with email ${email} not found` }, { status: 404 })
         }
 
-        // Update role
+        // Update role in both auth metadata AND profiles table
+        const { error: metaErr } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+            app_metadata: { role },
+        })
+        if (metaErr) {
+            console.error('app_metadata update failed:', metaErr.message)
+        }
+
         const { error: updateErr } = await supabaseAdmin
             .from('profiles')
             .update({ role })

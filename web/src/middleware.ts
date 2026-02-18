@@ -48,7 +48,7 @@ export async function middleware(request: NextRequest) {
 
     // If logged-in user visits /login, redirect to their dashboard
     if (user && pathname === '/login') {
-        const role = await getUserRole(supabase, user.id)
+        const role = await getUserRole(supabase, user)
         const url = request.nextUrl.clone()
         url.pathname = role === 'brand' ? '/brand/dashboard' : '/dashboard'
         return NextResponse.redirect(url)
@@ -63,7 +63,7 @@ export async function middleware(request: NextRequest) {
 
     // ── Role gate: enforce role-based access ───────────────────────────
     if (user && isProtectedRoute) {
-        const role = await getUserRole(supabase, user.id)
+        const role = await getUserRole(supabase, user)
 
         // /brand/* requires brand or admin role
         if (pathname.startsWith('/brand') && role !== 'brand' && role !== 'admin') {
@@ -90,15 +90,23 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
 }
 
-// ── Helper: fetch user role from profiles ─────────────────────────────
+// ── Helper: resolve user role ─────────────────────────────────────────
+// Priority: app_metadata.role (set at signup, most reliable) → profiles.role → 'creator'
 async function getUserRole(
     supabase: ReturnType<typeof createServerClient>,
-    userId: string
+    user: { id: string; app_metadata?: Record<string, unknown> }
 ): Promise<string> {
+    // 1. Check app_metadata first (set during signup, embedded in auth)
+    const metaRole = user.app_metadata?.role
+    if (typeof metaRole === 'string' && ['creator', 'brand', 'admin'].includes(metaRole)) {
+        return metaRole
+    }
+
+    // 2. Fallback to profiles table
     const { data } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', userId)
+        .eq('id', user.id)
         .single()
 
     return data?.role ?? 'creator'
