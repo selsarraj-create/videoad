@@ -38,7 +38,7 @@ import {
     Upload, Loader2, Sparkles, Image as ImageIcon,
     FastForward, Library, ExternalLink, Camera,
     Video, User, Shirt, Check, Plus, ArrowRight, Trash2, X, LogOut,
-    Pencil, Star, ChevronDown, UserCircle
+    Pencil, Star, ChevronDown, UserCircle, Menu, ShoppingBag, Award as AwardIcon, FolderOpen, Eye
 } from "lucide-react"
 import { PresetGrid } from "@/components/preset-grid"
 import { getOrCreateDefaultProject } from "@/app/actions"
@@ -92,6 +92,7 @@ interface PersonaSlot {
 
 export default function StudioPage() {
     const [activeTab, setActiveTab] = useState<Tab>('try-on')
+    const [dashMenuOpen, setDashMenuOpen] = useState(false)
 
     // Persona state
     const [personaSlots, setPersonaSlots] = useState<PersonaSlot[]>([])
@@ -639,7 +640,7 @@ export default function StudioPage() {
     return (
         <div className="min-h-screen bg-paper text-foreground flex flex-col font-sans overflow-hidden selection:bg-primary/20">
             {/* Header */}
-            <header className="h-20 border-b border-nimbus/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-8 z-50 sticky top-0">
+            <header className="h-16 lg:h-20 border-b border-nimbus/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-4 lg:px-8 z-50 sticky top-0">
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-primary flex items-center justify-center">
@@ -650,8 +651,8 @@ export default function StudioPage() {
                         </h1>
                     </div>
 
-                    {/* Tab Switcher - Minimal Text Only */}
-                    <div className="flex items-center gap-8 ml-12 overflow-x-auto scrollbar-none pb-1">
+                    {/* Tab Switcher - Desktop Only */}
+                    <div className="hidden lg:flex items-center gap-8 ml-12 overflow-x-auto scrollbar-none pb-1">
                         <button onClick={() => setActiveTab('identities')}
                             className={`text-xs uppercase tracking-[0.2em] font-bold transition-all relative py-2 
                                 ${activeTab === 'identities' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'}`}>
@@ -697,7 +698,8 @@ export default function StudioPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-6">
+                {/* Desktop utility links */}
+                <div className="hidden lg:flex items-center gap-6">
                     <Link href="/dashboard/content"
                         className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                         <Library className="w-3.5 h-3.5" /> Content Vault
@@ -730,9 +732,121 @@ export default function StudioPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Mobile: Credit badge + hamburger */}
+                <div className="flex lg:hidden items-center gap-3">
+                    <button onClick={() => setCreditShopOpen(true)} className="flex items-center gap-1.5 bg-foreground/5 border border-nimbus/20 px-2.5 py-1.5">
+                        <Zap className="w-3 h-3 text-primary" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">{creditBalance}</span>
+                    </button>
+                    <button
+                        onClick={() => setDashMenuOpen(!dashMenuOpen)}
+                        className="w-10 h-10 flex items-center justify-center"
+                        aria-label="Toggle menu"
+                    >
+                        <AnimatePresence mode="wait">
+                            {dashMenuOpen ? (
+                                <motion.div key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }}>
+                                    <X className="w-5 h-5" />
+                                </motion.div>
+                            ) : (
+                                <motion.div key="menu" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }}>
+                                    <Menu className="w-5 h-5" />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </div>
             </header>
 
-            <main className="flex-1 grid grid-cols-12 overflow-hidden">
+            {/* ===== MOBILE DRAWER ===== */}
+            <AnimatePresence>
+                {dashMenuOpen && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.3 }}
+                            onClick={() => setDashMenuOpen(false)}
+                            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden"
+                        />
+                        {/* Drawer */}
+                        <motion.div
+                            initial={{ x: "100%" }}
+                            animate={{ x: 0 }}
+                            exit={{ x: "100%" }}
+                            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+                            className="fixed top-0 right-0 bottom-0 w-[300px] bg-background/95 backdrop-blur-xl z-50 lg:hidden shadow-2xl overflow-y-auto"
+                        >
+                            <div className="pt-20 px-6 pb-8 space-y-6">
+                                {/* Tabs */}
+                                <div className="space-y-1">
+                                    <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 px-3">Navigation</p>
+                                    {[
+                                        { id: 'identities' as Tab, label: 'Identities', icon: UserCircle },
+                                        { id: 'try-on' as Tab, label: 'Try On', icon: Shirt },
+                                        { id: 'video' as Tab, label: 'Create Video', icon: Video },
+                                        { id: 'marketplace' as Tab, label: 'Marketplace', icon: ShoppingBag },
+                                        { id: 'showcase' as Tab, label: 'Showcase', icon: Eye },
+                                        { id: 'bounties' as Tab, label: 'Bounties', icon: AwardIcon },
+                                        { id: 'projects' as Tab, label: 'Projects', icon: FolderOpen },
+                                    ].map(({ id, label, icon: Icon }) => (
+                                        <button
+                                            key={id}
+                                            onClick={() => { setActiveTab(id); setDashMenuOpen(false) }}
+                                            className={`w-full flex items-center gap-3 px-3 py-3 text-sm font-bold uppercase tracking-[0.15em] transition-all
+                                                ${activeTab === id ? 'text-foreground bg-foreground/5' : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.02]'}`}
+                                        >
+                                            <Icon className="w-4 h-4" />
+                                            {label}
+                                            {activeTab === id && <div className="ml-auto w-1.5 h-1.5 bg-primary rounded-full" />}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Divider */}
+                                <div className="border-t border-nimbus/30" />
+
+                                {/* Utility Links */}
+                                <div className="space-y-1">
+                                    <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 px-3">More</p>
+                                    <Link href="/dashboard/content" onClick={() => setDashMenuOpen(false)}
+                                        className="flex items-center gap-3 px-3 py-3 text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground transition-colors">
+                                        <Library className="w-4 h-4" /> Content Vault
+                                    </Link>
+                                    <Link href="/dashboard/settings" onClick={() => setDashMenuOpen(false)}
+                                        className="flex items-center gap-3 px-3 py-3 text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground transition-colors">
+                                        <Settings className="w-4 h-4" /> Settings
+                                    </Link>
+                                    <button
+                                        onClick={async () => {
+                                            await supabase.auth.signOut()
+                                            window.location.href = '/login'
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3 py-3 text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground hover:text-red-500 transition-colors"
+                                    >
+                                        <LogOut className="w-4 h-4" /> Sign Out
+                                    </button>
+                                </div>
+
+                                {/* Tier Badge */}
+                                <div className="px-3 pt-2">
+                                    <div className={`inline-block px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest
+                                        ${userTier === 'high_octane' ? 'bg-amber-500/10 text-amber-600 border border-amber-200'
+                                            : userTier === 'pro' || trialActive ? 'bg-primary/10 text-primary border border-primary/20'
+                                                : 'bg-foreground/5 text-muted-foreground border border-nimbus/20'}`}>
+                                        {trialActive ? 'Trial' : userTier === 'high_octane' ? 'High-Octane' : userTier === 'pro' ? 'Pro' : 'Starter'}
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            <main className="flex-1 grid grid-cols-12 overflow-hidden pb-[72px] lg:pb-0">
 
                 {/* ===== LEFT PANEL ===== */}
                 <section className={`flex flex-col overflow-y-auto glass-panel z-20 relative transition-all duration-500
@@ -1684,6 +1798,36 @@ export default function StudioPage() {
                     </div>
                 )
             }
+            {/* ===== MOBILE BOTTOM TAB BAR ===== */}
+            <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-background/95 backdrop-blur-xl border-t border-nimbus/50" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+                <div className="flex items-center justify-around h-[64px]">
+                    {[
+                        { id: 'identities' as Tab, label: 'Identities', icon: UserCircle },
+                        { id: 'try-on' as Tab, label: 'Try On', icon: Shirt },
+                        { id: 'video' as Tab, label: 'Video', icon: Video },
+                    ].map(({ id, label, icon: Icon }) => (
+                        <button
+                            key={id}
+                            onClick={() => setActiveTab(id)}
+                            className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors
+                                ${activeTab === id ? 'text-foreground' : 'text-muted-foreground'}`}
+                        >
+                            <Icon className="w-5 h-5" />
+                            <span className="text-[9px] font-bold uppercase tracking-widest">{label}</span>
+                            {activeTab === id && <motion.div layoutId="mobileTab" className="absolute bottom-0 w-10 h-[2px] bg-primary" />}
+                        </button>
+                    ))}
+                    <button
+                        onClick={() => setDashMenuOpen(true)}
+                        className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors
+                            ${!['identities', 'try-on', 'video'].includes(activeTab) ? 'text-foreground' : 'text-muted-foreground'}`}
+                    >
+                        <Menu className="w-5 h-5" />
+                        <span className="text-[9px] font-bold uppercase tracking-widest">More</span>
+                        {!['identities', 'try-on', 'video'].includes(activeTab) && <motion.div layoutId="mobileTab" className="absolute bottom-0 w-10 h-[2px] bg-primary" />}
+                    </button>
+                </div>
+            </nav>
         </div >
     )
 }

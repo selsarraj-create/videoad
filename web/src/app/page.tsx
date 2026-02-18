@@ -1,13 +1,14 @@
 "use client"
 
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { motion, useScroll, useTransform } from "framer-motion"
-import { ArrowRight, Sparkles, Camera, Play, Upload, ScanLine, Layers } from "lucide-react"
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion"
+import { ArrowRight, Sparkles, Camera, Play, Upload, ScanLine, Layers, Menu, X } from "lucide-react"
 
 export default function Home() {
   const containerRef = useRef(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"]
@@ -47,13 +48,81 @@ export default function Home() {
               Sign In
             </Link>
             <Link href="/dashboard"
-              className="glass-button px-8 py-3 text-xs font-bold uppercase tracking-widest hover:bg-primary hover:text-primary-foreground transition-all duration-500"
+              className="hidden md:inline-block glass-button px-8 py-3 text-xs font-bold uppercase tracking-widest hover:bg-primary hover:text-primary-foreground transition-all duration-500"
             >
               Start Creating
             </Link>
+
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden w-10 h-10 flex items-center justify-center relative z-[60]"
+              aria-label="Toggle menu"
+            >
+              <AnimatePresence mode="wait">
+                {mobileMenuOpen ? (
+                  <motion.div key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }}>
+                    <X className="w-6 h-6" />
+                  </motion.div>
+                ) : (
+                  <motion.div key="menu" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }}>
+                    <Menu className="w-6 h-6" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </button>
           </div>
         </div>
       </motion.header>
+
+      {/* ===== MOBILE DRAWER ===== */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 md:hidden"
+            />
+            {/* Drawer */}
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed top-0 right-0 bottom-0 w-[280px] bg-background/95 backdrop-blur-xl z-50 md:hidden shadow-2xl"
+            >
+              <nav className="flex flex-col gap-2 pt-24 px-8">
+                <Link
+                  href="/brand/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="py-4 text-sm uppercase tracking-[0.2em] font-bold border-b border-nimbus/30 hover:text-primary transition-colors"
+                >
+                  For Brands
+                </Link>
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="py-4 text-sm uppercase tracking-[0.2em] font-bold border-b border-nimbus/30 hover:text-primary transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="mt-6 glass-button px-8 py-4 text-sm font-bold uppercase tracking-widest text-center hover:bg-primary hover:text-primary-foreground transition-all duration-500"
+                >
+                  Start Creating
+                </Link>
+              </nav>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ===== HERO SECTION ===== */}
       <section className="relative min-h-screen flex flex-col justify-center px-6 pt-24 pb-12 lg:pt-32 lg:pb-20">
