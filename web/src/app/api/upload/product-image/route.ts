@@ -1,13 +1,36 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
 /**
  * POST /api/upload/product-image
  *
- * Upload a product image to Supabase Storage.
+ * Upload a product image to Cloudflare R2.
  * Accepts multipart form data with a 'file' field.
  * Returns the public URL of the uploaded image.
+ *
+ * Env vars required:
+ *   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+ *   R2_BUCKET_NAME (default: 'assets')
+ *   R2_PUBLIC_URL   (your custom domain or R2 public URL)
  */
+
+function getR2Client() {
+    const accountId = process.env.R2_ACCOUNT_ID
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY
+
+    if (!accountId || !accessKeyId || !secretAccessKey) {
+        throw new Error('R2 credentials not configured')
+    }
+
+    return new S3Client({
+        region: 'auto',
+        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+        credentials: { accessKeyId, secretAccessKey },
+    })
+}
+
 export async function POST(request: Request) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -46,38 +69,32 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'File too large. Max 5MB' }, { status: 400 })
         }
 
-        // Generate unique filename
+        // Generate unique key under product-images/
         const ext = file.name.split('.').pop() || 'jpg'
-        const filename = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+        const key = `product-images/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
 
-        // Convert File to ArrayBuffer then to Buffer for upload
         const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
+        const bucket = process.env.R2_BUCKET_NAME || 'assets'
 
-        // Upload to Supabase Storage
-        const { data, error } = await supabase.storage
-            .from('product-images')
-            .upload(filename, buffer, {
-                contentType: file.type,
-                upsert: false,
-            })
+        const r2 = getR2Client()
 
-        if (error) {
-            console.error('Upload error:', error)
-            return NextResponse.json({ error: error.message }, { status: 500 })
-        }
+        await r2.send(new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: Buffer.from(arrayBuffer),
+            ContentType: file.type,
+        }))
 
-        // Get public URL
-        const { data: urlData } = supabase.storage
-            .from('product-images')
-            .getPublicUrl(data.path)
+        // Build the public URL
+        const publicBase = process.env.R2_PUBLIC_URL || `https://pub-${process.env.R2_ACCOUNT_ID}.r2.dev`
+        const publicUrl = `${publicBase.replace(/\/$/, '')}/${key}`
 
         return NextResponse.json({
-            url: urlData.publicUrl,
-            path: data.path,
+            url: publicUrl,
+            key,
         })
     } catch (err: any) {
-        console.error('Upload exception:', err)
+        console.error('R2 upload error:', err)
         return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 })
     }
 }
