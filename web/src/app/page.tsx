@@ -36,7 +36,12 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-6">
-            <Link href="/dashboard"
+            <Link href="/join/brand"
+              className="hidden md:block text-xs uppercase tracking-[0.2em] hover:text-primary transition-colors"
+            >
+              For Brands
+            </Link>
+            <Link href="/login"
               className="hidden md:block text-xs uppercase tracking-[0.2em] hover:text-primary transition-colors"
             >
               Sign In
@@ -93,13 +98,17 @@ export default function Home() {
                 that blur the line between reality and dream.
               </p>
 
-              <div className="mt-10 flex items-center gap-6">
+              <div className="mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <Link href="/dashboard"
                   className="frosted-touch text-foreground px-10 py-5 text-sm uppercase tracking-widest font-bold hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)] hover:scale-105 hover:bg-white/40 transition-all duration-300 rounded-sm"
                 >
                   Start Creating Now
                 </Link>
-                <span className="text-xs text-muted-foreground uppercase tracking-widest">No credit card required</span>
+                <Link href="/join/brand"
+                  className="px-10 py-5 text-sm uppercase tracking-widest font-bold border border-primary/20 hover:bg-primary hover:text-white transition-all duration-500 rounded-sm"
+                >
+                  Hire Creators →
+                </Link>
               </div>
             </motion.div>
           </div>
