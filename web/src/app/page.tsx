@@ -33,7 +33,7 @@ export default function Home() {
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             <span className="font-serif text-2xl tracking-tighter mix-blend-difference text-foreground">
-              FASHION<span className="font-sans text-xs tracking-widest ml-1 opacity-60">STUDIO</span>
+              LOOK<span className="font-sans text-xs tracking-widest ml-1 opacity-60">MAISON</span>
             </span>
           </div>
           <div className="flex items-center gap-6">
@@ -407,14 +407,14 @@ export default function Home() {
         <div className="max-w-[1800px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 opacity-60">
             <Sparkles className="w-4 h-4 text-primary" />
-            <span className="font-serif text-lg tracking-tight">FASHION<span className="font-sans text-[10px] ml-1 opacity-60">STUDIO</span></span>
+            <span className="font-serif text-lg tracking-tight">LOOK<span className="font-sans text-[10px] ml-1 opacity-60">MAISON</span></span>
           </div>
           <div className="flex gap-6 text-[10px] uppercase tracking-widest text-muted-foreground">
             <Link href="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
             <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
           </div>
           <p className="text-[10px] text-muted-foreground opacity-60">
-            LookMaison.com All Rights Reserved. Copyright &copy; 2026
+            Look Maison. All Rights Reserved. Copyright &copy; 2026
           </p>
         </div>
       </footer>

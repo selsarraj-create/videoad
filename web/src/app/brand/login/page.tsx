@@ -133,7 +133,7 @@ function BrandLoginContent() {
                         <Building2 className="w-5 h-5 text-background" />
                     </div>
                     <h1 className="font-serif text-2xl tracking-tight text-foreground">
-                        FASHION<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">FOR BRANDS</span>
+                        LOOK<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">MAISON</span>
                     </h1>
                 </Link>
             </motion.div>
@@ -350,7 +350,7 @@ function BrandLoginContent() {
                 transition={{ delay: 0.5 }}
                 className="mt-8 text-[10px] text-muted-foreground/60 z-10 uppercase tracking-widest"
             >
-                © 2026 Fashion Studio. All rights reserved.
+                © 2026 Look Maison. All rights reserved.
             </motion.p>
         </div>
     )

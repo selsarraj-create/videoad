@@ -87,7 +87,7 @@ export async function POST(request: Request) {
                 amount: Math.round(totalCleared * 100), // convert to cents
                 currency: 'usd',
                 destination: profile.stripe_account_id,
-                description: 'Fashion Studio Creator Payout',
+                description: 'Look Maison Creator Payout',
             });
 
             // Mark Ledger as Paid

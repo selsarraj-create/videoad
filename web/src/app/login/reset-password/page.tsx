@@ -64,7 +64,7 @@ export default function ResetPasswordPage() {
                         <Sparkles className="w-5 h-5 text-primary-foreground" />
                     </div>
                     <h1 className="font-serif text-2xl tracking-tight text-foreground">
-                        FASHION<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">STUDIO</span>
+                        LOOK<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">MAISON</span>
                     </h1>
                 </Link>
             </motion.div>
@@ -161,7 +161,7 @@ export default function ResetPasswordPage() {
                 transition={{ delay: 0.5 }}
                 className="mt-8 text-[10px] text-muted-foreground/60 z-10 uppercase tracking-widest"
             >
-                © 2026 Fashion Studio. All rights reserved.
+                © 2026 Look Maison. All rights reserved.
             </motion.p>
         </div>
     )

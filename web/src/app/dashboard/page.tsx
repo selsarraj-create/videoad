@@ -647,7 +647,7 @@ export default function StudioPage() {
                             <Sparkles className="w-4 h-4 text-primary-foreground" />
                         </div>
                         <h1 className="font-serif text-xl tracking-tight text-foreground mix-blend-difference">
-                            FASHION<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">STUDIO</span>
+                            LOOK<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">MAISON</span>
                         </h1>
                     </div>
 

@@ -351,7 +351,7 @@ export default function OutfitBuilderPage() {
                             <Sparkles className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-primary-foreground" />
                         </div>
                         <span className="font-serif text-lg lg:text-xl tracking-tight text-foreground mix-blend-difference">
-                            FASHION<span className="font-sans text-[9px] lg:text-[10px] tracking-[0.2em] ml-1.5 opacity-60">STUDIO</span>
+                            LOOK<span className="font-sans text-[9px] lg:text-[10px] tracking-[0.2em] ml-1.5 opacity-60">MAISON</span>
                         </span>
                     </Link>
                     <div className="w-px h-6 lg:h-8 bg-nimbus" />

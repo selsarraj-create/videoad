@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
-  title: "Fashion Studio — AI Virtual Try-On & Video",
+  title: "Look Maison — AI Virtual Try-On & Video",
   description: "Upload a selfie, try on any clothing with AI, and generate stunning fashion videos in seconds.",
 };
 
