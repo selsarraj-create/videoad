@@ -253,25 +253,25 @@ export default function SettingsPage() {
     return (
         <div className="min-h-screen bg-paper text-foreground font-sans selection:bg-primary/20">
             {/* Header */}
-            <header className="h-20 border-b border-nimbus/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-8 sticky top-0 z-50">
-                <div className="flex items-center gap-6">
+            <header className="h-16 lg:h-20 border-b border-nimbus/50 bg-background/80 backdrop-blur-xl flex items-center justify-between px-4 lg:px-8 sticky top-0 z-50">
+                <div className="flex items-center gap-3 lg:gap-6">
                     <Link href="/dashboard" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group">
                         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Back to Studio</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Back to Studio</span>
                     </Link>
-                    <div className="h-5 w-px bg-nimbus/30" />
+                    <div className="h-5 w-px bg-nimbus/30 hidden sm:block" />
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-primary flex items-center justify-center">
                             <Sparkles className="w-4 h-4 text-primary-foreground" />
                         </div>
-                        <h1 className="font-serif text-xl tracking-tight">
+                        <h1 className="font-serif text-lg lg:text-xl tracking-tight">
                             Account<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">SETTINGS</span>
                         </h1>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-foreground/5 border border-nimbus/20 px-3 py-1.5">
+                <div className="flex items-center gap-2 lg:gap-4">
+                    <div className="flex items-center gap-2 bg-foreground/5 border border-nimbus/20 px-2.5 lg:px-3 py-1.5">
                         <Zap className="w-3 h-3 text-primary" />
                         <span className="text-[10px] font-bold uppercase tracking-widest">{creditBalance} CR</span>
                     </div>
@@ -284,36 +284,67 @@ export default function SettingsPage() {
                 </div>
             </header>
 
-            <main className="max-w-5xl mx-auto p-8 lg:p-12">
-                <div className="flex gap-12">
-                    {/* Sidebar */}
-                    <nav className="w-56 flex-shrink-0 space-y-1">
-                        {sections.map(({ id, label, icon: Icon }) => (
-                            <button
-                                key={id}
-                                onClick={() => setActiveSection(id)}
-                                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-200
-                                    ${activeSection === id
-                                        ? 'bg-foreground text-background font-bold'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5'
-                                    }`}
-                            >
-                                <Icon className="w-4 h-4" />
-                                <span className="text-xs uppercase tracking-widest">{label}</span>
-                            </button>
-                        ))}
-
-                        <div className="pt-6">
+            <main className="max-w-5xl mx-auto p-4 lg:p-8 xl:p-12">
+                <div className="flex flex-col lg:flex-row gap-6 lg:gap-12">
+                    {/* Sidebar — horizontal scroll on mobile, vertical on desktop */}
+                    <nav className="lg:w-56 flex-shrink-0">
+                        {/* Mobile: horizontal scrollable tabs */}
+                        <div className="flex lg:hidden overflow-x-auto scrollbar-none gap-1 border-b border-nimbus/30 pb-3 -mx-1">
+                            {sections.map(({ id, label, icon: Icon }) => (
+                                <button
+                                    key={id}
+                                    onClick={() => setActiveSection(id)}
+                                    className={`flex items-center gap-2 px-4 py-2.5 whitespace-nowrap transition-all duration-200
+                                        ${activeSection === id
+                                            ? 'bg-foreground text-background font-bold'
+                                            : 'text-muted-foreground hover:text-foreground bg-foreground/5'
+                                        }`}
+                                >
+                                    <Icon className="w-4 h-4" />
+                                    <span className="text-xs uppercase tracking-widest">{label}</span>
+                                </button>
+                            ))}
                             <button
                                 onClick={async () => {
                                     await supabase.auth.signOut()
                                     router.push('/login')
                                 }}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-muted-foreground hover:text-red-500 transition-colors"
+                                className="flex items-center gap-2 px-4 py-2.5 whitespace-nowrap text-muted-foreground hover:text-red-500 transition-colors bg-foreground/5"
                             >
                                 <LogOut className="w-4 h-4" />
                                 <span className="text-xs uppercase tracking-widest">Sign Out</span>
                             </button>
+                        </div>
+
+                        {/* Desktop: vertical sidebar */}
+                        <div className="hidden lg:block space-y-1">
+                            {sections.map(({ id, label, icon: Icon }) => (
+                                <button
+                                    key={id}
+                                    onClick={() => setActiveSection(id)}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-200
+                                        ${activeSection === id
+                                            ? 'bg-foreground text-background font-bold'
+                                            : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5'
+                                        }`}
+                                >
+                                    <Icon className="w-4 h-4" />
+                                    <span className="text-xs uppercase tracking-widest">{label}</span>
+                                </button>
+                            ))}
+
+                            <div className="pt-6">
+                                <button
+                                    onClick={async () => {
+                                        await supabase.auth.signOut()
+                                        router.push('/login')
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-muted-foreground hover:text-red-500 transition-colors"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    <span className="text-xs uppercase tracking-widest">Sign Out</span>
+                                </button>
+                            </div>
                         </div>
                     </nav>
 
@@ -514,7 +545,7 @@ export default function SettingsPage() {
                                     </div>
 
                                     {/* KPI Cards */}
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
                                         <div className="p-5 bg-white border border-nimbus/20 shadow-sm">
                                             <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Total Payouts</span>
                                             <span className="text-2xl font-serif">${stats.total.toFixed(2)}</span>
