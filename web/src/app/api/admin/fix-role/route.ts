@@ -14,7 +14,7 @@ export async function POST(request: Request) {
         const { email, role, admin_secret } = await request.json()
 
         // Simple secret check
-        if (admin_secret !== process.env.ADMIN_SECRET && admin_secret !== 'fix-brand-2026') {
+        if (!process.env.ADMIN_SECRET || admin_secret !== process.env.ADMIN_SECRET) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 

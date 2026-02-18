@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase/db"
+import { createClient } from "@/lib/supabase/server"
 
 const WORKER_URL = process.env.RAILWAY_WORKER_URL || ""
 const WORKER_SECRET = process.env.WORKER_SHARED_SECRET || ""
@@ -16,8 +17,24 @@ const MODEL_COSTS: Record<string, number> = {
 
 export const revalidate = 10 // ISR: revalidate every 10s
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        // Auth: require admin role or ADMIN_SECRET header
+        const authHeader = (request as any).headers?.get?.('authorization')
+        const isSecretAuth = authHeader === `Bearer ${process.env.ADMIN_SECRET}`
+
+        if (!isSecretAuth) {
+            const supabase = await createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+            }
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+            if (profile?.role !== 'admin') {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            }
+        }
+
         // 1. Fetch worker metrics
         let workerMetrics = null
         if (WORKER_URL) {
