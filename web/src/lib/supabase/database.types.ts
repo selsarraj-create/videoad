@@ -180,29 +180,35 @@ export type Database = {
       }
       brands: {
         Row: {
+          bio: string | null
           company_name: string
           created_at: string | null
           id: string
           invoice_email: string | null
           logo_url: string | null
+          phone: string | null
           profile_id: string
           website: string | null
         }
         Insert: {
+          bio?: string | null
           company_name: string
           created_at?: string | null
           id?: string
           invoice_email?: string | null
           logo_url?: string | null
+          phone?: string | null
           profile_id: string
           website?: string | null
         }
         Update: {
+          bio?: string | null
           company_name?: string
           created_at?: string | null
           id?: string
           invoice_email?: string | null
           logo_url?: string | null
+          phone?: string | null
           profile_id?: string
           website?: string | null
         }
