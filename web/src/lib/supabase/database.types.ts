@@ -126,6 +126,8 @@ export type Database = {
           description: string | null
           escrow_status: Database["public"]["Enums"]["escrow_status"] | null
           id: string
+          payment_per_video: number | null
+          product_image_url: string | null
           requirements: Json | null
           status: Database["public"]["Enums"]["bounty_status"] | null
           stripe_payment_intent_id: string | null
@@ -141,6 +143,8 @@ export type Database = {
           description?: string | null
           escrow_status?: Database["public"]["Enums"]["escrow_status"] | null
           id?: string
+          payment_per_video?: number | null
+          product_image_url?: string | null
           requirements?: Json | null
           status?: Database["public"]["Enums"]["bounty_status"] | null
           stripe_payment_intent_id?: string | null
@@ -156,6 +160,8 @@ export type Database = {
           description?: string | null
           escrow_status?: Database["public"]["Enums"]["escrow_status"] | null
           id?: string
+          payment_per_video?: number | null
+          product_image_url?: string | null
           requirements?: Json | null
           status?: Database["public"]["Enums"]["bounty_status"] | null
           stripe_payment_intent_id?: string | null
