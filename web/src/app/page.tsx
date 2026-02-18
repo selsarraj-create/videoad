@@ -36,7 +36,7 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-6">
-            <Link href="/join/brand"
+            <Link href="/brand/login"
               className="hidden md:block text-xs uppercase tracking-[0.2em] hover:text-primary transition-colors"
             >
               For Brands
@@ -104,7 +104,7 @@ export default function Home() {
                 >
                   Start Creating Now
                 </Link>
-                <Link href="/join/brand"
+                <Link href="/brand/login"
                   className="px-10 py-5 text-sm uppercase tracking-widest font-bold border border-primary/20 hover:bg-primary hover:text-white transition-all duration-500 rounded-sm"
                 >
                   Hire Creators →

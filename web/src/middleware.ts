@@ -36,11 +36,12 @@ export async function middleware(request: NextRequest) {
     const isProtectedRoute =
         pathname.startsWith('/dashboard') ||
         pathname.startsWith('/admin') ||
-        pathname.startsWith('/brand')
+        (pathname.startsWith('/brand') && !pathname.startsWith('/brand/login'))
 
     if (!user && isProtectedRoute) {
         const url = request.nextUrl.clone()
-        url.pathname = '/login'
+        // Brand routes → brand login, everything else → creator login
+        url.pathname = pathname.startsWith('/brand') ? '/brand/login' : '/login'
         url.searchParams.set('redirect', pathname)
         return NextResponse.redirect(url)
     }
@@ -50,6 +51,13 @@ export async function middleware(request: NextRequest) {
         const role = await getUserRole(supabase, user.id)
         const url = request.nextUrl.clone()
         url.pathname = role === 'brand' ? '/brand/dashboard' : '/dashboard'
+        return NextResponse.redirect(url)
+    }
+
+    // If logged-in brand visits /brand/login, redirect to brand dashboard
+    if (user && pathname === '/brand/login') {
+        const url = request.nextUrl.clone()
+        url.pathname = '/brand/dashboard'
         return NextResponse.redirect(url)
     }
 

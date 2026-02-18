@@ -1,0 +1,370 @@
+"use client"
+
+import { useState, Suspense } from "react"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Loader2, Sparkles, Mail, Lock, ArrowRight, Eye, EyeOff, Building2 } from "lucide-react"
+import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
+
+/* ── SVG brand icons ── */
+function GoogleIcon({ className }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 24 24" fill="none">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+        </svg>
+    )
+}
+
+function BrandLoginContent() {
+    const [mode, setMode] = useState<'login' | 'signup'>('login')
+    const [email, setEmail] = useState("")
+    const [password, setPassword] = useState("")
+    const [companyName, setCompanyName] = useState("")
+    const [showPassword, setShowPassword] = useState(false)
+    const [loading, setLoading] = useState(false)
+    const [socialLoading, setSocialLoading] = useState<string | null>(null)
+    const [error, setError] = useState<string | null>(null)
+    const [success, setSuccess] = useState<string | null>(null)
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const supabase = createClient()
+
+    const callbackError = searchParams.get('error')
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setLoading(true)
+        setError(null)
+        setSuccess(null)
+
+        if (mode === 'login') {
+            const { error } = await supabase.auth.signInWithPassword({ email, password })
+            if (error) {
+                setError(error.message)
+                setLoading(false)
+            } else {
+                router.push('/brand/dashboard')
+                router.refresh()
+            }
+        } else {
+            if (!companyName.trim()) {
+                setError('Company name is required')
+                setLoading(false)
+                return
+            }
+
+            const res = await fetch('/api/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    password,
+                    role: 'brand',
+                    company_name: companyName,
+                    selected_tier: 'starter',
+                })
+            })
+            const data = await res.json()
+            if (!res.ok) {
+                setError(data.error || 'Sign up failed')
+                setLoading(false)
+            } else {
+                const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+                if (loginError) {
+                    setSuccess("Account created! Sign in with your credentials.")
+                    setMode('login')
+                    setLoading(false)
+                } else {
+                    router.push('/brand/dashboard')
+                    router.refresh()
+                }
+            }
+        }
+    }
+
+    const handleSocialLogin = async (provider: 'google') => {
+        setSocialLoading(provider)
+        setError(null)
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider,
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback?brand=true`,
+            },
+        })
+
+        if (error) {
+            setError(error.message)
+            setSocialLoading(null)
+        }
+    }
+
+    return (
+        <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center p-6 selection:bg-primary/20 relative overflow-hidden font-sans">
+            {/* Subtle gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#0a0a0a] via-[#111] to-[#1a1a2e]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(99,102,241,0.08),_transparent_60%)]" />
+
+            {/* Decorative floating elements */}
+            <motion.div
+                animate={{ y: [0, -20, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-20 right-[15%] w-32 h-32 border border-white/5 rotate-12 hidden lg:block"
+            />
+            <motion.div
+                animate={{ y: [0, 15, 0] }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute bottom-32 left-[10%] w-24 h-24 border border-white/5 -rotate-6 hidden lg:block"
+            />
+
+            {/* Logo */}
+            <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+            >
+                <Link href="/" className="mb-12 flex items-center gap-3 group z-10 relative">
+                    <div className="w-10 h-10 bg-indigo-600 flex items-center justify-center group-hover:shadow-lg group-hover:shadow-indigo-500/20 transition-shadow">
+                        <Building2 className="w-5 h-5 text-white" />
+                    </div>
+                    <h1 className="font-serif text-2xl tracking-tight text-white">
+                        FASHION<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">FOR BRANDS</span>
+                    </h1>
+                </Link>
+            </motion.div>
+
+            {/* Main Card */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.15 }}
+                className="w-full max-w-md relative z-10"
+            >
+                <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 p-10 shadow-2xl space-y-8">
+                    {/* Header */}
+                    <div className="text-center space-y-2">
+                        <h2 className="font-serif text-3xl tracking-tight text-white">
+                            {mode === 'login' ? 'Brand Portal' : 'Register Your Brand'}
+                        </h2>
+                        <p className="text-xs text-white/50 uppercase tracking-[0.2em]">
+                            {mode === 'login'
+                                ? 'Access your brand dashboard'
+                                : 'Start posting bounties and hiring creators'
+                            }
+                        </p>
+                    </div>
+
+                    {/* Mode Tabs */}
+                    <div className="flex border border-white/10">
+                        <button
+                            onClick={() => { setMode('login'); setError(null); setSuccess(null) }}
+                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 ${mode === 'login'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-transparent text-white/40 hover:text-white/70'
+                                }`}
+                        >
+                            Sign In
+                        </button>
+                        <button
+                            onClick={() => { setMode('signup'); setError(null); setSuccess(null) }}
+                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 border-l border-white/10 ${mode === 'signup'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-transparent text-white/40 hover:text-white/70'
+                                }`}
+                        >
+                            Register
+                        </button>
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                        {(
+                            <motion.div
+                                key="credentials"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.3 }}
+                                className="space-y-6"
+                            >
+                                {/* Google Login */}
+                                <button
+                                    className="w-full h-12 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all duration-300 flex items-center justify-center gap-2 group"
+                                    onClick={() => handleSocialLogin('google')}
+                                    disabled={socialLoading !== null}
+                                >
+                                    {socialLoading === 'google' ? (
+                                        <Loader2 className="w-4 h-4 animate-spin text-white/50" />
+                                    ) : (
+                                        <>
+                                            <GoogleIcon className="w-4 h-4" />
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-white/50 group-hover:text-white transition-colors">Continue with Google</span>
+                                        </>
+                                    )}
+                                </button>
+
+                                {/* Divider */}
+                                <div className="relative">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-white/10" />
+                                    </div>
+                                    <div className="relative flex justify-center">
+                                        <span className="bg-[#0a0a0a] px-4 text-[9px] uppercase tracking-[0.2em] text-white/30 font-bold">
+                                            or continue with email
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Form */}
+                                <form onSubmit={handleSubmit} className="space-y-5">
+                                    {/* Company name for signup */}
+                                    {mode === 'signup' && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="company" className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">Company Name</Label>
+                                            <div className="relative">
+                                                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                                <input
+                                                    id="company"
+                                                    type="text"
+                                                    placeholder="Acme Inc."
+                                                    className="w-full h-12 pl-10 pr-4 bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all text-sm"
+                                                    value={companyName}
+                                                    onChange={(e) => setCompanyName(e.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="email" className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">Email</Label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                            <input
+                                                id="email"
+                                                type="email"
+                                                placeholder="brand@company.com"
+                                                className="w-full h-12 pl-10 pr-4 bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all text-sm"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="password" className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">Password</Label>
+                                            {mode === 'login' && (
+                                                <Link
+                                                    href="/login/forgot-password"
+                                                    className="text-[10px] text-indigo-400 hover:text-white transition-colors uppercase tracking-widest font-bold"
+                                                >
+                                                    Forgot?
+                                                </Link>
+                                            )}
+                                        </div>
+                                        <div className="relative">
+                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                            <input
+                                                id="password"
+                                                type={showPassword ? 'text' : 'password'}
+                                                placeholder={mode === 'signup' ? 'Min 6 characters' : '••••••••'}
+                                                className="w-full h-12 pl-10 pr-10 bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all text-sm"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                required
+                                                minLength={6}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors"
+                                                tabIndex={-1}
+                                            >
+                                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Error / Success */}
+                                    {(error || callbackError) && (
+                                        <div className="p-4 border-l-2 border-red-500 bg-red-500/5">
+                                            <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">Error</p>
+                                            <p className="text-xs text-white/60">{error || 'Authentication failed. Please try again.'}</p>
+                                        </div>
+                                    )}
+
+                                    {success && (
+                                        <div className="p-4 border-l-2 border-indigo-500 bg-indigo-500/5">
+                                            <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Success</p>
+                                            <p className="text-xs text-white/60">{success}</p>
+                                        </div>
+                                    )}
+
+                                    <Button
+                                        type="submit"
+                                        className="w-full h-14 bg-indigo-600 text-white hover:bg-indigo-500 text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 rounded-none shadow-xl hover:shadow-2xl hover:shadow-indigo-500/20"
+                                        disabled={loading}
+                                    >
+                                        {loading ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <>
+                                                {mode === 'login' ? 'Access Dashboard' : 'Register Brand'}
+                                                <ArrowRight className="w-4 h-4 ml-2" />
+                                            </>
+                                        )}
+                                    </Button>
+                                </form>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Footer toggle */}
+                    <div className="text-center pt-2">
+                        <p className="text-xs text-white/40">
+                            {mode === 'login'
+                                ? <>Don&apos;t have a brand account?{' '}<button onClick={() => { setMode('signup'); setError(null); setSuccess(null) }} className="text-indigo-400 hover:text-white font-bold uppercase tracking-widest text-[10px] transition-colors">Register</button></>
+                                : <>Already have an account?{' '}<button onClick={() => setMode('login')} className="text-indigo-400 hover:text-white font-bold uppercase tracking-widest text-[10px] transition-colors">Sign in</button></>
+                            }
+                        </p>
+                    </div>
+
+                    {/* Creator link */}
+                    <div className="text-center border-t border-white/5 pt-6">
+                        <p className="text-[10px] text-white/30 uppercase tracking-widest">
+                            Are you a creator? <Link href="/login" className="text-indigo-400 hover:text-white transition-colors font-bold">Sign in here</Link>
+                        </p>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* Footer */}
+            <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="mt-8 text-[10px] text-white/20 z-10 uppercase tracking-widest"
+            >
+                © 2026 Fashion Studio. All rights reserved.
+            </motion.p>
+        </div>
+    )
+}
+
+export default function BrandLoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+            </div>
+        }>
+            <BrandLoginContent />
+        </Suspense>
+    )
+}
