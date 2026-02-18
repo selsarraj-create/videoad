@@ -106,21 +106,20 @@ function BrandLoginContent() {
     }
 
     return (
-        <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center p-6 selection:bg-primary/20 relative overflow-hidden font-sans">
-            {/* Subtle gradient background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#0a0a0a] via-[#111] to-[#1a1a2e]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(99,102,241,0.08),_transparent_60%)]" />
+        <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 selection:bg-primary/20 relative overflow-hidden font-sans">
+            {/* Subtle background texture */}
+            <div className="absolute inset-0 bg-noise opacity-30 pointer-events-none" />
 
             {/* Decorative floating elements */}
             <motion.div
                 animate={{ y: [0, -20, 0] }}
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute top-20 right-[15%] w-32 h-32 border border-white/5 rotate-12 hidden lg:block"
+                className="absolute top-20 right-[15%] w-32 h-32 border border-nimbus/40 rotate-12 hidden lg:block"
             />
             <motion.div
                 animate={{ y: [0, 15, 0] }}
                 transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute bottom-32 left-[10%] w-24 h-24 border border-white/5 -rotate-6 hidden lg:block"
+                className="absolute bottom-32 left-[10%] w-24 h-24 border border-nimbus/30 -rotate-6 hidden lg:block"
             />
 
             {/* Logo */}
@@ -130,10 +129,10 @@ function BrandLoginContent() {
                 transition={{ duration: 0.6 }}
             >
                 <Link href="/" className="mb-12 flex items-center gap-3 group z-10 relative">
-                    <div className="w-10 h-10 bg-indigo-600 flex items-center justify-center group-hover:shadow-lg group-hover:shadow-indigo-500/20 transition-shadow">
-                        <Building2 className="w-5 h-5 text-white" />
+                    <div className="w-10 h-10 bg-foreground flex items-center justify-center group-hover:shadow-lg transition-shadow">
+                        <Building2 className="w-5 h-5 text-background" />
                     </div>
-                    <h1 className="font-serif text-2xl tracking-tight text-white">
+                    <h1 className="font-serif text-2xl tracking-tight text-foreground">
                         FASHION<span className="font-sans text-[10px] tracking-[0.2em] ml-2 opacity-60">FOR BRANDS</span>
                     </h1>
                 </Link>
@@ -146,36 +145,36 @@ function BrandLoginContent() {
                 transition={{ duration: 0.6, delay: 0.15 }}
                 className="w-full max-w-md relative z-10"
             >
-                <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 p-10 shadow-2xl space-y-8">
+                <div className="frosted-touch p-10 shadow-xl space-y-8">
                     {/* Header */}
                     <div className="text-center space-y-2">
-                        <h2 className="font-serif text-3xl tracking-tight text-white">
+                        <h2 className="font-serif text-3xl tracking-tight text-foreground">
                             {mode === 'login' ? 'Brand Portal' : 'Register Your Brand'}
                         </h2>
-                        <p className="text-xs text-white/50 uppercase tracking-[0.2em]">
+                        <p className="text-xs text-muted-foreground uppercase tracking-[0.2em]">
                             {mode === 'login'
                                 ? 'Access your brand dashboard'
-                                : 'Start posting bounties and hiring creators'
+                                : 'Start posting campaigns and hiring creators'
                             }
                         </p>
                     </div>
 
                     {/* Mode Tabs */}
-                    <div className="flex border border-white/10">
+                    <div className="flex border border-nimbus">
                         <button
                             onClick={() => { setMode('login'); setError(null); setSuccess(null) }}
                             className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 ${mode === 'login'
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-transparent text-white/40 hover:text-white/70'
+                                ? 'bg-foreground text-background'
+                                : 'bg-transparent text-muted-foreground hover:text-foreground'
                                 }`}
                         >
                             Sign In
                         </button>
                         <button
                             onClick={() => { setMode('signup'); setError(null); setSuccess(null) }}
-                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 border-l border-white/10 ${mode === 'signup'
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-transparent text-white/40 hover:text-white/70'
+                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 border-l border-nimbus ${mode === 'signup'
+                                ? 'bg-foreground text-background'
+                                : 'bg-transparent text-muted-foreground hover:text-foreground'
                                 }`}
                         >
                             Register
@@ -194,16 +193,16 @@ function BrandLoginContent() {
                             >
                                 {/* Google Login */}
                                 <button
-                                    className="w-full h-12 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all duration-300 flex items-center justify-center gap-2 group"
+                                    className="w-full h-12 border border-nimbus bg-white/50 hover:bg-white transition-all duration-300 flex items-center justify-center gap-2 group"
                                     onClick={() => handleSocialLogin('google')}
                                     disabled={socialLoading !== null}
                                 >
                                     {socialLoading === 'google' ? (
-                                        <Loader2 className="w-4 h-4 animate-spin text-white/50" />
+                                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                                     ) : (
                                         <>
                                             <GoogleIcon className="w-4 h-4" />
-                                            <span className="text-[10px] font-bold uppercase tracking-widest text-white/50 group-hover:text-white transition-colors">Continue with Google</span>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground group-hover:text-foreground transition-colors">Continue with Google</span>
                                         </>
                                     )}
                                 </button>
@@ -211,10 +210,10 @@ function BrandLoginContent() {
                                 {/* Divider */}
                                 <div className="relative">
                                     <div className="absolute inset-0 flex items-center">
-                                        <div className="w-full border-t border-white/10" />
+                                        <div className="w-full border-t border-nimbus" />
                                     </div>
                                     <div className="relative flex justify-center">
-                                        <span className="bg-[#0a0a0a] px-4 text-[9px] uppercase tracking-[0.2em] text-white/30 font-bold">
+                                        <span className="bg-background/80 backdrop-blur-sm px-4 text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-bold">
                                             or continue with email
                                         </span>
                                     </div>
@@ -225,14 +224,14 @@ function BrandLoginContent() {
                                     {/* Company name for signup */}
                                     {mode === 'signup' && (
                                         <div className="space-y-2">
-                                            <Label htmlFor="company" className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">Company Name</Label>
+                                            <Label htmlFor="company" className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">Company Name</Label>
                                             <div className="relative">
-                                                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                                                 <input
                                                     id="company"
                                                     type="text"
                                                     placeholder="Acme Inc."
-                                                    className="w-full h-12 pl-10 pr-4 bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all text-sm"
+                                                    className="w-full h-12 pl-10 pr-4 bg-white/60 border border-nimbus text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
                                                     value={companyName}
                                                     onChange={(e) => setCompanyName(e.target.value)}
                                                     required
@@ -242,14 +241,14 @@ function BrandLoginContent() {
                                     )}
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="email" className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">Email</Label>
+                                        <Label htmlFor="email" className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">Email</Label>
                                         <div className="relative">
-                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                                             <input
                                                 id="email"
                                                 type="email"
                                                 placeholder="brand@company.com"
-                                                className="w-full h-12 pl-10 pr-4 bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all text-sm"
+                                                className="w-full h-12 pl-10 pr-4 bg-white/60 border border-nimbus text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
                                                 value={email}
                                                 onChange={(e) => setEmail(e.target.value)}
                                                 required
@@ -258,23 +257,23 @@ function BrandLoginContent() {
                                     </div>
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between">
-                                            <Label htmlFor="password" className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">Password</Label>
+                                            <Label htmlFor="password" className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">Password</Label>
                                             {mode === 'login' && (
                                                 <Link
                                                     href="/login/forgot-password"
-                                                    className="text-[10px] text-indigo-400 hover:text-white transition-colors uppercase tracking-widest font-bold"
+                                                    className="text-[10px] text-primary hover:text-foreground transition-colors uppercase tracking-widest font-bold"
                                                 >
                                                     Forgot?
                                                 </Link>
                                             )}
                                         </div>
                                         <div className="relative">
-                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                                             <input
                                                 id="password"
                                                 type={showPassword ? 'text' : 'password'}
                                                 placeholder={mode === 'signup' ? 'Min 6 characters' : '••••••••'}
-                                                className="w-full h-12 pl-10 pr-10 bg-white/[0.03] border border-white/10 text-white placeholder:text-white/20 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all text-sm"
+                                                className="w-full h-12 pl-10 pr-10 bg-white/60 border border-nimbus text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 required
@@ -283,7 +282,7 @@ function BrandLoginContent() {
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors"
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors"
                                                 tabIndex={-1}
                                             >
                                                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -293,22 +292,22 @@ function BrandLoginContent() {
 
                                     {/* Error / Success */}
                                     {(error || callbackError) && (
-                                        <div className="p-4 border-l-2 border-red-500 bg-red-500/5">
-                                            <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">Error</p>
-                                            <p className="text-xs text-white/60">{error || 'Authentication failed. Please try again.'}</p>
+                                        <div className="p-4 border-l-2 border-destructive bg-destructive/5">
+                                            <p className="text-[10px] font-bold text-destructive uppercase tracking-widest mb-1">Error</p>
+                                            <p className="text-xs text-muted-foreground">{error || 'Authentication failed. Please try again.'}</p>
                                         </div>
                                     )}
 
                                     {success && (
-                                        <div className="p-4 border-l-2 border-indigo-500 bg-indigo-500/5">
-                                            <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Success</p>
-                                            <p className="text-xs text-white/60">{success}</p>
+                                        <div className="p-4 border-l-2 border-primary bg-primary/5">
+                                            <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Success</p>
+                                            <p className="text-xs text-muted-foreground">{success}</p>
                                         </div>
                                     )}
 
                                     <Button
                                         type="submit"
-                                        className="w-full h-14 bg-indigo-600 text-white hover:bg-indigo-500 text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 rounded-none shadow-xl hover:shadow-2xl hover:shadow-indigo-500/20"
+                                        className="w-full h-14 bg-foreground text-background hover:bg-primary text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 rounded-none shadow-xl hover:shadow-2xl"
                                         disabled={loading}
                                     >
                                         {loading ? (
@@ -327,18 +326,18 @@ function BrandLoginContent() {
 
                     {/* Footer toggle */}
                     <div className="text-center pt-2">
-                        <p className="text-xs text-white/40">
+                        <p className="text-xs text-muted-foreground">
                             {mode === 'login'
-                                ? <>Don&apos;t have a brand account?{' '}<button onClick={() => { setMode('signup'); setError(null); setSuccess(null) }} className="text-indigo-400 hover:text-white font-bold uppercase tracking-widest text-[10px] transition-colors">Register</button></>
-                                : <>Already have an account?{' '}<button onClick={() => setMode('login')} className="text-indigo-400 hover:text-white font-bold uppercase tracking-widest text-[10px] transition-colors">Sign in</button></>
+                                ? <>Don&apos;t have a brand account?{' '}<button onClick={() => { setMode('signup'); setError(null); setSuccess(null) }} className="text-primary hover:text-foreground font-bold uppercase tracking-widest text-[10px] transition-colors">Register</button></>
+                                : <>Already have an account?{' '}<button onClick={() => setMode('login')} className="text-primary hover:text-foreground font-bold uppercase tracking-widest text-[10px] transition-colors">Sign in</button></>
                             }
                         </p>
                     </div>
 
                     {/* Creator link */}
-                    <div className="text-center border-t border-white/5 pt-6">
-                        <p className="text-[10px] text-white/30 uppercase tracking-widest">
-                            Are you a creator? <Link href="/login" className="text-indigo-400 hover:text-white transition-colors font-bold">Sign in here</Link>
+                    <div className="text-center border-t border-nimbus pt-6">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                            Are you a creator? <Link href="/login" className="text-primary hover:text-foreground transition-colors font-bold">Sign in here</Link>
                         </p>
                     </div>
                 </div>
@@ -349,7 +348,7 @@ function BrandLoginContent() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
-                className="mt-8 text-[10px] text-white/20 z-10 uppercase tracking-widest"
+                className="mt-8 text-[10px] text-muted-foreground/60 z-10 uppercase tracking-widest"
             >
                 © 2026 Fashion Studio. All rights reserved.
             </motion.p>
@@ -360,8 +359,8 @@ function BrandLoginContent() {
 export default function BrandLoginPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-                <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
             </div>
         }>
             <BrandLoginContent />
