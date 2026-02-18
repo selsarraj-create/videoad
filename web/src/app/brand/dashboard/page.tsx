@@ -96,7 +96,7 @@ export default function BrandDashboardPage() {
             {/* Create Campaign CTA */}
             <Button
                 onClick={() => setShowCreateForm(true)}
-                className="w-full h-14 bg-white border-2 border-foreground text-foreground hover:bg-foreground hover:text-white rounded-none text-xs uppercase tracking-[0.2em] font-bold transition-colors"
+                className="w-full h-14 bg-white border-2 border-foreground text-foreground hover:bg-nimbus/30 rounded-none text-xs uppercase tracking-[0.2em] font-bold transition-colors"
             >
                 <Plus className="w-5 h-5 mr-2" />
                 Create Campaign
