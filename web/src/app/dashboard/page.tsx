@@ -1332,7 +1332,7 @@ export default function StudioPage() {
                                     </div>
                                 </div>
                             </motion.div>
-                        ) : (
+                        ) : activeTab === 'video' ? (
                             /* ---- VIDEO TAB ---- */
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="space-y-12">
                                 {/* Step 1: Pick from Media Library */}
@@ -1402,7 +1402,7 @@ export default function StudioPage() {
                                     )}
                                 </div>
                             </motion.div>
-                        )}
+                        ) : null}
 
 
                         {activeTab === 'bounties' && (
