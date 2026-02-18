@@ -67,18 +67,9 @@ export default function BrandDashboardPage() {
     return (
         <div className="p-8 max-w-6xl mx-auto space-y-8">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="font-serif text-3xl tracking-tight">Brand Dashboard</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Manage your campaigns and review creator submissions.</p>
-                </div>
-                <Button
-                    onClick={() => setShowCreateForm(true)}
-                    className="h-11 bg-foreground text-white hover:bg-foreground/90 rounded-none text-xs uppercase tracking-[0.15em] font-bold px-6"
-                >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Campaign
-                </Button>
+            <div>
+                <h1 className="font-serif text-3xl tracking-tight">Brand Dashboard</h1>
+                <p className="text-sm text-muted-foreground mt-1">Manage your campaigns and review creator submissions.</p>
             </div>
 
             {/* Stats */}
@@ -101,6 +92,15 @@ export default function BrandDashboardPage() {
                     </motion.div>
                 ))}
             </div>
+
+            {/* Create Campaign CTA */}
+            <Button
+                onClick={() => setShowCreateForm(true)}
+                className="w-full h-14 bg-white border-2 border-foreground text-foreground hover:bg-foreground hover:text-white rounded-none text-xs uppercase tracking-[0.2em] font-bold transition-colors"
+            >
+                <Plus className="w-5 h-5 mr-2" />
+                Create Campaign
+            </Button>
 
             {/* Campaigns List */}
             <div className="space-y-4">
