@@ -5,6 +5,7 @@ import { deductCredits, getCreditCost } from '@/lib/credit-router'
 import { getEffectiveTier, canAccessEngine, type SubscriptionTier } from '@/lib/tier-config'
 import { MODELS } from '@/lib/models'
 import { checkModeration } from '@/lib/moderation'
+import { checkGenerationCache } from '@/lib/generation-cache'
 
 export async function POST(request: Request) {
     const supabase = await createClient()
@@ -60,7 +61,30 @@ export async function POST(request: Request) {
             }, { status: 403 })
         }
 
-        // ── Credit Deduction ─────────────────────────────────────
+        // ── Cache Check: skip API call if identical output exists ─
+        const cacheResult = await checkGenerationCache(supabase, user.id, {
+            prompt: preset_id,
+            model: selectedEngine,
+            aspect_ratio,
+            preset_id,
+        })
+
+        if (cacheResult.found) {
+            return NextResponse.json({
+                success: true,
+                job: {
+                    id: cacheResult.job_id,
+                    status: 'completed',
+                    output_url: cacheResult.output_url,
+                    model: cacheResult.model,
+                    cached: true,
+                },
+                credits_deducted: 0,
+                cache_hit: true,
+            })
+        }
+
+        // ── Credit Deduction (only on cache miss) ────────────────
         const creditCost = getCreditCost(selectedEngine)
         if (creditCost > 0) {
             const result = await deductCredits(user.id, selectedEngine)
@@ -115,6 +139,7 @@ export async function POST(request: Request) {
                     pipeline: 'fashion',
                     identity_id: identity_id || ''
                 },
+                input_hash: cacheResult.hash,
                 model: selectedEngine,
                 tier: 'fashion',
                 provider_metadata: {

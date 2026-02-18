@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { checkModeration } from '@/lib/moderation'
 import { deductCredits, getCreditCost } from '@/lib/credit-router'
 import { sanitizePrompt } from '@/lib/prompt-safety'
+import { checkGenerationCache } from '@/lib/generation-cache'
 
 export async function POST(request: Request) {
     const supabase = await createClient()
@@ -38,33 +39,61 @@ export async function POST(request: Request) {
             }, { status: 429 })
         }
 
-        // ── Credit Deduction ─────────────────────────────────────
-        const selectedEngine = model || 'veo-3.1-fast'
-        const creditCost = getCreditCost(selectedEngine)
-        if (creditCost > 0) {
-            const result = await deductCredits(user.id, selectedEngine)
-            if (!result.ok) {
-                return NextResponse.json({
-                    error: 'insufficient_credits',
-                    required: result.required,
-                    balance: result.balance,
-                    message: `You need ${result.required} credit(s) but only have ${result.balance}`,
-                }, { status: 402 })
-            }
-        }
-
-        // Support both new Storyboard (shots array) and legacy Single Shot (prompt)
-        // If 'shots' is present, use it. Otherwise wrap 'prompt' in a single shot.
+        // Support both Storyboard (shots array) and single Shot (prompt)
         const workItems = shots ? shots : [{
             id: Math.random().toString(),
             prompt,
             duration: provider_metadata?.duration || 5
         }]
 
+        const selectedEngine = model || 'veo-3.1-fast'
+        const resolution = is4k ? '4k' : '720p'
         const createdJobs = []
+        let cacheHits = 0
 
-        // Iterate through all shots and create jobs
         for (const item of workItems) {
+            const sanitizedPrompt = sanitizePrompt(
+                item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt
+            )
+
+            // ── Cache Check: skip Veo call if identical output exists ──
+            const cacheResult = await checkGenerationCache(supabase, user.id, {
+                prompt: sanitizedPrompt,
+                model: selectedEngine,
+                resolution,
+                duration: item.duration || 5,
+                camera_move: item.cameraMove || '',
+                style_ref: anchorStyle || '',
+            })
+
+            if (cacheResult.found) {
+                // Cache hit — return existing result without spending money
+                createdJobs.push({
+                    id: cacheResult.job_id,
+                    status: 'completed',
+                    output_url: cacheResult.output_url,
+                    model: cacheResult.model,
+                    cached: true,
+                })
+                cacheHits++
+                continue
+            }
+
+            // ── Credit Deduction (only for cache misses) ─────────
+            const creditCost = getCreditCost(selectedEngine)
+            if (creditCost > 0) {
+                const result = await deductCredits(user.id, selectedEngine)
+                if (!result.ok) {
+                    return NextResponse.json({
+                        error: 'insufficient_credits',
+                        required: result.required,
+                        balance: result.balance,
+                        message: `You need ${result.required} credit(s) but only have ${result.balance}`,
+                    }, { status: 402 })
+                }
+            }
+
+            // ── Create Job (tagged with hash for future cache hits) ──
             const { data: job, error: dbError } = await supabase
                 .from('jobs')
                 .insert({
@@ -72,15 +101,16 @@ export async function POST(request: Request) {
                     user_id: user.id,
                     status: 'pending',
                     input_params: {
-                        prompt: sanitizePrompt(item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt),
+                        prompt: sanitizedPrompt,
                         style_ref: anchorStyle
                     },
-                    model: model, // Main model for all for now
+                    input_hash: cacheResult.hash,
+                    model: model,
                     tier: tier || 'draft',
                     provider_metadata: {
                         ...provider_metadata,
                         duration: item.duration,
-                        resolution: is4k ? '4k' : '720p',
+                        resolution,
                         camera_move: item.cameraMove
                     },
                     created_at: new Date().toISOString()
@@ -90,12 +120,12 @@ export async function POST(request: Request) {
 
             if (dbError) {
                 console.error('Database error:', dbError)
-                continue // Skip failed usage
+                continue
             }
 
             createdJobs.push(job)
 
-            // Call Railway Worker Webhook for each job
+            // Call Railway Worker Webhook
             const workerUrl = process.env.RAILWAY_WORKER_URL
             if (workerUrl) {
                 try {
@@ -107,13 +137,13 @@ export async function POST(request: Request) {
                         },
                         body: JSON.stringify({
                             job_id: job.id,
-                            prompt: sanitizePrompt(item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt),
+                            prompt: sanitizedPrompt,
                             model: model,
                             tier: tier || 'draft',
                             provider_metadata: {
                                 ...provider_metadata,
                                 duration: item.duration,
-                                resolution: is4k ? '4k' : '720p',
+                                resolution,
                                 camera_move: item.cameraMove,
                                 style_ref: anchorStyle
                             }
@@ -125,7 +155,12 @@ export async function POST(request: Request) {
             }
         }
 
-        return NextResponse.json({ success: true, jobs: createdJobs })
+        return NextResponse.json({
+            success: true,
+            jobs: createdJobs,
+            cache_hits: cacheHits,
+            cache_misses: createdJobs.length - cacheHits,
+        })
     } catch (err) {
         console.error("API Route Error", err)
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
