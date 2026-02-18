@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { checkModeration } from '@/lib/moderation'
+import { deductCredits, getCreditCost } from '@/lib/credit-router'
+import { sanitizePrompt } from '@/lib/prompt-safety'
 
 export async function POST(request: Request) {
     const supabase = await createClient()
@@ -11,8 +14,44 @@ export async function POST(request: Request) {
     }
 
     try {
+        // ── Moderation Gate ──────────────────────────────────────
+        const moderationGate = await checkModeration(user.id)
+        if (!moderationGate.allowed) {
+            return NextResponse.json(moderationGate.response, { status: moderationGate.status })
+        }
+
         const body = await request.json()
         const { shots, prompt, model, tier, provider_metadata, workspace_id, is4k, anchorStyle } = body
+
+        // ── Rate Limit: max 10 jobs/minute per user ─────────────
+        const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
+        const { count: recentJobs } = await supabase
+            .from('jobs')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('created_at', oneMinuteAgo)
+
+        if ((recentJobs ?? 0) >= 10) {
+            return NextResponse.json({
+                error: 'rate_limited',
+                message: 'Too many requests. Please wait a minute before generating again.',
+            }, { status: 429 })
+        }
+
+        // ── Credit Deduction ─────────────────────────────────────
+        const selectedEngine = model || 'veo-3.1-fast'
+        const creditCost = getCreditCost(selectedEngine)
+        if (creditCost > 0) {
+            const result = await deductCredits(user.id, selectedEngine)
+            if (!result.ok) {
+                return NextResponse.json({
+                    error: 'insufficient_credits',
+                    required: result.required,
+                    balance: result.balance,
+                    message: `You need ${result.required} credit(s) but only have ${result.balance}`,
+                }, { status: 402 })
+            }
+        }
 
         // Support both new Storyboard (shots array) and legacy Single Shot (prompt)
         // If 'shots' is present, use it. Otherwise wrap 'prompt' in a single shot.
@@ -33,7 +72,7 @@ export async function POST(request: Request) {
                     user_id: user.id,
                     status: 'pending',
                     input_params: {
-                        prompt: item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt,
+                        prompt: sanitizePrompt(item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt),
                         style_ref: anchorStyle
                     },
                     model: model, // Main model for all for now
@@ -68,7 +107,7 @@ export async function POST(request: Request) {
                         },
                         body: JSON.stringify({
                             job_id: job.id,
-                            prompt: item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt,
+                            prompt: sanitizePrompt(item.action ? `${item.prompt}. Action: ${item.action}` : item.prompt),
                             model: model,
                             tier: tier || 'draft',
                             provider_metadata: {

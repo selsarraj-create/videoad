@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getActiveIdentity } from '@/lib/identity-middleware'
+import { checkModeration } from '@/lib/moderation'
 
 export async function POST(request: Request) {
     const supabase = await createClient()
@@ -12,6 +13,28 @@ export async function POST(request: Request) {
     }
 
     try {
+        // ── Moderation Gate ──────────────────────────────────────
+        const moderationGate = await checkModeration(user.id)
+        if (!moderationGate.allowed) {
+            return NextResponse.json(moderationGate.response, { status: moderationGate.status })
+        }
+
+        // ── Rate Limit: max 20 try-ons/minute per user ──────────
+        const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
+        const { count: recentJobs } = await supabase
+            .from('jobs')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('tier', 'try_on')
+            .gte('created_at', oneMinuteAgo)
+
+        if ((recentJobs ?? 0) >= 20) {
+            return NextResponse.json({
+                error: 'rate_limited',
+                message: 'Too many try-on requests. Please wait a minute.',
+            }, { status: 429 })
+        }
+
         const body = await request.json()
         let { person_image_url, garment_image_url, identity_id, marketplace_source } = body
 
