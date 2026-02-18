@@ -67,34 +67,55 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: error.message }, { status: 400 })
         }
 
-        // Set the user's subscription tier in their profile
+        // Wait for the profile row to exist (Supabase trigger creates it)
+        // then update with our role + tier data
         const userId = data.user.id
         const now = new Date()
 
-        // For Pro tier, grant a 7-day trial
         const trialEndsAt = tier === 'pro'
             ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
             : null
 
-        // High-Octane gets 20 monthly credits
         const monthlyGrant = tier === 'high_octane' ? 20 : 0
         const initialCredits = tier === 'high_octane' ? 20 : 0
 
-        const { error: profileError } = await supabaseAdmin
-            .from('profiles')
-            .update({
-                subscription_status: tier,
-                trial_ends_at: trialEndsAt,
-                credit_balance: initialCredits,
-                monthly_credit_grant: monthlyGrant,
-                render_priority: tier === 'high_octane' ? 1 : tier === 'pro' ? 2 : 3,
-                role: userRole,
-            })
-            .eq('id', userId)
+        // Retry profile update — the trigger may not have created the row yet
+        let profileUpdated = false
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const { data: existing } = await supabaseAdmin
+                .from('profiles')
+                .select('id')
+                .eq('id', userId)
+                .single()
 
-        if (profileError) {
-            console.error('Profile tier update failed:', profileError)
-            // Don't fail the signup, just log — the user was created
+            if (existing) {
+                const { error: profileError } = await supabaseAdmin
+                    .from('profiles')
+                    .update({
+                        subscription_status: tier,
+                        trial_ends_at: trialEndsAt,
+                        credit_balance: initialCredits,
+                        monthly_credit_grant: monthlyGrant,
+                        render_priority: tier === 'high_octane' ? 1 : tier === 'pro' ? 2 : 3,
+                        role: userRole,
+                    })
+                    .eq('id', userId)
+
+                if (profileError) {
+                    console.error(`Profile update failed (attempt ${attempt + 1}):`, profileError)
+                } else {
+                    profileUpdated = true
+                    console.log(`Profile updated: userId=${userId}, role=${userRole}`)
+                }
+                break
+            }
+
+            // Wait 200ms before retrying
+            await new Promise(resolve => setTimeout(resolve, 200))
+        }
+
+        if (!profileUpdated) {
+            console.error(`Profile row never appeared for userId=${userId}, role may be wrong`)
         }
 
         // If brand role, create a brands record
