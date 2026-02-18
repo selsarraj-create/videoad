@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
     Megaphone, PoundSterling, Clock, FileCheck, Plus,
     Loader2, Sparkles, Calendar, AlertCircle, ChevronRight,
-    Eye, Users, X
+    Eye, Users, X, Upload
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -196,9 +196,40 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
     const [title, setTitle] = useState("")
     const [description, setDescription] = useState("")
     const [budget, setBudget] = useState("")
+    const [paymentPerVideo, setPaymentPerVideo] = useState("")
     const [deadline, setDeadline] = useState("")
+    const [productImage, setProductImage] = useState<File | null>(null)
+    const [productImagePreview, setProductImagePreview] = useState<string | null>(null)
+    const [uploading, setUploading] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
+    const [dragOver, setDragOver] = useState(false)
+
+    const maxVideos = budget && paymentPerVideo && parseInt(paymentPerVideo, 10) > 0
+        ? Math.floor(parseInt(budget, 10) / parseInt(paymentPerVideo, 10))
+        : null
+
+    const handleImageSelect = (file: File) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+        if (!allowed.includes(file.type)) {
+            setError('Invalid file type. Allowed: JPEG, PNG, WebP, GIF')
+            return
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            setError('Image too large. Max 5MB')
+            return
+        }
+        setProductImage(file)
+        setProductImagePreview(URL.createObjectURL(file))
+        setError("")
+    }
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        setDragOver(false)
+        const file = e.dataTransfer.files[0]
+        if (file) handleImageSelect(file)
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -208,6 +239,30 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
         setError("")
 
         try {
+            let productImageUrl: string | null = null
+
+            // Upload product image first if one was selected
+            if (productImage) {
+                setUploading(true)
+                const formData = new FormData()
+                formData.append('file', productImage)
+
+                const uploadRes = await fetch('/api/upload/product-image', {
+                    method: 'POST',
+                    body: formData,
+                })
+
+                if (!uploadRes.ok) {
+                    const data = await uploadRes.json()
+                    throw new Error(data.error || 'Image upload failed')
+                }
+
+                const { url } = await uploadRes.json()
+                productImageUrl = url
+                setUploading(false)
+            }
+
+            // Create the bounty
             const res = await fetch('/api/bounties', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -215,6 +270,8 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
                     title: title.trim(),
                     description: description.trim() || null,
                     budget_gbp: parseInt(budget, 10),
+                    payment_per_video: paymentPerVideo ? parseInt(paymentPerVideo, 10) : 0,
+                    product_image_url: productImageUrl,
                     deadline: deadline || null,
                     status: 'active',
                 }),
@@ -222,12 +279,13 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
 
             if (!res.ok) {
                 const data = await res.json()
-                throw new Error(data.error || 'Failed to create bounty')
+                throw new Error(data.error || 'Failed to create campaign')
             }
 
             onCreated()
         } catch (err: any) {
             setError(err.message)
+            setUploading(false)
         } finally {
             setSubmitting(false)
         }
@@ -246,11 +304,11 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="fixed inset-x-4 top-[10%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-lg z-50"
+                className="fixed inset-x-4 top-[5%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-lg z-50 max-h-[90vh] overflow-y-auto"
             >
                 <form onSubmit={handleSubmit} className="bg-white border border-nimbus/40 shadow-2xl">
-                    <div className="p-6 border-b border-nimbus/20 flex items-center justify-between">
-                        <h2 className="font-serif text-xl tracking-tight">Create Bounty</h2>
+                    <div className="p-6 border-b border-nimbus/20 flex items-center justify-between sticky top-0 bg-white z-10">
+                        <h2 className="font-serif text-xl tracking-tight">Create Campaign</h2>
                         <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center hover:bg-nimbus/20 rounded-full transition-colors">
                             <X className="w-4 h-4" />
                         </button>
@@ -264,6 +322,7 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
                             </div>
                         )}
 
+                        {/* Campaign Title */}
                         <div className="space-y-2">
                             <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Campaign Title *</label>
                             <input
@@ -275,8 +334,9 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
                             />
                         </div>
 
+                        {/* Description */}
                         <div className="space-y-2">
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Description</label>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Brief / Description</label>
                             <textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
@@ -286,9 +346,69 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
                             />
                         </div>
 
+                        {/* Product Image Upload */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Product Image</label>
+                            {productImagePreview ? (
+                                <div className="relative group">
+                                    <img
+                                        src={productImagePreview}
+                                        alt="Product preview"
+                                        className="w-full h-48 object-cover border border-nimbus/30"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => { setProductImage(null); setProductImagePreview(null) }}
+                                        className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div
+                                    onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                                    onDragLeave={() => setDragOver(false)}
+                                    onDrop={handleDrop}
+                                    onClick={() => document.getElementById('product-image-input')?.click()}
+                                    className={`w-full h-36 border-2 border-dashed cursor-pointer flex flex-col items-center justify-center gap-2 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-nimbus/40 hover:border-primary/40 hover:bg-nimbus/5'
+                                        }`}
+                                >
+                                    <Upload className="w-6 h-6 text-muted-foreground/40" />
+                                    <span className="text-xs text-muted-foreground">Drop image here or click to upload</span>
+                                    <span className="text-[9px] text-muted-foreground/50">JPEG, PNG, WebP · Max 5MB</span>
+                                </div>
+                            )}
+                            <input
+                                id="product-image-input"
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0]
+                                    if (file) handleImageSelect(file)
+                                }}
+                            />
+                        </div>
+
+                        {/* Payment Per Video + Total Budget */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Budget (£) *</label>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Per Video (£) *</label>
+                                <div className="relative">
+                                    <PoundSterling className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                    <input
+                                        type="number"
+                                        value={paymentPerVideo}
+                                        onChange={(e) => setPaymentPerVideo(e.target.value)}
+                                        placeholder="50"
+                                        min="1"
+                                        className="w-full h-11 pl-9 pr-4 border border-nimbus/30 bg-white text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total Budget (£) *</label>
                                 <div className="relative">
                                     <PoundSterling className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                                     <input
@@ -302,17 +422,29 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
                                     />
                                 </div>
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Deadline</label>
-                                <div className="relative">
-                                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                                    <input
-                                        type="date"
-                                        value={deadline}
-                                        onChange={(e) => setDeadline(e.target.value)}
-                                        className="w-full h-11 pl-9 pr-4 border border-nimbus/30 bg-white text-sm focus:outline-none focus:border-primary/50 transition-colors"
-                                    />
-                                </div>
+                        </div>
+
+                        {/* Max Videos Indicator */}
+                        {maxVideos !== null && (
+                            <div className="flex items-center gap-2 px-4 py-3 bg-primary/5 border border-primary/10">
+                                <FileCheck className="w-4 h-4 text-primary shrink-0" />
+                                <span className="text-xs text-primary font-medium">
+                                    This budget covers up to <strong className="font-black">{maxVideos} video{maxVideos !== 1 ? 's' : ''}</strong> at £{paymentPerVideo} each
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Deadline */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Deadline</label>
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                <input
+                                    type="date"
+                                    value={deadline}
+                                    onChange={(e) => setDeadline(e.target.value)}
+                                    className="w-full h-11 pl-9 pr-4 border border-nimbus/30 bg-white text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                                />
                             </div>
                         </div>
                     </div>
@@ -320,10 +452,12 @@ function CreateBountyModal({ onClose, onCreated }: { onClose: () => void; onCrea
                     <div className="p-6 pt-0">
                         <Button
                             type="submit"
-                            disabled={submitting || !title.trim() || !budget}
+                            disabled={submitting || uploading || !title.trim() || !budget || !paymentPerVideo}
                             className="w-full h-12 bg-primary text-white hover:bg-primary/90 rounded-none text-xs uppercase tracking-[0.2em] font-bold disabled:opacity-50"
                         >
-                            {submitting ? (
+                            {uploading ? (
+                                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Uploading Image...</>
+                            ) : submitting ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                                 <><Megaphone className="w-4 h-4 mr-2" /> Launch Campaign</>

@@ -125,7 +125,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Brand profile not found' }, { status: 404 })
     }
 
-    const { title, description, budget_gbp, deadline, status, requirements } = await request.json()
+    const { title, description, budget_gbp, deadline, status, requirements, payment_per_video, product_image_url } = await request.json()
 
     if (!title?.trim()) {
         return NextResponse.json({ error: 'Title is required' }, { status: 400 })
@@ -138,6 +138,8 @@ export async function POST(request: Request) {
             title: title.trim(),
             description: description || null,
             budget_gbp: budget_gbp || 0,
+            payment_per_video: payment_per_video || 0,
+            product_image_url: product_image_url || null,
             deadline: deadline || null,
             status: status || 'draft',
             requirements: requirements || {},
