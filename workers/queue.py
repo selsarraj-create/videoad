@@ -5,17 +5,20 @@ Uses the BRPOPLPUSH (reliable queue) pattern to guarantee zero task loss:
   1. LPUSH → `taskqueue:jobs`         (enqueue)
   2. BRPOPLPUSH → `taskqueue:processing` (atomic dequeue + in-flight tracking)
   3. LREM from processing on success  (ack)
-  4. Requeue or → `taskqueue:dead_letter` after 3 failures (nack)
+  4. Delayed retry with exponential backoff on failure
+  5. → `taskqueue:dead_letter` after 3 failures (nack)
 
 Keys:
   taskqueue:jobs             — pending tasks (Redis list, FIFO)
   taskqueue:processing       — in-flight tasks (Redis list)
+  taskqueue:delayed          — retry-eligible tasks (Redis sorted set, scored by timestamp)
   taskqueue:dead_letter      — permanently failed tasks (Redis list)
   taskqueue:meta:{job_id}    — per-job metadata (Redis hash, TTL 2h)
 """
 
 import json
 import time
+import os
 import logging
 from typing import Optional
 
@@ -23,12 +26,17 @@ logger = logging.getLogger(__name__)
 
 QUEUE_KEY = "taskqueue:jobs"
 PROCESSING_KEY = "taskqueue:processing"
+DELAYED_KEY = "taskqueue:delayed"
 DEAD_LETTER_KEY = "taskqueue:dead_letter"
 META_PREFIX = "taskqueue:meta:"
 META_TTL = 7200  # 2 hours — metadata auto-expires
 
 MAX_RETRIES = 3
 STALE_TASK_TIMEOUT = 600  # 10 minutes — requeue stale in-flight tasks
+
+# Exponential backoff: 30s, 60s, 120s
+BACKOFF_BASE_SECONDS = 30
+BACKOFF_MULTIPLIER = 2
 
 
 # ── Enqueue ───────────────────────────────────────────────────────────────────
@@ -118,11 +126,11 @@ def ack_task(redis_client, job_id: str):
     logger.info(f"Acked job {job_id}")
 
 
-def nack_task(redis_client, job_id: str, error_msg: str = ""):
+def nack_task(redis_client, job_id: str, error_msg: str = "", supabase_client=None):
     """
     Negative-acknowledge a failed task.
-    Increments retry count. If below MAX_RETRIES, requeues.
-    Otherwise moves to the dead-letter queue.
+    Increments retry count. If below MAX_RETRIES, schedules a delayed retry
+    with exponential backoff. Otherwise moves to the dead-letter queue.
     """
     meta_key = f"{META_PREFIX}{job_id}"
     retries = int(redis_client.hget(meta_key, "retries") or 0)
@@ -136,15 +144,83 @@ def nack_task(redis_client, job_id: str, error_msg: str = ""):
     redis_client.lrem(PROCESSING_KEY, 1, job_id)
 
     if retries < MAX_RETRIES:
-        # Requeue for retry
-        redis_client.lpush(QUEUE_KEY, job_id)
-        update_task_status(redis_client, job_id, "queued")
-        logger.warning(f"Nacked job {job_id} (retry {retries}/{MAX_RETRIES}), requeued")
+        # ── Exponential Backoff: delay before retry ──────────────
+        delay = BACKOFF_BASE_SECONDS * (BACKOFF_MULTIPLIER ** (retries - 1))
+        retry_at = time.time() + delay
+
+        # Add to delayed sorted set (scored by when it becomes eligible)
+        redis_client.zadd(DELAYED_KEY, {job_id: retry_at})
+        update_task_status(redis_client, job_id, "retry_scheduled")
+        logger.warning(
+            f"Nacked job {job_id} (retry {retries}/{MAX_RETRIES}), "
+            f"scheduled retry in {delay}s"
+        )
     else:
-        # Move to dead-letter queue
+        # ── Dead Letter Queue ────────────────────────────────────
         redis_client.lpush(DEAD_LETTER_KEY, job_id)
         update_task_status(redis_client, job_id, "dead_letter")
-        logger.error(f"Job {job_id} moved to dead-letter queue after {MAX_RETRIES} failures: {error_msg}")
+        logger.error(
+            f"Job {job_id} moved to dead-letter queue after "
+            f"{MAX_RETRIES} failures: {error_msg}"
+        )
+
+        # ── Sync to Supabase so the user sees "failed" ──────────
+        _sync_dead_letter_to_supabase(job_id, error_msg, supabase_client)
+
+
+def _sync_dead_letter_to_supabase(job_id: str, error_msg: str, supabase_client=None):
+    """Update Supabase job status when a job enters the dead letter queue."""
+    try:
+        if supabase_client is None:
+            # Import lazily to avoid circular deps
+            url = os.environ.get("SUPABASE_URL")
+            key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            if url and key:
+                from supabase import create_client
+                supabase_client = create_client(url, key)
+
+        if supabase_client:
+            supabase_client.table("jobs").update({
+                "status": "failed",
+                "error_message": f"[Dead Letter] Exceeded {MAX_RETRIES} retries. Last error: {error_msg[:300]}"
+            }).eq("id", job_id).execute()
+            logger.info(f"Synced dead-letter job {job_id} to Supabase (status=failed)")
+    except Exception as e:
+        logger.error(f"Failed to sync dead-letter job {job_id} to Supabase: {e}")
+
+
+# ── Delayed Retry Promoter ────────────────────────────────────────────────────
+
+def promote_delayed_tasks(redis_client) -> int:
+    """
+    Move tasks from the delayed set to the pending queue if their
+    retry-eligible timestamp has passed.
+
+    Call this in the consumer loop on every iteration.
+    Returns the number of promoted tasks.
+    """
+    now = time.time()
+    # Get all tasks with score <= now (i.e., delay has elapsed)
+    ready_jobs = redis_client.zrangebyscore(DELAYED_KEY, 0, now)
+
+    if not ready_jobs:
+        return 0
+
+    promoted = 0
+    for item in ready_jobs:
+        job_id = item.decode("utf-8") if isinstance(item, bytes) else item
+
+        # Atomic: remove from delayed + push to pending
+        pipe = redis_client.pipeline(transaction=True)
+        pipe.zrem(DELAYED_KEY, job_id)
+        pipe.lpush(QUEUE_KEY, job_id)
+        pipe.execute()
+
+        update_task_status(redis_client, job_id, "queued")
+        promoted += 1
+        logger.info(f"Promoted delayed job {job_id} back to pending queue")
+
+    return promoted
 
 
 # ── Stale Task Recovery ───────────────────────────────────────────────────────
@@ -240,6 +316,11 @@ def get_processing_count(redis_client) -> int:
     return redis_client.llen(PROCESSING_KEY)
 
 
+def get_delayed_count(redis_client) -> int:
+    """Get the number of tasks waiting for delayed retry."""
+    return redis_client.zcard(DELAYED_KEY)
+
+
 def get_task_meta(redis_client, job_id: str) -> Optional[dict]:
     """Get metadata for a queued/processing task."""
     meta_key = f"{META_PREFIX}{job_id}"
@@ -266,6 +347,7 @@ ESTIMATED_DURATIONS = {
     "video_generate": 90,
     "fashion_generate": 180,
     "try_on": 60,
+    "extend": 120,
     "default": 90,
 }
 

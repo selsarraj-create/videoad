@@ -101,15 +101,32 @@ def get_redis():
     return _redis_client
 
 # ── Queue consumer thread (reliable) ──────────────────────────────────────────
+
+# Interval for periodic stale recovery (seconds)
+STALE_RECOVERY_INTERVAL = 60
+
 def _queue_consumer_loop():
     """Background thread: dequeues via BRPOPLPUSH, acks on success, nacks on failure."""
     print("Queue consumer thread started (reliable mode)")
+    last_stale_check = time.time()
+
     while True:
         try:
             r = get_redis()
             if r is None:
                 time.sleep(5)
                 continue
+
+            # ── Promote delayed retries that are now eligible ─────
+            task_queue.promote_delayed_tasks(r)
+
+            # ── Periodic stale recovery (not just on startup) ────
+            now = time.time()
+            if (now - last_stale_check) > STALE_RECOVERY_INTERVAL:
+                recovered = task_queue.recover_stale_tasks(r)
+                if recovered:
+                    print(f"Periodic recovery: {recovered} stale task(s) requeued")
+                last_stale_check = now
 
             # Atomic dequeue → processing list
             job_id = task_queue.dequeue_task(r, timeout=5)
@@ -149,6 +166,21 @@ def _queue_consumer_loop():
                         model_options=payload.get("model_options", {}),
                         identity_id=payload.get("identity_id", ""),
                     )
+                elif task_type == "try_on":
+                    process_try_on_job(
+                        job_id=payload["job_id"],
+                        person_image_url=payload["person_image_url"],
+                        garment_image_url=payload["garment_image_url"],
+                        marketplace_source=payload.get("marketplace_source"),
+                    )
+                elif task_type == "extend":
+                    process_extend_job(
+                        job_id=payload["job_id"],
+                        original_task_id=payload["original_task_id"],
+                        prompt=payload["prompt"],
+                        video_url=payload["video_url"],
+                        aspect_ratio=payload.get("aspect_ratio", "16:9"),
+                    )
                 else:
                     print(f"Queue consumer: unknown task type '{task_type}'")
 
@@ -156,9 +188,9 @@ def _queue_consumer_loop():
                 task_queue.ack_task(r, job_id)
 
             except Exception as task_err:
-                # ❌ Failure — nack (retry or dead-letter)
+                # ❌ Failure — nack (retry with backoff, or dead-letter → Supabase)
                 print(f"Queue consumer: task {job_id} failed: {task_err}")
-                task_queue.nack_task(r, job_id, str(task_err))
+                task_queue.nack_task(r, job_id, str(task_err), supabase_client=get_supabase())
 
         except Exception as e:
             print(f"Queue consumer loop error: {e}")
@@ -254,6 +286,9 @@ class VideoJobRequest(BaseModel):
     tier: str = "draft"
     provider_metadata: dict = {}
 
+# Maximum time to poll for AI completion before timing out (seconds)
+MAX_POLL_DURATION = 600  # 10 minutes
+
 def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_refs: list[str], duration: int, provider_metadata: dict):
     """
     Synchronous background task to handle Video Generation via ProviderFactory.
@@ -294,8 +329,12 @@ def process_video_job(job_id: str, prompt: str, model: str, tier: str, image_ref
             "provider_metadata": provider_metadata
         }).eq("id", job_id).execute()
 
-        # 3. Poll for completion
+        # 3. Poll for completion (with timeout)
+        poll_start = time.time()
         while True:
+            if (time.time() - poll_start) > MAX_POLL_DURATION:
+                raise Exception(f"Poll timeout: AI provider did not complete within {MAX_POLL_DURATION}s")
+
             status_data = provider.get_task_status(task_id, model)
             
             print(f"Poll response for {job_id}: {status_data}")
@@ -468,9 +507,13 @@ def process_extend_job(job_id: str, original_task_id: str, prompt: str, video_ur
         
         print(f"Extend task started: {new_task_id}")
         
-        # 3. Poll for completion (reuse same logic as generate)
+        # 3. Poll for completion (with timeout)
         model = "veo-3.1-fast"  # Extend is always Veo
+        poll_start = time.time()
         while True:
+            if (time.time() - poll_start) > MAX_POLL_DURATION:
+                raise Exception(f"Extend poll timeout: did not complete within {MAX_POLL_DURATION}s")
+
             status_data = kie.get_task_status(new_task_id, model)
             
             poll_data = status_data.get("data") if isinstance(status_data, dict) else None
@@ -525,15 +568,32 @@ def process_extend_job(job_id: str, original_task_id: str, prompt: str, video_ur
 
 @app.post("/webhook/extend")
 async def handle_extend_webhook(request: ExtendRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(
-        process_extend_job,
-        request.job_id,
-        request.original_task_id,
-        request.prompt,
-        request.video_url,
-        request.aspect_ratio
-    )
-    return {"message": "Extend job received", "job_id": request.job_id}
+    r = get_redis()
+    user_id = "extend"  # extend jobs don't carry user_id in the payload
+
+    if r:
+        payload = {
+            "job_id": request.job_id,
+            "original_task_id": request.original_task_id,
+            "prompt": request.prompt,
+            "video_url": request.video_url,
+            "aspect_ratio": request.aspect_ratio,
+        }
+        position = task_queue.enqueue_task(r, user_id, request.job_id, "extend", payload)
+        supabase.table("jobs").update({
+            "status": "queued",
+        }).eq("id", request.job_id).execute()
+        return {"message": "Extend job queued", "job_id": request.job_id, "queue_position": position}
+    else:
+        background_tasks.add_task(
+            process_extend_job,
+            request.job_id,
+            request.original_task_id,
+            request.prompt,
+            request.video_url,
+            request.aspect_ratio
+        )
+        return {"message": "Extend job received", "job_id": request.job_id}
 
 # =========================================================================
 # Try-On Only: Fashn generates on-model image (no video)
@@ -588,18 +648,35 @@ def process_try_on_job(job_id: str, person_image_url: str, garment_image_url: st
 
 @app.post("/webhook/try-on")
 async def handle_try_on_webhook(request: TryOnRequest):
-    """Run synchronously so Railway keeps the container alive."""
-    try:
-        process_try_on_job(
-            request.job_id, 
-            request.person_image_url, 
-            request.garment_image_url,
-            request.marketplace_source
-        )
-        return {"message": "Try-on job completed", "job_id": request.job_id}
-    except Exception as e:
-        print(f"Try-on endpoint error: {str(e)}")
-        return {"message": f"Try-on failed: {str(e)[:200]}", "job_id": request.job_id}
+    """Route through Redis queue for retry capability, or run synchronously."""
+    r = get_redis()
+    user_id = "try_on"  # try-on requests don't carry user_id
+
+    if r:
+        payload = {
+            "job_id": request.job_id,
+            "person_image_url": request.person_image_url,
+            "garment_image_url": request.garment_image_url,
+            "marketplace_source": request.marketplace_source,
+        }
+        position = task_queue.enqueue_task(r, user_id, request.job_id, "try_on", payload)
+        supabase.table("jobs").update({
+            "status": "queued",
+        }).eq("id", request.job_id).execute()
+        return {"message": "Try-on job queued", "job_id": request.job_id, "queue_position": position}
+    else:
+        # Fallback: run synchronously
+        try:
+            process_try_on_job(
+                request.job_id,
+                request.person_image_url,
+                request.garment_image_url,
+                request.marketplace_source
+            )
+            return {"message": "Try-on job completed", "job_id": request.job_id}
+        except Exception as e:
+            print(f"Try-on endpoint error: {str(e)}")
+            return {"message": f"Try-on failed: {str(e)[:200]}", "job_id": request.job_id}
 
 # =========================================================================
 # Garment Cleaning Pipeline: Claid.ai background removal + cache
